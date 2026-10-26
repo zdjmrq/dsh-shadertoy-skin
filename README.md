@@ -9,12 +9,14 @@
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
 ![马里奥像素画背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-mario.jpg)
-![Seascape 海面背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-seascape.jpg)
 ![代码页：查看 / 修改 / 保存并运行当前作品的着色器](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-code.jpg)
+![Seascape 海面背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-seascape.jpg)
 
 [![▶ 点击播放演示视频（1280×810，约 2.6 MB）](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-demo-poster.jpg)](https://github.com/zdjmrq/dsh-shadertoy-skin/blob/main/docs/verify/readme-demo.mp4)
 
-<video src="https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-demo.mp4" controls muted width="100%"></video>
+<video src="https://cdn.jsdelivr.net/gh/zdjmrq/dsh-shadertoy-skin@cb917dd43198461ba0bcc4d3a96342f870fa01d6/docs/verify/readme-demo.mp4" controls muted width="100%"></video>
+
+> GitHub 把仓库里的 mp4 按 `application/octet-stream` 下发（还限制 Range），`<video>` 直接引用 raw 链接播不了；这里走 jsDelivr 的 GitHub 镜像（`video/mp4` + Range 支持），并钉在具体 commit 上避免 CDN 缓存旧文件。
 
 > 截图里的 ShaderToy 作品版权归原作者：像素马里奥（作者见对应作品页）、Seascape（© TDM，CC BY-NC-SA 3.0）。**截图仅作效果展示**，本仓库代码仍是 MIT，且不收录这些作品代码。
 
