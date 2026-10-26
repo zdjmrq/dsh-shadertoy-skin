@@ -20,11 +20,13 @@ M0（渲染器 + 插件骨架 + 设置面板）已完成，持续加功能：
 - [x] Host 半：静态路由 + `$DSH_HOME/shader-skin.json` 原子状态存取 + `$DSH_HOME/shader-skin/presets/` 本地预设目录
 - [x] Client 半：把播放器挂成 body 首子节点、转发 iMouse / 主题 / 可见性，全部资源走 `ctx.effect` 清理
 - [x] 玻璃壳：`theme.overrideTokens` 只透「底壳」（AppFrame / 侧栏），卡片与输入框保持实体；两层表面做 alpha 补偿
-- [x] 设置面板（右下角圆钮）：启用开关、作品切换、玻璃不透明度、模糊、**渲染分辨率**、**帧率上限**、播放速度、恢复默认；改动即时生效并自动保存
-- [x] 两个随包 MIT 着色器（极光、流体色带）
-- [ ] 背景库管理 UI（导入 / 改名 / 删除 / 恢复内置）、每背景独立参数
-- [ ] `mainSound` 音频（WebAudio）
-- [ ] 多 pass（Buffer A–D）、音频可视化、兼容性体检
+- [x] 设置面板（右下角圆钮）：启用开关、作品切换、玻璃不透明度、模糊、**渲染分辨率**、**帧率上限**、播放速度、音量/静音、恢复默认；改动即时生效并自动保存
+- [x] **背景库**：内置 + 我的背景列表、切换、改名、删除；粘贴代码导入、文件导入（ShaderToy JSON / GLSL）、从 `$DSH_HOME/shader-skin/presets/` 导入
+- [x] **每背景独立参数**（`overrides`），可「本背景恢复默认」
+- [x] **`mainSound` 音频**：4096 采样块 → `readPixels` → WebAudio 前瞻调度 + Gain/限幅，音量与静音实时生效
+- [x] 深浅色主题适配（设置面板与玻璃都跟随 DSH）
+- [ ] 侧边栏入口：**暂时关闭**（注册进 `sidebar.panellist` + `main` 会卡死前端，已用常量 `ENABLE_SIDEBAR_ENTRY` 关掉，待定位后再开）
+- [ ] 多 pass（Buffer A–D）、音频可视化回馈、兼容性静态体检
 
 ## 参数与默认值
 
@@ -38,7 +40,7 @@ M0（渲染器 + 插件骨架 + 设置面板）已完成，持续加功能：
 | `scale` | `1`× | 0.5 / 0.75 / 1 / 1.25 / 1.5 | 渲染分辨率倍率（DPR 上限 1.5） |
 | `fps` | `30` | 15 / 20 / 30 / 60 | 渲染帧率上限；聊天时 30 足够 |
 | `speed` | `1`× | 0–2 | 时间轴倍速 |
-| `volume` / `muted` | `60` / `true` | 0–100 | 预留给 M2 音频 |
+| `volume` / `muted` | `60` / `false` | 0–100 / 开/关 | 带 `mainSound` 的作品默认出声；浏览器可能拦截自动播放，面板会给「开声音」 |
 
 ## 要求
 
@@ -57,7 +59,9 @@ dsh plugin --profile desktop add dsh-shadertoy-skin
 dsh plugin --profile desktop add github:zdjmrq/dsh-shadertoy-skin#main
 ```
 
-安装后背景默认是「极光」。目前还没有设置面板，参数改在 `$DSH_HOME/shader-skin.json` 里（后续版本会有 UI）。
+安装后背景默认是「极光」，右下角有设置圆钮（参数/背景库两个页签）。
+
+**开发期的安全阀**：如果界面出现卡死等异常，新建一个空文件 `$DSH_HOME/shader-skin.safe` 再刷新页面——客户端会跳过所有注入进 `#root` 的 UI（侧边栏入口等），只保留背景层与悬浮面板；删掉该文件即可恢复。
 
 ## 预设与许可证（重要）
 
@@ -71,29 +75,39 @@ dsh plugin --profile desktop add github:zdjmrq/dsh-shadertoy-skin#main
 ## 开发
 
 ```sh
-npm run dev        # http://127.0.0.1:8730/player.html?preset=aurora
-npm run check      # 包结构 / 许可卫生 / npm pack 内容检查（无依赖）
-npm run test:renderer   # 真浏览器 WebGL2 冒烟测试（需要 playwright）
+npm run dev              # http://127.0.0.1:8730/player.html?preset=aurora
+npm run check            # 包结构 / 许可卫生 / npm pack 内容检查（无依赖）
+npm run test:host        # Host 半路由 + 状态 v2 + 本地预设列表
+npm run test:renderer    # 真浏览器 WebGL2 渲染 + 设置面板冒烟（需 playwright）
+npm run test:audio       # mainSound → readPixels → WebAudio 真实出声验证（需 playwright）
 ```
 
 Windows 上已装 Edge 可以跳过浏览器下载：`PLAYWRIGHT_CHANNEL=msedge npm run test:renderer`。
 
-改 `native-dist/player.html` 或 `native-dist/presets/*.glsl` → 刷新浏览器即生效；插件壳（`index.js`/`client.js`）改动需要重新安装/重启。
+开发服务器同时挂了本地预设目录（只读），可以直接预览你导出的作品、不用先导入：
+
+```
+http://127.0.0.1:8730/player.html?preset=local/<file>.glsl
+```
+
+改 `native-dist/player.html`、`native-dist/panel.html` 或 `native-dist/presets/*.glsl` → 刷新页面即生效（Host 半读盘、no-cache）；插件壳（`index.js`/`client.js`）改动要重启客户端。**开发时优先改 `native-dist/*`**：改 `client.js` 会触发热重载，重载期间的 UI 变更风险最高，`client.js` 的改动请集中在一次做完再重启验证。
 
 架构与决策记录在 [`docs/00-决策与方案复核.md`](docs/00-决策与方案复核.md)，渲染器说明在 [`docs/renderer-notes.md`](docs/renderer-notes.md)，发布流程在 [`docs/PUBLISHING.md`](docs/PUBLISHING.md)。
 
 ## 目录
 
 ```
-index.js              Host 半：/shader-skin 路由 + 状态文件
-client.js             Client 半：iframe 挂载 + 事件转发
+index.js              Host 半：/shader-skin 路由 + 状态文件 + 本地预设目录 + safe-mode
+client.js             Client 半：背景 iframe + 悬浮面板 + 玻璃 token + 事件转发
 cordis.patch.yml      bundle patch（插入 shadertoy-skin 行）
 native-dist/
-  player.html         零依赖 WebGL2 播放器
-  presets/*.glsl      随包 MIT 着色器
+  player.html         零依赖 WebGL2 播放器（渲染 + mainSound 音频）
+  panel.html          设置界面（参数 / 背景库，深浅色自适应）
+  defaults.json       全部默认参数（改这里就改默认值）
+  presets/*.glsl      随包 MIT 着色器 + `pulse-sound.glsl`
   presets/dev/        测试夹具（不进 npm 包）
 locale/ icon.svg      插件管理器展示资源
-tools/                开发服务器 / 包检查 / 渲染冒烟
+tools/                开发服务器 / 包检查 / 渲染冒烟 / 音频冒烟
 .github/workflows/    CI + npm 发布（OIDC trusted publishing）
 ```
 

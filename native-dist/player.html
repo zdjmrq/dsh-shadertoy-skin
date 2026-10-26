@@ -23,13 +23,18 @@
 <pre id="err"></pre>
 <pre id="diag"></pre>
 <script>
-/* ShaderSkin player — zero-dependency WebGL2 ShaderToy-compatible runtime (M0).
+/* ShaderSkin player — zero-dependency WebGL2 ShaderToy-compatible runtime (M2).
  * Runs standalone (dev) or inside the skin iframe (parent = plugin client half).
  * Protocol (postMessage, same origin only):
- *   in : {type:'init', preset:{id,name,image}} | {type:'params', params} | {type:'mouse', mouse:[x,y,z,w]}
+ *   in : {type:'init', preset:{id,name,code:{image,sound?}}, params}   // preset.image 旧写法兼容
+ *        {type:'params', params} | {type:'mouse', mouse:[x,y,z,w]}
  *        {type:'theme', dark:boolean} | {type:'pause', paused:boolean} | {type:'reset'}
- *   out: {type:'ready', preset, es3} | {type:'error', stage, log} | {type:'stats', fps, ms, w, h}
- *        {type:'diag', text}
+ *        {type:'audio-resume'}                                        // 手势后重试 resume()
+ *   out: {type:'ready', preset, es3, sound} | {type:'error', stage, log}
+ *        {type:'stats', fps, ms, w, h} | {type:'diag', text}
+ *        {type:'audio', state:'none'|'running'|'suspended'|'error', sampleRate?, chunks?, reason?}
+ * Audio: mainSound(t) -> 4096x1 RGBA8 (16-bit L/R) -> readPixels -> WebAudio
+ * lookahead scheduling (400 ms ahead, 500 ms prebuffer, 120 ms timer).
  */
 (() => {
   'use strict'
@@ -49,7 +54,7 @@
   // ---------- params (client half sends these; standalone defaults are for preview)
 
   const params = {
-    speed: 1,      // 0..2   time multiplier
+    speed: 1,      // 0..2   time multiplier (visuals and audio timeline)
     scale: 1,      // 0.5..2 render resolution multiplier
     blur: 0,       // 0..12  css blur px (only applied when > 0)
     fps: 30,       // 15..120 render-loop cap (battery vs smoothness)
@@ -57,6 +62,8 @@
     tintMix: 0,    // 0..1   mix toward tint colour
     tint: '#ececec',
     paused: false,
+    volume: 60,    // 0..100 mainSound output level
+    muted: true,   // default muted; parent UI unmutes
   }
   const TINT = [0.925, 0.925, 0.925]
 
@@ -67,12 +74,15 @@
 
   function applyParams(next) {
     if (!next || typeof next !== 'object') return
+    const wasPaused = params.paused
     if ('speed' in next) params.speed = clamp(next.speed, 0, 2, 1)
     if ('scale' in next) params.scale = clamp(next.scale, 0.5, 2, 1)
     if ('blur' in next) params.blur = clamp(next.blur, 0, 12, 0)
     if ('fps' in next) params.fps = clamp(next.fps, 1, 120, 30)
     if ('dim' in next) params.dim = clamp(next.dim, 0, 1, 0.55)
     if ('tintMix' in next) params.tintMix = clamp(next.tintMix, 0, 1, 0)
+    if ('volume' in next) params.volume = clamp(next.volume, 0, 100, 60)
+    if ('muted' in next) params.muted = Boolean(next.muted)
     if (typeof next.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(next.tint)) params.tint = next.tint
     if (typeof next.paused === 'boolean') params.paused = next.paused
     frameInterval = 1000 / Math.max(1, params.fps)
@@ -80,16 +90,22 @@
     if (params.blur > 0) canvas.style.willChange = 'filter'
     else canvas.style.removeProperty('will-change')
     for (let i = 0; i < 3; i++) TINT[i] = parseInt(params.tint.slice(1 + i * 2, 3 + i * 2), 16) / 255
+    applyGain()
+    if (wasPaused !== params.paused) {
+      if (params.paused) stopAudioScheduler('paused')
+      else if (audio.program && audio.ctx && audio.ctx.state === 'running') startAudioScheduler()
+    }
     resize()
   }
 
   // ---------- diagnostics
 
   const diag = { stage: 'boot', note: '', gl: 'none', preset: PRESET, es3: null, w: 0, h: 0, frames: 0, fps: 0 }
+  let audioStateLabel = 'none'
   function line() {
     const mode = DEBUG_BG ? 'debug-bg' : (program ? 'running' : 'idle')
     const note = diag.note ? ` · ${diag.note}` : ''
-    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · shader=${diag.preset}${note}`
+    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · audio=${audioStateLabel} · shader=${diag.preset}${note}`
   }
   function refreshDiag() {
     diagBox.textContent = line()
@@ -120,9 +136,17 @@
     post({ type: 'error', stage, log })
   }
   function post(message) {
-    if (STANDALONE) return
+    if (STANDALONE) {
+      // dev/test only: keep the last outbound messages inspectable without a parent
+      if (window.__outbox) {
+        window.__outbox.push(message)
+        if (window.__outbox.length > 240) window.__outbox.shift()
+      }
+      return
+    }
     try { parent.postMessage(message, location.origin) } catch { /* parent gone */ }
   }
+  if (STANDALONE) window.__outbox = []
 
   // ---------- GL setup
 
@@ -191,8 +215,10 @@
       .replace(/\bgl_FragColor\b/g, 'st_out')
   }
 
-  /** Build a compilable fragment shader from ShaderToy-style source. */
-  function assemble(rawSrc, es3, skip) {
+  /** Build a compilable fragment shader from ShaderToy-style source.
+   *  kind 'image' -> wraps mainImage(); kind 'sound' -> wraps mainSound() and packs
+   *  stereo samples into RGBA8 (16 bit per channel) for readPixels + WebAudio. */
+  function assemble(rawSrc, es3, skip, kind = 'image') {
     const { body, extensions } = splitDirectives(rawSrc)
     const rewritten = es3 ? rewriteLegacyEs3(body) : body
     const analysis = stripComments(rewritten)
@@ -212,18 +238,33 @@
       if (has(name) || defines.has(base) || skip.has(name)) continue
       header.push(`uniform ${type} ${name};`)
     }
-    for (const [type, name] of OWN_UNIFORMS) header.push(`uniform ${type} ${name};`)
+    if (kind === 'image') for (const [type, name] of OWN_UNIFORMS) header.push(`uniform ${type} ${name};`)
 
-    const hasMainImage = /\bmainImage\s*\(/.test(analysis)
+    const target = es3 ? 'st_out' : 'gl_FragColor'
     const tail = []
-    if (hasMainImage) {
-      const target = es3 ? 'st_out' : 'gl_FragColor'
+    if (kind === 'image') {
+      if (/\bmainImage\s*\(/.test(analysis)) {
+        tail.push(
+          `void main(){`,
+          `  vec4 c = vec4(0.0, 0.0, 0.0, 1.0);`,
+          `  mainImage(c, gl_FragCoord.xy);`,
+          `  c.rgb = mix(clamp(c.rgb, 0.0, 1.0) * uDim, uTint, uTintMix);`,
+          `  ${target} = c;`,
+          `}`,
+        )
+      }
+    } else {
+      // 16-bit linear packing: R/G = hi/lo byte of L, B/A = hi/lo byte of R.
       tail.push(
+        `vec2 st_pack16(float v){`,
+        `  float u = clamp(v * 0.5 + 0.5, 0.0, 1.0);`,
+        `  float n = floor(u * 65535.0);`,
+        `  return vec2(floor(n / 256.0), n - 256.0 * floor(n / 256.0)) / 255.0;`,
+        `}`,
         `void main(){`,
-        `  vec4 c = vec4(0.0, 0.0, 0.0, 1.0);`,
-        `  mainImage(c, gl_FragCoord.xy);`,
-        `  c.rgb = mix(clamp(c.rgb, 0.0, 1.0) * uDim, uTint, uTintMix);`,
-        `  ${target} = c;`,
+        `  float st_t = iTime + gl_FragCoord.x / iSampleRate;`,
+        `  vec2 st_s = clamp(mainSound(st_t), -1.0, 1.0);`,
+        `  ${target} = vec4(st_pack16(st_s.x), st_pack16(st_s.y));`,
         `}`,
       )
     }
@@ -299,13 +340,40 @@
     return { error: lastError ? `[ES3]\n${lastError}\n\n[ES1]\n${es1Error}` : es1Error }
   }
 
-  function collectLocations() {
-    locs = Object.create(null)
-    if (!program) return
-    for (const [, name] of [...UNIFORMS, ...OWN_UNIFORMS]) {
-      const loc = gl.getUniformLocation(program, /\[/.test(name) ? `${name.replace(/\[.*$/, '')}[0]` : name)
-      if (loc) locs[name] = loc
+  /** Sound pass: same preprocessing/fallback ladder, different wrapper. */
+  function buildSoundProgram(rawSrc) {
+    if (!/\bmainSound\s*\(/.test(stripComments(rawSrc))) {
+      return { error: 'sound 代码里没有 vec2 mainSound(float time)' }
     }
+    const skip = new Set()
+    let lastError = ''
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { source, headerLineCount } = assemble(rawSrc, true, skip, 'sound')
+      const result = tryLink(source, true)
+      if (result.program) return { program: result.program, es3: true, source }
+      lastError = remapLog(result.error, headerLineCount)
+      const redef = /redefinition of '([A-Za-z_][A-Za-z0-9_]*)'/.exec(result.error)
+      if (redef && !skip.has(redef[1])) {
+        const name = UNIFORMS.find(([, n]) => n.replace(/\[.*$/, '') === redef[1])
+        if (name) { skip.add(name[1]); continue }
+      }
+      break
+    }
+    const { source, headerLineCount } = assemble(rawSrc, false, new Set(), 'sound')
+    const result = tryLink(source, false)
+    if (result.program) return { program: result.program, es3: false, source, note: 'es1-fallback' }
+    const es1Error = remapLog(result.error, headerLineCount)
+    return { error: lastError ? `[ES3]\n${lastError}\n\n[ES1]\n${es1Error}` : es1Error }
+  }
+
+  function collectLocations(targetProgram = program) {
+    const map = Object.create(null)
+    if (!targetProgram) return map
+    for (const [, name] of [...UNIFORMS, ...OWN_UNIFORMS]) {
+      const loc = gl.getUniformLocation(targetProgram, /\[/.test(name) ? `${name.replace(/\[.*$/, '')}[0]` : name)
+      if (loc) map[name] = loc
+    }
+    return map
   }
 
   function set1(name, v) { const l = locs[name]; if (l) gl.uniform1f(l, v) }
@@ -314,9 +382,320 @@
   function set3(name, a, b, c) { const l = locs[name]; if (l) gl.uniform3f(l, a, b, c) }
   function set4(name, a, b, c, d) { const l = locs[name]; if (l) gl.uniform4f(l, a, b, c, d) }
 
+  // ---------- audio (M2): mainSound -> 4096x1 RGBA8 16-bit -> WebAudio lookahead
+  //
+  // mainSound(t) is evaluated one sample per pixel into a 4096x1 RGBA8 target:
+  // R/G = high/low byte of the left sample, B/A = the right one. readPixels then
+  // moves 16 KB per chunk (~92.9 ms at 44.1 kHz ≈ 10.8 syncs/s), which the
+  // 400 ms lookahead + 500 ms prebuffer absorb. Scheduling runs on its own timer
+  // so a hitching rAF can never starve the audio thread.
+
+  const AUDIO_CHUNK = 4096
+  const AUDIO_LOOKAHEAD = 0.4
+  const AUDIO_PREBUFFER = 0.5
+  const AUDIO_TICK_MS = 120
+  const AUDIOPROBE = q.get('audioprobe') === '1'
+
+  const audio = {
+    ctx: null, gain: null, limiter: null,
+    program: null, es3: true, locs: Object.create(null),
+    tex: null, fbo: null,
+    bytes: new Uint8Array(AUDIO_CHUNK * 4),
+    left: new Float32Array(AUDIO_CHUNK),
+    right: new Float32Array(AUDIO_CHUNK),
+    sampleRate: 0, chunkSize: AUDIO_CHUNK,
+    time: 0,               // shader time at the next chunk start
+    chunks: 0,             // scheduled chunk count
+    scheduledUntil: 0,     // ctx.currentTime of the next chunk start
+    sources: new Set(), timer: 0, running: false,
+    state: 'none', reason: '',
+    peak: 0, rms: 0,
+  }
+
+  function targetGain() { return params.muted ? 0 : clamp(params.volume, 0, 100, 60) / 100 }
+
+  function applyGain() {
+    const value = targetGain()
+    if (!audio.gain || !audio.ctx) return
+    try { audio.gain.gain.setTargetAtTime(value, audio.ctx.currentTime, 0.02) } catch { audio.gain.gain.value = value }
+  }
+
+  function audioChunkSeconds() { return audio.chunkSize / (audio.sampleRate || 44100) }
+
+  function publishAudio() {
+    audioStateLabel = audio.program ? `${audio.state}/${audio.chunks}` : 'none'
+    if (typeof window.__player !== 'object' || window.__player === null) window.__player = {}
+    const p = window.__player
+    p.ready = state.ready
+    p.sound = !!audio.program
+    p.es3 = es3
+    p.preset = diag.preset
+    p.frames = state.frame
+    p.audio = {
+      state: audio.state, sampleRate: audio.sampleRate, chunks: audio.chunks,
+      chunkSize: audio.chunkSize, peak: audio.peak, rms: audio.rms, gain: targetGain(),
+    }
+    if (AUDIOPROBE) window.__audioProbe = { peak: audio.peak, rms: audio.rms, chunks: audio.chunks }
+  }
+
+  function setAudioState(next, reason) {
+    if (audio.state === next && (reason ?? '') === audio.reason) return
+    audio.state = next
+    audio.reason = reason ?? ''
+    const message = { type: 'audio', state: next }
+    if (audio.sampleRate) message.sampleRate = audio.sampleRate
+    if (next === 'running' || audio.chunks) message.chunks = audio.chunks
+    if (reason) message.reason = reason
+    post(message)
+    publishAudio()
+    refreshDiag()
+  }
+
+  function ensureAudioTarget() {
+    if (audio.fbo) return true
+    try {
+      const tex = gl.createTexture()
+      gl.bindTexture(gl.TEXTURE_2D, tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, AUDIO_CHUNK, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      const fbo = gl.createFramebuffer()
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+      const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      if (status !== gl.FRAMEBUFFER_COMPLETE) throw new Error(`0x${status.toString(16)}`)
+      audio.tex = tex
+      audio.fbo = fbo
+      return true
+    } catch (error) {
+      setAudioState('error', `audio FBO: ${error.message}`)
+      return false
+    }
+  }
+
+  function ensureAudioContext() {
+    if (audio.ctx) return true
+    const Ctor = window.AudioContext || window.webkitAudioContext
+    if (!Ctor) { setAudioState('error', 'AudioContext 不可用'); return false }
+    let ctx = null
+    try {
+      ctx = new Ctor({ sampleRate: 44100, latencyHint: 'playback' })
+    } catch {
+      try { ctx = new Ctor({ latencyHint: 'playback' }) } catch (error) {
+        setAudioState('error', `AudioContext 创建失败: ${error.message}`)
+        return false
+      }
+    }
+    audio.ctx = ctx
+    audio.sampleRate = ctx.sampleRate || 44100
+    audio.gain = ctx.createGain()
+    audio.limiter = ctx.createDynamicsCompressor()
+    audio.limiter.threshold.value = -6
+    audio.limiter.knee.value = 0
+    audio.limiter.ratio.value = 20
+    audio.limiter.attack.value = 0.003
+    audio.limiter.release.value = 0.25
+    audio.gain.connect(audio.limiter)
+    audio.limiter.connect(ctx.destination)
+    audio.gain.gain.value = targetGain()
+    ctx.onstatechange = () => {
+      if (ctx.state === 'running') { if (audio.program) startAudioScheduler() }
+      else if (audio.program) setAudioState(ctx.state === 'suspended' ? 'suspended' : 'error', `context ${ctx.state}`)
+    }
+    try { const p = ctx.resume(); if (p && typeof p.catch === 'function') p.catch(() => {}) } catch { /* blocked */ }
+    // Autoplay policy may keep us suspended; that is a normal state, not an error.
+    setAudioState(ctx.state === 'running' ? 'running' : 'suspended', ctx.state === 'running' ? '' : 'autoplay blocked')
+    return true
+  }
+
+  /** Render one chunk into the FBO and decode it into audio.left/right. */
+  function renderAudioChunk() {
+    if (!audio.program || !audio.sampleRate) return false
+    if (!ensureAudioTarget()) return false
+    const L = audio.locs
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, audio.fbo)
+      gl.viewport(0, 0, AUDIO_CHUNK, 1)
+      gl.useProgram(audio.program)
+      gl.bindBuffer(gl.ARRAY_BUFFER, VBO)
+      gl.enableVertexAttribArray(0)
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+      for (let i = 0; i < 4; i++) { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, blackTex) }
+      if (L.iResolution) gl.uniform3f(L.iResolution, AUDIO_CHUNK, 1, 1)
+      if (L.iTime) gl.uniform1f(L.iTime, audio.time)
+      if (L.iTimeDelta) gl.uniform1f(L.iTimeDelta, 0)
+      if (L.iFrame) gl.uniform1i(L.iFrame, audio.chunks)
+      if (L.iMouse) gl.uniform4f(L.iMouse, 0, 0, 0, 0)
+      if (L.iDate) { const d = nowDate(); gl.uniform4f(L.iDate, d[0], d[1], d[2], d[3]) }
+      if (L.iSampleRate) gl.uniform1f(L.iSampleRate, audio.sampleRate)
+      for (let i = 0; i < 4; i++) if (L[`iChannel${i}`]) gl.uniform1i(L[`iChannel${i}`], i)
+      if (L['iChannelResolution[4]']) gl.uniform3fv(L['iChannelResolution[4]'], new Float32Array(12))
+      if (L['iChannelTime[4]']) gl.uniform1fv(L['iChannelTime[4]'], new Float32Array(4))
+      gl.drawArrays(gl.TRIANGLES, 0, 3)
+      gl.readPixels(0, 0, AUDIO_CHUNK, 1, gl.RGBA, gl.UNSIGNED_BYTE, audio.bytes)
+    } catch (error) {
+      setAudioState('error', `audio render: ${error.message}`)
+      return false
+    } finally {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    }
+    const bytes = audio.bytes
+    let peak = 0
+    let sum = 0
+    for (let i = 0; i < AUDIO_CHUNK; i++) {
+      const l = (((bytes[i * 4] << 8) | bytes[i * 4 + 1]) / 65535) * 2 - 1
+      const r = (((bytes[i * 4 + 2] << 8) | bytes[i * 4 + 3]) / 65535) * 2 - 1
+      audio.left[i] = l
+      audio.right[i] = r
+      const al = l < 0 ? -l : l
+      const ar = r < 0 ? -r : r
+      if (al > peak) peak = al
+      if (ar > peak) peak = ar
+      sum += l * l + r * r
+    }
+    audio.peak = peak
+    audio.rms = Math.sqrt(sum / (AUDIO_CHUNK * 2))
+    audio.time += audioChunkSeconds() * Math.max(params.speed, 0)
+    if (AUDIOPROBE) window.__audioProbe = { peak, rms: audio.rms, chunks: audio.chunks }
+    return true
+  }
+
+  function scheduleAudioChunk(when) {
+    const ctx = audio.ctx
+    if (!ctx || !audio.gain) return false
+    if (!renderAudioChunk()) return false
+    try {
+      const buffer = ctx.createBuffer(2, AUDIO_CHUNK, audio.sampleRate)
+      buffer.copyToChannel(audio.left, 0)
+      buffer.copyToChannel(audio.right, 1)
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.connect(audio.gain)
+      source.onended = () => audio.sources.delete(source)
+      source.start(when)
+      audio.sources.add(source)
+      audio.chunks++
+      audio.scheduledUntil = when + audioChunkSeconds()
+      return true
+    } catch (error) {
+      setAudioState('error', `audio schedule: ${error.message}`)
+      return false
+    }
+  }
+
+  function startAudioScheduler() {
+    if (!audio.program || !audio.ctx || audio.ctx.state !== 'running' || audio.running) return
+    audio.running = true
+    const startAt = audio.ctx.currentTime + AUDIO_PREBUFFER
+    audio.scheduledUntil = startAt
+    // fill prebuffer + lookahead up front: one slow frame must not starve playback
+    for (let i = 0; i < 16 && audio.scheduledUntil < startAt + AUDIO_LOOKAHEAD; i++) {
+      if (!scheduleAudioChunk(audio.scheduledUntil)) break
+    }
+    if (audio.state !== 'error') setAudioState('running')
+    audio.timer = setInterval(tickAudio, AUDIO_TICK_MS)
+    publishAudio()
+  }
+
+  function stopAudioScheduler(reason) {
+    if (audio.timer) { clearInterval(audio.timer); audio.timer = 0 }
+    audio.running = false
+    for (const source of audio.sources) {
+      try { source.onended = null; source.stop() } catch { /* already stopped */ }
+      try { source.disconnect() } catch { /* noop */ }
+    }
+    audio.sources.clear()
+    audio.scheduledUntil = 0
+    if (audio.program && reason !== 'switch' && reason !== 'reset') {
+      setAudioState('suspended', reason)
+    }
+  }
+
+  function tickAudio() {
+    const ctx = audio.ctx
+    if (!ctx || !audio.program || audio.running !== true) return
+    if (params.paused || document.hidden) { stopAudioScheduler('paused'); return }
+    if (ctx.state !== 'running') { stopAudioScheduler('context'); return }
+    if (audio.scheduledUntil < ctx.currentTime - 0.05) audio.scheduledUntil = ctx.currentTime + 0.15 // underrun: skip ahead
+    for (let i = 0; i < 16 && audio.scheduledUntil < ctx.currentTime + AUDIO_LOOKAHEAD; i++) {
+      if (!scheduleAudioChunk(audio.scheduledUntil)) return
+    }
+    publishAudio()
+  }
+
+  function stopAudio() {
+    stopAudioScheduler('switch')
+    audio.time = 0
+    audio.chunks = 0
+    audio.scheduledUntil = 0
+    audio.peak = 0
+    audio.rms = 0
+    if (audio.program) { try { gl.deleteProgram(audio.program) } catch { /* noop */ } }
+    audio.program = null
+    audio.locs = Object.create(null)
+    publishAudio()
+  }
+
+  /** Install (or clear) the sound pass. Never fails the image pass. */
+  function setSound(source) {
+    stopAudio()
+    if (typeof source !== 'string' || !source.trim()) { setAudioState('none'); publishAudio(); return false }
+    const built = buildSoundProgram(source)
+    if (!built.program) {
+      report(`sound disabled · ${String(built.error).split('\n')[0].slice(0, 120)}`)
+      setAudioState('error', 'sound compile failed')
+      publishAudio()
+      return false
+    }
+    audio.program = built.program
+    audio.es3 = built.es3
+    audio.locs = collectLocations(built.program)
+    audio.time = 0
+    audio.chunks = 0
+    report(`sound ready · ${built.es3 ? 'es3' : 'es1'}`)
+    if (ensureAudioContext()) {
+      applyGain()
+      if (audio.ctx.state === 'running') startAudioScheduler()
+      else setAudioState('suspended', 'autoplay blocked')
+    }
+    publishAudio()
+    return true
+  }
+
+  async function resumeAudio() {
+    if (!audio.program) return
+    if (!ensureAudioContext()) return
+    try { await audio.ctx.resume() } catch { /* still blocked */ }
+    if (audio.ctx.state === 'running') startAudioScheduler()
+    else setAudioState('suspended', 'autoplay blocked')
+    publishAudio()
+  }
+
+  async function loadSoundForEntry(entry, id) {
+    const candidates = []
+    if (entry && typeof entry.soundFile === 'string' && entry.soundFile.trim()) {
+      candidates.push(`presets/${entry.soundFile.trim()}`)
+    }
+    const convention = `presets/${id}-sound.glsl`
+    if (!candidates.includes(convention)) candidates.push(convention)
+    for (const url of candidates) {
+      try {
+        const code = await fetchText(url)
+        if (code && code.trim()) { setSound(code); return true }
+      } catch { /* 404 → try the next convention / treat as no sound */ }
+    }
+    setSound(null)
+    return false
+  }
+
   // ---------- state
 
-  const state = { time: 0, dt: 0, frame: 0, last: 0, drawMs: 0, fps: 0, fpsAcc: 0, fpsFrames: 0, ready: false }
+  if (STANDALONE) window.__audioInternals = audio
+
+  const state = { time: 0, dt: 0, frame: 0, last: 0, drawMs: 0, fps: 0, fpsAcc: 0, fpsFrames: 0, ready: false, pendingSound: false }
   const mouse = { x: 0, y: 0, cx: 0, cy: 0, down: false, anchorX: 0, anchorY: 0 }
 
   function resize() {
@@ -366,7 +745,7 @@
       mouse.down ? mouse.anchorY : -Math.abs(mouse.anchorY))
     const date = nowDate()
     set4('iDate', date[0], date[1], date[2], date[3])
-    set1('iSampleRate', 44100)
+    set1('iSampleRate', audio.sampleRate || 44100)
     const chRes = new Float32Array(12)
     const chTime = new Float32Array(4)
     if (locs['iChannelResolution[4]']) gl.uniform3fv(locs['iChannelResolution[4]'], chRes)
@@ -403,15 +782,17 @@
       refreshDiag()
       if (state.ready) post({ type: 'stats', fps: state.fps, ms: Math.round(state.drawMs * 100) / 100, w: canvas.width, h: canvas.height })
     }
-    if (!state.ready && program) {
+    if (!state.ready && program && !state.pendingSound) {
       state.ready = true
-      post({ type: 'ready', preset: diag.preset, es3 })
+      post({ type: 'ready', preset: diag.preset, es3, sound: !!audio.program })
+      publishAudio()
     }
   }
 
   // ---------- shader loading
 
   function setShader(source, presetName) {
+    if (audio.program) stopAudio()
     const built = buildProgram(source)
     if (!built.program) {
       program = null
@@ -429,7 +810,7 @@
     state.time = 0
     state.frame = 0
     state.ready = false
-    collectLocations()
+    locs = collectLocations()
     report(`running · ${es3 ? 'es3' : 'es1'} · shader=${diag.preset}`)
     return true
   }
@@ -441,10 +822,20 @@
   }
 
   async function loadPreset(id) {
+    // dev/preview path: `?preset=local/seascape.glsl` reads a user preset straight
+    // from $DSH_HOME/shader-skin/presets (served by the Host / dev server at /local/)
+    if (id.startsWith('local/')) {
+      const file = id.slice('local/'.length)
+      return { entry: { id, name: file.replace(/\.[^.]+$/, '') }, source: await fetchText(`local/${file}`) }
+    }
     let list = []
     try { list = await (await fetch('presets/index.json', { cache: 'no-store' })).json() } catch { /* manifest optional */ }
     const hit = Array.isArray(list) ? list.find(item => item.id === id) : undefined
-    if (hit) return { entry: hit, source: await fetchText(`presets/${hit.file}`) }
+    if (hit) {
+      const source = await fetchText(`presets/${hit.file}`)
+      const sound = hit.soundFile ? await fetchText(`presets/${hit.soundFile}`).catch(() => undefined) : undefined
+      return { entry: hit, source, sound }
+    }
     // unknown id: try presets/<id>.glsl directly (dev fixtures), otherwise the first manifest entry
     try { return { entry: { id, name: id }, source: await fetchText(`presets/${id}.glsl`) } } catch { /* not a fixture */ }
     const first = Array.isArray(list) ? list[0] : undefined
@@ -479,7 +870,11 @@
 
   window.addEventListener('resize', resize)
   if (typeof ResizeObserver === 'function') new ResizeObserver(resize).observe(document.body)
-  document.addEventListener('visibilitychange', () => { state.last = 0 })
+  document.addEventListener('visibilitychange', () => {
+    state.last = 0
+    if (document.hidden) stopAudioScheduler('hidden')
+    else if (audio.program && !params.paused && audio.ctx && audio.ctx.state === 'running') startAudioScheduler()
+  })
 
   if (!STANDALONE) {
     window.addEventListener('message', event => {
@@ -487,14 +882,24 @@
       const message = event.data
       if (!message || typeof message !== 'object') return
       switch (message.type) {
-        case 'init':
+        case 'init': {
           if (message.preset) {
-            const image = message.preset.image ?? message.preset.code?.image
-            if (typeof image === 'string' && image.trim()) setShader(image, message.preset.name || message.preset.id)
-            else fail('init', 'init 消息里没有 image 代码')
+            const preset = message.preset
+            const image = preset.code?.image ?? preset.image
+            if (typeof image === 'string' && image.trim()) {
+              if (setShader(image, preset.name || preset.id)) {
+                const sound = preset.code?.sound
+                setSound(typeof sound === 'string' && sound.trim() ? sound : null)
+              } else {
+                setSound(null)
+              }
+            } else {
+              fail('init', 'init 消息里没有 image 代码')
+            }
           }
           if (message.params) applyParams(message.params)
           break
+        }
         case 'params': applyParams(message.params); break
         case 'mouse':
           if (Array.isArray(message.mouse) && message.mouse.length === 4) {
@@ -512,8 +917,22 @@
           if (message.dark === false) { params.dim = 0.72; params.tintMix = 0.62 }
           else { params.dim = 0.55; params.tintMix = 0 }
           break
-        case 'pause': params.paused = Boolean(message.paused); break
-        case 'reset': state.time = 0; state.frame = 0; break
+        case 'pause':
+          params.paused = Boolean(message.paused)
+          if (params.paused) stopAudioScheduler('paused')
+          else if (audio.program && audio.ctx && audio.ctx.state === 'running') startAudioScheduler()
+          break
+        case 'reset':
+          state.time = 0
+          state.frame = 0
+          if (audio.program) {
+            stopAudioScheduler('reset')
+            audio.time = 0
+            audio.chunks = 0
+            if (!params.paused && audio.ctx && audio.ctx.state === 'running') startAudioScheduler()
+          }
+          break
+        case 'audio-resume': void resumeAudio(); break
         default: break
       }
     })
@@ -524,10 +943,12 @@
   // ---------- boot
 
   // dev conveniences: ?dim= .9 &scale= .75 &speed= .5 &blur= 4 &fps= 60 &tintMix= .3
+  //                   &volume= 70 &muted= 0
   const overrides = {}
-  for (const key of ['dim', 'scale', 'speed', 'blur', 'fps', 'tintMix']) {
+  for (const key of ['dim', 'scale', 'speed', 'blur', 'fps', 'tintMix', 'volume']) {
     if (q.has(key)) overrides[key] = Number(q.get(key))
   }
+  if (q.has('muted')) overrides.muted = q.get('muted') !== '0'
   applyParams(params)
   applyParams(overrides)
   resize()
@@ -539,12 +960,27 @@
   }
 
   if (STANDALONE) {
+    // Ready waits for the optional sound probe: presets/<id>-sound.glsl (404 = no sound)
+    // or a manifest `soundFile` entry. presets/index.json itself is never modified.
+    state.pendingSound = true
     loadPreset(PRESET)
-      .then(({ entry, source }) => setShader(source, entry.name || entry.id))
+      .then(async ({ entry, source }) => {
+        const presetId = entry.id || PRESET
+        if (setShader(source, entry.name || entry.id)) {
+          await loadSoundForEntry(entry, presetId)
+        } else {
+          setSound(null)
+        }
+        state.pendingSound = false
+        publishAudio()
+      })
       .catch(error => {
         const message = error && error.message ? error.message : String(error)
         setShader(EMBEDDED_FALLBACK, 'embedded-fallback')
         fail('preset', `${message}\n\n已回退到内置占位 shader。`)
+        setSound(null)
+        state.pendingSound = false
+        publishAudio()
       })
   } else {
     report('boot · waiting for parent init')

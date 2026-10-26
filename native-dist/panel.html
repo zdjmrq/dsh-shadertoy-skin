@@ -1,82 +1,175 @@
 <!doctype html>
-<html lang="zh">
+<html lang="zh" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ShaderToy 背景设置</title>
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    --bg: rgba(255, 255, 255, .96);
+    --fg: #1a2330;
+    --muted: rgba(26, 35, 48, .58);
+    --faint: rgba(26, 35, 48, .40);
+    --line: rgba(15, 23, 42, .12);
+    --field: rgba(15, 23, 42, .045);
+    --field-hover: rgba(15, 23, 42, .09);
+    --accent: #0b8a80;
+    --accent-soft: rgba(11, 138, 128, .12);
+    --pop: rgba(255, 255, 255, .99);
+    --shadow: 0 18px 44px rgba(15, 23, 42, .18);
+    --danger: #c0362c;
+  }
+  html[data-theme="dark"] {
+    --bg: rgba(10, 14, 20, .92);
+    --fg: #eef4f6;
+    --muted: rgba(238, 244, 246, .58);
+    --faint: rgba(238, 244, 246, .38);
+    --line: rgba(255, 255, 255, .13);
+    --field: rgba(255, 255, 255, .06);
+    --field-hover: rgba(255, 255, 255, .11);
+    --accent: #8fe9e4;
+    --accent-soft: rgba(143, 233, 228, .14);
+    --pop: rgba(18, 24, 32, .99);
+    --shadow: 0 18px 50px rgba(0, 0, 0, .45);
+    --danger: #ff8d7e;
+  }
+  * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
   body {
     font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    color: #eef4f6;
+    color: var(--fg);
     -webkit-font-smoothing: antialiased;
   }
   button { font: inherit; color: inherit; }
 
-  /* collapsed entry point */
   .fab {
     width: 44px; height: 44px; padding: 0; border-radius: 14px;
-    border: 1px solid rgba(255,255,255,.14);
-    background: rgba(12,16,22,.62);
-    backdrop-filter: blur(14px) saturate(130%);
+    border: 1px solid var(--line);
+    background: var(--bg);
+    box-shadow: var(--shadow);
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; color: #9fb3bd;
-    transition: color .18s ease, border-color .18s ease, background .18s ease, transform .1s ease;
+    cursor: pointer; color: var(--accent);
+    transition: border-color .18s ease, transform .1s ease;
   }
-  .fab:hover { color: #8fe9e4; border-color: rgba(143,233,228,.5); background: rgba(16,22,30,.75); }
+  .fab:hover { border-color: var(--accent); }
   .fab:active { transform: scale(.94); }
-  .fab[aria-expanded="true"] { color: #dafdfb; border-color: rgba(143,233,228,.55); background: rgba(143,233,228,.14); }
-  .fab svg { display: block; }
 
-  /* panel */
   .panel {
-    width: 392px; box-sizing: border-box; padding: 16px 18px 14px;
-    border-radius: 18px; border: 1px solid rgba(255,255,255,.12);
-    background: rgba(10,14,20,.88);
-    backdrop-filter: blur(24px) saturate(140%);
-    box-shadow: 0 18px 50px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
+    width: 392px; padding: 14px 16px 12px;
+    border-radius: 16px; border: 1px solid var(--line);
+    background: var(--bg);
+    box-shadow: var(--shadow);
     display: none;
   }
+  .panel.wide { width: 560px; }
   .panel.open { display: block; }
-  .panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-  .panel h1 { margin: 0; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,255,255,.62); font-weight: 500; }
-  .panel h1 b { color: #8fe9e4; font-weight: 600; }
-  .close { background: none; border: 0; color: rgba(255,255,255,.55); font-size: 18px; line-height: 1; cursor: pointer; padding: 3px 6px; border-radius: 6px; }
-  .close:hover { color: #fff; background: rgba(255,255,255,.08); }
 
-  .row { margin-top: 13px; }
+  /* full-page mode (rendered in the main column through the sidebar entry) */
+  body.mode-main { overflow: auto; height: 100%; }
+  body.mode-main .fab { display: none; }
+  body.mode-main .panel {
+    display: block; width: 100%; max-width: 820px; margin: 0 auto;
+    border: 0; box-shadow: none; background: transparent;
+    padding: 22px 24px 40px;
+  }
+  body.mode-main .panel.wide { width: 100%; }
+  body.mode-main .tabs { max-width: 320px; }
+  body.mode-main .list { max-height: none; }
+  body.mode-main .sub { max-width: 560px; }
+  body.mode-main .close { display: none; }
+
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  h1 { margin: 0; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  h1 b { color: var(--accent); font-weight: 600; }
+  .close { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 3px 6px; border-radius: 6px; }
+  .close:hover { color: var(--fg); background: var(--field-hover); }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 3px; border-radius: 10px; background: var(--field); }
+  .tabs button {
+    flex: 1; padding: 6px 0; border: 0; border-radius: 8px; background: transparent;
+    color: var(--muted); cursor: pointer; font-size: 11px; letter-spacing: .06em;
+  }
+  .tabs button.active { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  body.mode-main .tabs button.active { background: var(--field-hover); box-shadow: none; }
+
+  .row { margin-top: 12px; }
   .row:first-of-type { margin-top: 0; }
-  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-  .head label { font-size: 11px; letter-spacing: .08em; color: rgba(255,255,255,.72); }
-  .head output { font-size: 11px; color: #8fe9e4; font-variant-numeric: tabular-nums; }
-  .hint { margin-top: 5px; font-size: 10px; color: rgba(255,255,255,.42); }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
+  .head label { font-size: 11px; letter-spacing: .06em; color: var(--muted); }
+  .head output { font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .hint { margin-top: 5px; font-size: 10px; line-height: 1.6; color: var(--faint); }
+  .hint.error { color: var(--danger); }
 
   input[type=range] { appearance: none; display: block; width: 100%; height: 16px; margin: 0; padding: 0; background: transparent; cursor: pointer; }
-  input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.2); }
-  input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5.5px; border: 0; border-radius: 50%; background: #8fe9e4; box-shadow: 0 0 10px rgba(143,233,228,.7); }
-  input[type=range]:focus-visible { outline: 2px solid rgba(143,233,228,.6); outline-offset: 3px; border-radius: 4px; }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: var(--field-hover); }
+  input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5.5px; border: 0; border-radius: 50%; background: var(--accent); }
+  input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
-  select {
-    width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 9px;
-    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06);
-    color: #eef4f6; font: inherit; cursor: pointer;
+  input[type=text], textarea, input[type=file] {
+    width: 100%; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--field); color: var(--fg); font: inherit;
   }
-  select:focus-visible { outline: 2px solid rgba(143,233,228,.6); outline-offset: 2px; }
+  input[type=text]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  textarea { resize: vertical; min-height: 92px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.5; }
+
+  /* custom dropdown: the native <select> popup ignores our palette */
+  .dd { position: relative; }
+  .dd-trigger {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--field); color: var(--fg); cursor: pointer; text-align: left;
+  }
+  .dd-trigger:hover { background: var(--field-hover); }
+  .dd-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .dd-trigger::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg) translateY(-2px); }
+  .dd-menu {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
+    max-height: 280px; overflow: auto; padding: 4px;
+    border-radius: 10px; border: 1px solid var(--line); background: var(--pop);
+    box-shadow: 0 12px 32px rgba(0,0,0,.28);
+    display: none;
+  }
+  .dd.open .dd-menu { display: block; }
+  .dd-item {
+    display: block; width: 100%; padding: 6px 8px; border: 0; border-radius: 7px;
+    background: transparent; color: var(--fg); cursor: pointer; text-align: left;
+  }
+  .dd-item:hover, .dd-item.focus { background: var(--accent-soft); }
+  .dd-item[aria-selected="true"] { color: var(--accent); font-weight: 600; }
 
   .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .switch input { width: 16px; height: 16px; margin: 0; accent-color: #8fe9e4; cursor: pointer; }
-  .disabled { opacity: .45; pointer-events: none; }
+  .switch input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .dim { opacity: .45; pointer-events: none; }
 
-  .footer { display: flex; gap: 8px; margin-top: 16px; }
-  .reset {
-    flex: 1; padding: 8px 0; border-radius: 9px; cursor: pointer;
-    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06);
-    transition: background .15s ease, border-color .15s ease;
+  .actions { display: flex; gap: 8px; margin-top: 14px; }
+  .btn {
+    flex: 1; padding: 7px 0; border-radius: 9px; cursor: pointer; font-size: 11px;
+    border: 1px solid var(--line); background: var(--field); color: var(--fg);
   }
-  .reset:hover { background: rgba(143,233,228,.12); border-color: rgba(143,233,228,.4); }
-  .note { margin: 12px 0 0; font-size: 10px; line-height: 1.7; color: rgba(255,255,255,.42); }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  .btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .btn.primary { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .btn.tiny { flex: 0 0 auto; padding: 4px 8px; font-size: 10px; }
+  .btn.danger:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
+
+  .note { margin: 10px 0 0; font-size: 10px; line-height: 1.7; color: var(--faint); }
+  .note.error { color: var(--danger); }
+
+  .lib-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .lib-head span { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+  .list { max-height: 300px; overflow: auto; margin: 0 -4px; padding: 0 4px; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px; border: 1px solid transparent; }
+  .item:hover { background: var(--field); }
+  .item.active { border-color: var(--accent); background: var(--accent-soft); }
+  .item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .badge { flex: 0 0 auto; font-size: 9px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; line-height: 16px; }
+  .item .badge.sound { color: var(--accent); border-color: var(--accent); }
+  .item .tools { display: flex; gap: 4px; flex: 0 0 auto; }
+  .import-box { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; margin-top: 10px; }
+  .import-box h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+  .form-row { margin-top: 10px; }
+  .form-row label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+  .local-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .local-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -94,132 +187,298 @@
     <button class="close" id="close" type="button" aria-label="关闭">×</button>
   </header>
 
-  <div class="row switch">
-    <label for="enabled">启用背景</label>
-    <input type="checkbox" id="enabled">
+  <div class="tabs" role="tablist">
+    <button type="button" id="tab-params" role="tab" class="active">参数</button>
+    <button type="button" id="tab-library" role="tab">背景库</button>
   </div>
 
-  <div class="row">
-    <div class="head"><label for="preset">背景作品</label></div>
-    <select id="preset"></select>
+  <div id="view-params" class="sub">
+    <div class="row switch">
+      <label for="enabled">启用背景</label>
+      <input type="checkbox" id="enabled">
+    </div>
+
+    <div class="row">
+      <div class="head"><label>背景作品</label><output id="preset-kind"></output></div>
+      <div id="preset-dd"></div>
+    </div>
+
+    <div class="row">
+      <div class="head"><label for="glass">玻璃不透明度</label><output id="glass-out"></output></div>
+      <input type="range" id="glass" min="40" max="90" step="1">
+      <div class="hint">越高文字越清晰，越低背景越明显（40% 起，保证可读性）</div>
+    </div>
+
+    <div class="row">
+      <div class="head"><label for="blur">模糊</label><output id="blur-out"></output></div>
+      <input type="range" id="blur" min="0" max="12" step="0.5">
+    </div>
+
+    <div class="row">
+      <div class="head"><label>渲染分辨率</label><output id="scale-out"></output></div>
+      <div id="scale-dd"></div>
+      <div class="hint" id="scale-hint"></div>
+    </div>
+
+    <div class="row">
+      <div class="head"><label>帧率上限</label><output id="fps-out"></output></div>
+      <div id="fps-dd"></div>
+      <div class="hint">聊天时 30fps 足够；60fps 更顺滑但更耗电</div>
+    </div>
+
+    <div class="row">
+      <div class="head"><label for="speed">播放速度</label><output id="speed-out"></output></div>
+      <input type="range" id="speed" min="0" max="2" step="0.05">
+    </div>
+
+    <div class="row" id="volume-row">
+      <div class="head"><label for="volume">音量</label><output id="volume-out"></output></div>
+      <input type="range" id="volume" min="0" max="100" step="1">
+      <div class="hint" id="volume-hint"></div>
+    </div>
+
+    <div class="row switch" id="mute-row">
+      <label for="muted">静音</label>
+      <input type="checkbox" id="muted">
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="reset" type="button">本背景恢复默认</button>
+      <button class="btn" id="audio" type="button" hidden>开声音</button>
+    </div>
+    <p class="note" id="note">改动即时生效并自动保存。</p>
   </div>
 
-  <div class="row">
-    <div class="head"><label for="glass">玻璃不透明度</label><output id="glass-out" for="glass"></output></div>
-    <input type="range" id="glass" min="40" max="90" step="1">
-    <div class="hint">越高文字越清晰，越低背景越明显（40% 起，保证可读性）</div>
-  </div>
+  <div id="view-library" hidden>
+    <div class="lib-head">
+      <span>内置 + 我的背景</span>
+      <button class="btn tiny" id="lib-reload" type="button">刷新</button>
+    </div>
+    <div class="list" id="lib-list"></div>
 
-  <div class="row">
-    <div class="head"><label for="blur">模糊</label><output id="blur-out" for="blur"></output></div>
-    <input type="range" id="blur" min="0" max="12" step="0.5">
-  </div>
+    <div class="import-box">
+      <h2>粘贴 ShaderToy 代码</h2>
+      <div class="form-row"><label for="paste-name">名字</label><input type="text" id="paste-name" placeholder="例如：我的海面"></div>
+      <div class="form-row"><label for="paste-image">Image 代码（必填）</label><textarea id="paste-image" placeholder="void mainImage(out vec4 fragColor, in vec2 fragCoord) { ... }"></textarea></div>
+      <div class="form-row"><label for="paste-sound">Sound 代码（可选，mainSound）</label><textarea id="paste-sound" placeholder="vec2 mainSound(float time) { ... }"></textarea></div>
+      <div class="actions"><button class="btn primary" id="paste-add" type="button">加入背景库</button></div>
+      <p class="note error" id="paste-error" hidden></p>
+    </div>
 
-  <div class="row">
-    <div class="head"><label for="scale">渲染分辨率</label><output id="scale-out" for="scale"></output></div>
-    <select id="scale"></select>
-    <div class="hint" id="scale-hint"></div>
-  </div>
+    <div class="import-box">
+      <h2>导入文件（ShaderToy 导出的 JSON / 一段 GLSL）</h2>
+      <input type="file" id="file-input" accept=".json,.glsl,.txt" multiple>
+      <p class="note">JSON 会解析 image / sound pass；GLSL 当作 image pass。作品许可证由原作者决定，仅供个人使用。</p>
+    </div>
 
-  <div class="row">
-    <div class="head"><label for="fps">帧率上限</label><output id="fps-out" for="fps"></output></div>
-    <select id="fps"></select>
-    <div class="hint">聊天时 30fps 足够；60fps 更顺滑但更耗电</div>
-  </div>
+    <div class="import-box">
+      <h2>从本地目录导入（$DSH_HOME/shader-skin/presets/）</h2>
+      <div id="local-list"><p class="note">正在读取…</p></div>
+    </div>
 
-  <div class="row">
-    <div class="head"><label for="speed">播放速度</label><output id="speed-out" for="speed"></output></div>
-    <input type="range" id="speed" min="0" max="2" step="0.05">
+    <p class="note" id="lib-note">内置作品随插件包提供；我的背景只保存在本机，不会上传。</p>
   </div>
-
-  <div class="row disabled" title="音频在 M2 实现">
-    <div class="head"><label for="volume">音量</label><output id="volume-out" for="volume"></output></div>
-    <input type="range" id="volume" min="0" max="100" step="1" disabled>
-    <div class="hint">带音乐的 ShaderToy 作品将在 M2 支持声音</div>
-  </div>
-
-  <div class="footer">
-    <button class="reset" id="reset" type="button">恢复默认</button>
-  </div>
-  <p class="note" id="note">改动即时生效并自动保存。</p>
 </section>
 
 <script>
 (() => {
   'use strict'
   const STANDALONE = window.parent === window
-  // `/shader-skin` in production; `?base=` lets the dev server drive the panel
-  // directly (its routes are mounted at the origin root).
-  const BASE = new URLSearchParams(location.search).get('base') ?? '/shader-skin'
+  const query = new URLSearchParams(location.search)
+  const BASE = query.get('base') ?? '/shader-skin'
+  const MODE = query.get('mode') === 'main' ? 'main' : 'popup'
   const $ = id => document.getElementById(id)
   const panel = $('panel')
-  const fab = $('fab')
 
-  const state = { version: 1, activeId: null, entries: [], params: {} }
-  let defaults = { params: { glass: 72, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: true }, limits: {} }
+  const state = { activeId: null, entries: [], overrides: {} }
+  let defaults = { params: { enabled: true, glass: 72, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: true }, limits: {} }
   let manifest = []
-  let open = false
+  let localPresets = null
+  let open = MODE === 'main'
   let saveTimer = 0
+  let audioState = 'none'
 
   const clamp = (v, lo, hi, fb) => {
     const n = Number(v)
     return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fb
   }
+  const el = (tag, props = {}, ...children) => {
+    const node = Object.assign(document.createElement(tag), props)
+    for (const child of children) node.append(child)
+    return node
+  }
+
+  // ---------------------------------------------------------------- theme
+  function detectDark() {
+    try {
+      if (parent.document?.body) return parent.document.body.hasAttribute('data-ds-dark-theme')
+    } catch { /* cross-origin fallback */ }
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true
+  }
+  function applyTheme() {
+    const dark = detectDark()
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+  }
+  function watchParentTheme() {
+    try {
+      const body = parent.document?.body
+      if (body) new MutationObserver(applyTheme).observe(body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
+    } catch { /* ignore */ }
+    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme)
+  }
+
+  // ---------------------------------------------------------------- dropdown
+  function makeDropdown(host, { options, value, onChange, translate }) {
+    const root = el('div', { className: 'dd' })
+    const trigger = el('button', { type: 'button', className: 'dd-trigger' })
+    const menu = el('div', { className: 'dd-menu', role: 'listbox' })
+    root.append(trigger, menu)
+    host.replaceChildren(root)
+    let list = options
+    let current = value
+    let focusIndex = -1
+
+    const textOf = option => (translate ? translate(option) : option.text)
+    const sync = () => {
+      const found = list.find(option => option.value === current)
+      trigger.textContent = found ? textOf(found) : ''
+      for (const [index, item] of [...menu.children].entries()) item.setAttribute('aria-selected', String(list[index]?.value === current))
+    }
+    const paintFocus = () => {
+      for (const [index, item] of [...menu.children].entries()) item.classList.toggle('focus', index === focusIndex)
+    }
+    const close = () => { root.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false') }
+    const openMenu = () => {
+      root.classList.add('open')
+      trigger.setAttribute('aria-expanded', 'true')
+      focusIndex = Math.max(0, list.findIndex(option => option.value === current))
+      paintFocus()
+      menu.scrollTop = Math.max(0, focusIndex * 30 - 60)
+    }
+    const pick = option => {
+      current = option.value
+      close()
+      sync()
+      onChange(option.value)
+    }
+    const render = () => {
+      menu.replaceChildren(...list.map((option, index) => {
+        const item = el('button', { type: 'button', className: 'dd-item', role: 'option' })
+        item.textContent = textOf(option)
+        item.addEventListener('click', () => pick(option))
+        item.addEventListener('mouseenter', () => { focusIndex = index; paintFocus() })
+        return item
+      }))
+      sync()
+    }
+    trigger.setAttribute('aria-haspopup', 'listbox')
+    trigger.setAttribute('aria-expanded', 'false')
+    trigger.addEventListener('click', () => { root.classList.contains('open') ? close() : openMenu() })
+    trigger.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        if (!root.classList.contains('open')) return openMenu()
+        focusIndex = clamp(focusIndex + (event.key === 'ArrowDown' ? 1 : -1), 0, list.length - 1, 0)
+        paintFocus()
+      } else if (event.key === 'Enter' || event.key === ' ') {
+        if (root.classList.contains('open')) {
+          event.preventDefault()
+          const option = list[focusIndex]
+          if (option) pick(option)
+        }
+      } else if (event.key === 'Escape') {
+        close()
+      }
+    })
+    document.addEventListener('click', event => { if (!root.contains(event.target)) close() })
+    render()
+    return {
+      setOptions(next, nextValue = current) { list = next; current = nextValue; render() },
+      setValue(next) { current = next; sync() },
+      getValue() { return current },
+    }
+  }
+
+  // ---------------------------------------------------------------- helpers
+  const effective = () => ({ ...defaults.params, ...(state.overrides[state.activeId] ?? {}) })
+  const builtinById = id => manifest.find(item => item.id === id)
+  const entryById = id => state.entries.find(item => item.id === id)
+  const activePreset = () => entryById(state.activeId) ?? builtinById(state.activeId) ?? manifest[0] ?? null
+  const hasSound = () => {
+    const preset = activePreset()
+    if (!preset) return false
+    return entryById(state.activeId) ? Boolean(preset.code?.sound) : Boolean(preset.hasSound)
+  }
+  const presetOptions = () => [
+    ...manifest.map(item => ({ value: item.id, text: item.name || item.id, kind: '内置' })),
+    ...state.entries.map(item => ({ value: item.id, text: item.name || item.id, kind: '我的' })),
+  ]
+  const textOfPreset = option => `${option.text}${option.kind ? ` · ${option.kind}` : ''}`
 
   async function fetchJson(url) {
     const response = await fetch(url, { cache: 'no-store' })
     if (!response.ok) throw new Error(`${response.status} ${url}`)
     return response.json()
   }
-
-  /** Effective rendering buffer size for the current scale, for the hint text. */
-  function bufferSize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
-    const scale = Number(merged().scale) || 1
-    const w = Math.round(window.innerWidth * dpr * scale)
-    const h = Math.round(window.innerHeight * dpr * scale)
-    return `${w} × ${h}`
+  async function fetchText(url) {
+    const response = await fetch(url, { cache: 'no-store' })
+    if (!response.ok) throw new Error(`${response.status} ${url}`)
+    return response.text()
   }
 
-  function merged() {
-    return { ...defaults.params, ...state.params }
-  }
-
-  // --- parent bridge -------------------------------------------------------
   function toParent(message) {
     if (STANDALONE) return
     try { parent.postMessage(message, location.origin) } catch { /* parent gone */ }
   }
 
-  function publish(kind) {
-    const params = merged()
-    toParent({ type: 'params', params })
-    if (kind === 'preset') toParent({ type: 'preset', id: state.activeId })
-    scheduleSave()
-  }
-
   function scheduleSave() {
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
-      const body = JSON.stringify({
-        version: 1,
-        activeId: state.activeId,
-        entries: state.entries,
-        params: state.params,
-      })
+      const body = JSON.stringify({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides })
       fetch(`${BASE}/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body })
-        .then(response => {
-          $('note').textContent = response.ok ? '改动即时生效并已保存。' : `保存失败（HTTP ${response.status}）`
-        })
-        .catch(() => { $('note').textContent = '保存失败：Host 路由不可用。' })
+        .then(response => setNote(response.ok ? '改动即时生效并已保存。' : `保存失败（HTTP ${response.status}）`, !response.ok))
+        .catch(() => setNote('保存失败：Host 路由不可用。', true))
     }, 320)
   }
 
-  // --- layout: the parent sizes the iframe to our content ------------------
+  function setNote(text, isError = false) {
+    const note = $('note')
+    note.textContent = text
+    note.classList.toggle('error', isError)
+  }
+
+  function publishParams() {
+    toParent({ type: 'params', params: effective() })
+    scheduleSave()
+  }
+
+  function setActive(id) {
+    if (!id || id === state.activeId) return
+    state.activeId = id
+    sync()
+    toParent({ type: 'preset', id })
+    toParent({ type: 'params', params: effective() })
+    scheduleSave()
+    renderLibrary()
+  }
+
+  function setParam(key, value) {
+    const current = { ...(state.overrides[state.activeId] ?? {}) }
+    if (value === undefined) delete current[key]
+    else current[key] = value
+    if (Object.keys(current).length === 0) delete state.overrides[state.activeId]
+    else state.overrides[state.activeId] = current
+    sync()
+    publishParams()
+  }
+
+  // ---------------------------------------------------------------- sizing
   function reportSize() {
-    const rect = open ? panel.getBoundingClientRect() : fab.getBoundingClientRect()
+    if (MODE !== 'popup') return
+    const target = open ? panel : $('fab')
+    const rect = target.getBoundingClientRect()
     toParent({ type: 'resize', w: Math.ceil(rect.width), h: Math.ceil(rect.height) })
-    // a standalone window has no parent to size it; keep the viewport usable
     if (STANDALONE) {
       document.body.style.width = `${Math.ceil(rect.width)}px`
       document.body.style.height = `${Math.ceil(rect.height)}px`
@@ -227,124 +486,344 @@
   }
 
   function setOpen(next) {
+    if (MODE === 'main') return
     open = next
     panel.classList.toggle('open', next)
-    fab.setAttribute('aria-expanded', String(next))
-    fab.style.display = next ? 'none' : 'flex'
-    if (next) panel.querySelector('select')?.focus()
+    $('fab').setAttribute('aria-expanded', String(next))
+    $('fab').style.display = next ? 'none' : 'flex'
     requestAnimationFrame(reportSize)
   }
 
-  // --- render --------------------------------------------------------------
-  function fillSelects() {
-    const scaleValues = defaults.limits.scale?.values ?? [0.5, 0.75, 1, 1.25, 1.5]
-    $('scale').replaceChildren(...scaleValues.map(value => {
-      const option = document.createElement('option')
-      option.value = String(value)
-      option.textContent = value === 1 ? '1×（原生）' : `${value}×`
-      return option
-    }))
-    const fpsValues = defaults.limits.fps?.values ?? [15, 20, 30, 60]
-    $('fps').replaceChildren(...fpsValues.map(value => {
-      const option = document.createElement('option')
-      option.value = String(value)
-      option.textContent = `${value} fps`
-      return option
-    }))
-    $('preset').replaceChildren(...manifest.map(item => {
-      const option = document.createElement('option')
-      option.value = item.id
-      option.textContent = item.name || item.id
-      return option
-    }))
+  function setTab(next) {
+    $('tab-params').classList.toggle('active', next === 'params')
+    $('tab-library').classList.toggle('active', next === 'library')
+    $('view-params').hidden = next !== 'params'
+    $('view-library').hidden = next !== 'library'
+    panel.classList.toggle('wide', next === 'library')
+    if (next === 'library') void loadLocalPresets()
+    requestAnimationFrame(() => { sync(); reportSize() })
   }
 
+  // ---------------------------------------------------------------- params UI
+  let presetDd
+  let scaleDd
+  let fpsDd
+
   function sync() {
-    const p = merged()
+    const p = effective()
     $('enabled').checked = p.enabled !== false
     $('glass').value = String(p.glass)
     $('glass-out').textContent = `${Math.round(p.glass)}%`
     $('blur').value = String(p.blur)
     $('blur-out').textContent = p.blur > 0 ? `${p.blur} px` : '关'
-    $('scale').value = String(p.scale)
     $('scale-out').textContent = `${p.scale}×`
-    $('scale-hint').textContent = `实际渲染缓冲：${bufferSize()}（DPR ≤ 1.5）`
-    $('fps').value = String(p.fps)
     $('fps-out').textContent = `${p.fps} fps`
     $('speed').value = String(p.speed)
     $('speed-out').textContent = `${Number(p.speed).toFixed(2)}×`
     $('volume').value = String(p.volume)
-    $('volume-out').textContent = p.muted ? '静音' : `${Math.round(p.volume)}%`
-    if (state.activeId) $('preset').value = state.activeId
+    $('volume-out').textContent = `${Math.round(p.volume)}%`
+    const sound = hasSound()
+    $('volume-row').classList.toggle('dim', !sound)
+    $('mute-row').classList.toggle('dim', !sound)
+    $('volume').disabled = !sound
+    $('muted').disabled = !sound
+    $('muted').checked = p.muted === true
+    $('volume-hint').textContent = sound
+      ? (p.muted ? '已静音' : (audioState === 'running' ? '有声播放中' : audioState === 'suspended' ? '浏览器拦截了自动播放，点「开声音」' : '该作品带声音'))
+      : '这个背景没有声音代码'
+    $('audio').hidden = !(sound && audioState === 'suspended')
+    if (presetDd) presetDd.setOptions(presetOptions(), state.activeId ?? '')
+    if (scaleDd) scaleDd.setValue(String(p.scale))
+    if (fpsDd) fpsDd.setValue(String(p.fps))
+    $('scale-hint').textContent = `实际渲染缓冲：${bufferSize()}（DPR ≤ 1.5）`
+    $('preset-kind').textContent = state.activeId ? (entryById(state.activeId) ? '我的' : '内置') : ''
   }
 
-  function bind() {
-    const setParam = (key, value) => {
-      state.params = { ...state.params, [key]: value }
-      sync()
-      publish()
-    }
-    $('fab').addEventListener('click', () => setOpen(true))
-    $('close').addEventListener('click', () => setOpen(false))
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false) }
+  function bufferSize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    const scale = Number(effective().scale) || 1
+    return `${Math.round(window.innerWidth * dpr * scale)} × ${Math.round(window.innerHeight * dpr * scale)}`
+  }
+
+  function bindParams() {
+    presetDd = makeDropdown($('preset-dd'), {
+      options: presetOptions(), value: state.activeId ?? '', translate: textOfPreset,
+      onChange: id => setActive(id),
     })
+    scaleDd = makeDropdown($('scale-dd'), {
+      options: (defaults.limits.scale?.values ?? [0.5, 0.75, 1, 1.25, 1.5]).map(value => ({
+        value: String(value), text: value === 1 ? '1×（原生）' : `${value}×`,
+      })),
+      value: String(effective().scale),
+      onChange: value => setParam('scale', Number(value)),
+    })
+    fpsDd = makeDropdown($('fps-dd'), {
+      options: (defaults.limits.fps?.values ?? [15, 20, 30, 60]).map(value => ({ value: String(value), text: `${value} fps` })),
+      value: String(effective().fps),
+      onChange: value => setParam('fps', Number(value)),
+    })
+
     $('enabled').addEventListener('change', event => setParam('enabled', event.target.checked))
     $('glass').addEventListener('input', event => setParam('glass', clamp(event.target.value, 40, 90, 72)))
     $('blur').addEventListener('input', event => setParam('blur', clamp(event.target.value, 0, 12, 0)))
-    $('scale').addEventListener('change', event => setParam('scale', Number(event.target.value)))
-    $('fps').addEventListener('change', event => setParam('fps', Number(event.target.value)))
     $('speed').addEventListener('input', event => setParam('speed', clamp(event.target.value, 0, 2, 1)))
     $('volume').addEventListener('input', event => setParam('volume', clamp(event.target.value, 0, 100, 60)))
-    $('preset').addEventListener('change', event => {
-      state.activeId = event.target.value
-      publish('preset')
-    })
+    $('muted').addEventListener('change', event => setParam('muted', event.target.checked))
     $('reset').addEventListener('click', () => {
-      state.params = {}
-      state.activeId = manifest[0]?.id ?? state.activeId
+      delete state.overrides[state.activeId]
       sync()
-      publish('preset')
+      publishParams()
+      setNote('已恢复为默认参数。')
+    })
+    $('audio').addEventListener('click', () => toParent({ type: 'audio-resume' }))
+    $('close').addEventListener('click', () => setOpen(false))
+    $('tab-params').addEventListener('click', () => setTab('params'))
+    $('tab-library').addEventListener('click', () => setTab('library'))
+    $('fab').addEventListener('click', () => setOpen(true))
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && MODE === 'popup' && open && !document.querySelector('.dd.open')) setOpen(false)
     })
     window.addEventListener('resize', () => { sync(); reportSize() })
   }
 
-  async function boot() {
-    if (!STANDALONE) {
-      window.addEventListener('message', event => {
-        if (event.origin !== location.origin) return
-        const message = event.data
-        if (message && message.type === 'error') {
-          $('note').textContent = `渲染错误（${message.stage}）：${String(message.log ?? '').slice(0, 260)}`
-          $('note').style.color = '#ff9d8f'
+  // ------------------------------------------------------------- library UI
+  function parseShaderDocument(text) {
+    let raw
+    try { raw = JSON.parse(text) } catch { return undefined }
+    const shader = raw?.Shader ?? raw?.shader ?? raw
+    const passes = shader?.renderpass ?? shader?.passes
+    let image = ''
+    let sound = ''
+    if (Array.isArray(passes)) {
+      for (const pass of passes) {
+        const type = String(pass?.type ?? 'image').toLowerCase()
+        const source = typeof pass?.code === 'string' ? pass.code : ''
+        if (source === '') continue
+        if (type === 'sound') sound = source
+        else if (image === '') image = source
+      }
+    }
+    if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
+    if (image === '' && typeof shader?.image === 'string') image = shader.image
+    if (image === '' && typeof raw?.image === 'string') image = raw.image
+    if (image === '') return undefined
+    const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
+    return { image, sound: sound || undefined, name: name || undefined }
+  }
+
+  const looksLikeImage = code => /\bmainImage\s*\(/.test(code) || /\bvoid\s+main\s*\(/.test(code)
+  const looksLikeSound = code => /\bmainSound\s*\(/.test(code)
+
+  function addEntry({ name, image, sound, source, origin }) {
+    if (!looksLikeImage(image)) throw new Error('Image 代码里找不到 mainImage() 或 main()')
+    const id = `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+    const entry = { id, name: (name || '我的背景').slice(0, 120), source: source || 'paste', code: { image } }
+    if (sound && looksLikeSound(sound)) entry.code.sound = sound
+    state.entries.push(entry)
+    scheduleSave()
+    renderLibrary()
+    return entry
+  }
+
+  function renderLibrary() {
+    const list = $('lib-list')
+    const rows = [
+      ...manifest.map(item => ({ id: item.id, name: item.name || item.id, kind: '内置', sound: Boolean(item.hasSound), entry: null })),
+      ...state.entries.map(item => ({ id: item.id, name: item.name, kind: '我的', sound: Boolean(item.code?.sound), entry: item })),
+    ]
+    list.replaceChildren(...rows.map(row => {
+      const name = el('span', { className: 'name' })
+      name.textContent = row.name
+      name.title = row.name
+      const badge = el('span', { className: 'badge' })
+      badge.textContent = row.kind
+      const sound = el('span', { className: 'badge sound' })
+      sound.textContent = row.sound ? '有声' : ''
+      sound.hidden = !row.sound
+      const use = el('button', { type: 'button', className: 'btn tiny' })
+      use.textContent = state.activeId === row.id ? '使用中' : '使用'
+      use.addEventListener('click', () => setActive(row.id))
+      const tools = el('div', { className: 'tools' }, use)
+      if (row.entry) {
+        const rename = el('button', { type: 'button', className: 'btn tiny' })
+        rename.textContent = '改名'
+        rename.addEventListener('click', () => {
+          const next = window.prompt('新的名字', row.entry.name)
+          if (next === null) return
+          const trimmed = next.trim()
+          if (trimmed === '') return
+          row.entry.name = trimmed.slice(0, 120)
+          scheduleSave()
+          renderLibrary()
+          sync()
+        })
+        const remove = el('button', { type: 'button', className: 'btn tiny danger' })
+        remove.textContent = '删除'
+        remove.addEventListener('click', () => {
+          if (!window.confirm(`删除「${row.entry.name}」？此操作不可恢复。`)) return
+          state.entries = state.entries.filter(item => item.id !== row.id)
+          delete state.overrides[row.id]
+          if (state.activeId === row.id) {
+            state.activeId = manifest[0]?.id ?? null
+            toParent({ type: 'preset', id: state.activeId })
+            toParent({ type: 'params', params: effective() })
+          }
+          scheduleSave()
+          renderLibrary()
+          sync()
+        })
+        tools.append(rename, remove)
+      }
+      return el('div', { className: `item${state.activeId === row.id ? ' active' : ''}` }, name, sound, badge, tools)
+    }))
+  }
+
+  async function loadLocalPresets(force = false) {
+    const box = $('local-list')
+    if (localPresets !== null && !force) return renderLocalPresets()
+    box.replaceChildren(el('p', { className: 'note' }, document.createTextNode('正在读取…')))
+    try {
+      localPresets = await fetchJson(`${BASE}/local/index.json`)
+    } catch {
+      localPresets = []
+      box.replaceChildren(el('p', { className: 'note error' }, document.createTextNode('读取本地目录失败（Host 路由不可用？）')))
+      return
+    }
+    renderLocalPresets()
+  }
+
+  function renderLocalPresets() {
+    const box = $('local-list')
+    const items = Array.isArray(localPresets) ? localPresets : []
+    if (items.length === 0) {
+      box.replaceChildren(el('p', { className: 'note' }, document.createTextNode('目录里还没有文件。把 ShaderToy 导出的 JSON 或 .glsl 放进 $DSH_HOME/shader-skin/presets/ 即可。')))
+      return
+    }
+    box.replaceChildren(...items.map(item => {
+      const name = el('span', { className: 'name' })
+      name.textContent = `${item.name}${item.hasSound ? ' · 有声' : ''}`
+      name.title = item.file
+      const add = el('button', { type: 'button', className: 'btn tiny primary' })
+      add.textContent = '导入'
+      add.addEventListener('click', async () => {
+        add.disabled = true
+        add.textContent = '导入中…'
+        try {
+          const text = await fetchText(`${BASE}/local/${encodeURIComponent(item.file)}`)
+          const parsed = item.kind === 'shadertoy' ? parseShaderDocument(text) : { image: text }
+          if (!parsed) throw new Error('无法解析这个文件')
+          addEntry({ name: parsed.name || item.name, image: parsed.image, sound: parsed.sound, source: 'local', origin: item.file })
+          setNote(`已导入「${parsed.name || item.name}」，可在列表里使用。`)
+        } catch (error) {
+          setNote(`导入失败：${error.message}`, true)
+        } finally {
+          add.disabled = false
+          add.textContent = '导入'
         }
       })
-    }
-    try {
-      defaults = await fetchJson('defaults.json')
-    } catch { /* keep built-in defaults */ }
-    try {
-      manifest = await fetchJson(`${BASE}/presets/index.json`)
-    } catch { manifest = [] }
+      return el('div', { className: 'local-item' }, name, add)
+    }))
+  }
+
+  function bindLibrary() {
+    $('paste-add').addEventListener('click', () => {
+      const error = $('paste-error')
+      error.hidden = true
+      try {
+        const entry = addEntry({
+          name: $('paste-name').value.trim() || '我的背景',
+          image: $('paste-image').value,
+          sound: $('paste-sound').value,
+          source: 'paste',
+        })
+        $('paste-name').value = ''
+        $('paste-image').value = ''
+        $('paste-sound').value = ''
+        setTab('params')
+        setActive(entry.id)
+        setNote(`已加入「${entry.name}」。`)
+      } catch (err) {
+        error.textContent = err.message
+        error.hidden = false
+      }
+    })
+
+    $('file-input').addEventListener('change', async event => {
+      const files = [...(event.target.files ?? [])]
+      event.target.value = ''
+      for (const file of files) {
+        try {
+          const text = await file.text()
+          const parsed = /\.json$/i.test(file.name) ? parseShaderDocument(text) : { image: text }
+          if (!parsed) throw new Error('不是可识别的 ShaderToy JSON')
+          addEntry({
+            name: parsed.name || file.name.replace(/\.[^.]+$/, ''),
+            image: parsed.image, sound: parsed.sound, source: 'file', origin: file.name,
+          })
+          setNote(`已导入「${parsed.name || file.name}」。`)
+        } catch (error) {
+          setNote(`导入 ${file.name} 失败：${error.message}`, true)
+        }
+      }
+    })
+
+    $('lib-reload').addEventListener('click', () => { void loadLocalPresets(true) })
+  }
+
+  // ---------------------------------------------------------------- messages
+  if (!STANDALONE) {
+    window.addEventListener('message', event => {
+      if (event.origin !== location.origin) return
+      const message = event.data
+      if (!message || typeof message !== 'object') return
+      if (message.type === 'audio') {
+        audioState = typeof message.state === 'string' ? message.state : 'none'
+        sync()
+      } else if (message.type === 'error') {
+        setNote(`渲染错误（${message.stage}）：${String(message.log ?? '').slice(0, 220)}`, true)
+      } else if (message.type === 'theme') {
+        applyTheme()
+      } else if (message.type === 'preset') {
+        if (typeof message.id === 'string' && message.id !== state.activeId) {
+          state.activeId = message.id
+          sync()
+          renderLibrary()
+        }
+      }
+    })
+  }
+
+  // ---------------------------------------------------------------- boot
+  async function boot() {
+    applyTheme()
+    watchParentTheme()
+    try { defaults = await fetchJson('defaults.json') } catch { /* built-in defaults */ }
+    try { manifest = await fetchJson(`${BASE}/presets/index.json`) } catch { manifest = [] }
     manifest = Array.isArray(manifest) ? manifest : []
-    if (manifest.length === 0) {
-      // standalone/dev fallback so the panel is still usable
-      manifest = [{ id: 'aurora', name: '极光（自写）' }, { id: 'flow', name: '流体色带（自写）' }]
-    }
+    if (manifest.length === 0) manifest = [{ id: 'aurora', name: '极光（自写）' }, { id: 'flow', name: '流体色带（自写）' }]
     if (!STANDALONE) {
       try {
         const remote = await fetchJson(`${BASE}/state`)
-        state.entries = Array.isArray(remote.entries) ? remote.entries : []
-        state.params = remote.params && typeof remote.params === 'object' ? remote.params : {}
-        state.activeId = typeof remote.activeId === 'string' ? remote.activeId : null
-      } catch { /* first run: defaults */ }
+        if (remote && typeof remote === 'object') {
+          state.activeId = typeof remote.activeId === 'string' ? remote.activeId : null
+          state.entries = Array.isArray(remote.entries) ? remote.entries : []
+          if (remote.overrides && typeof remote.overrides === 'object') state.overrides = remote.overrides
+          else if (remote.params && typeof remote.params === 'object' && state.activeId) state.overrides[state.activeId] = remote.params
+        }
+      } catch { /* first run */ }
     }
     if (!state.activeId) state.activeId = manifest[0]?.id ?? 'aurora'
-    fillSelects()
-    bind()
+    bindParams()
+    bindLibrary()
     sync()
-    if (STANDALONE) setOpen(true)
-    else {
+    renderLibrary()
+    if (MODE === 'main') {
+      document.body.classList.add('mode-main')
+      panel.classList.add('open')
+    } else if (STANDALONE) {
+      setTab(query.get('tab') === 'library' ? 'library' : 'params')
+      setOpen(true)
+    } else {
       setOpen(false)
       toParent({ type: 'ready' })
     }
