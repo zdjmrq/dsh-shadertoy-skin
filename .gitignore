@@ -16,3 +16,6 @@ Thumbs.db
 coverage/
 test-results/
 playwright-report/
+
+# debug scratch
+.tmp-*
