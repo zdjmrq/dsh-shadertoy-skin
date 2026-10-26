@@ -84,6 +84,7 @@ try {
   check('panel.html is served', panel.status === 200 && (await panel.text()).includes('Shader 背景'))
   const defaults = await json('/shader-skin/defaults.json')
   check('defaults.json exposes fps + scale defaults', defaults.params?.fps === 30 && defaults.params?.scale === 1)
+  check('defaults.json exposes the glass and brightness look', defaults.params?.glass === 60 && defaults.params?.brightness === 100)
   check('defaults.json exposes selectable fps/scale values', Array.isArray(defaults.limits?.fps?.values) && Array.isArray(defaults.limits?.scale?.values))
 
   // --- built-in presets

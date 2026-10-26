@@ -1,6 +1,6 @@
 {
   "name": "dsh-shadertoy-skin",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Realtime ShaderToy background skin for DeepSeek Harness — a zero-runtime-dependency WebGL2 player, background library and glass UI integration.",
   "type": "module",
   "license": "MIT",
