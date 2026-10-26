@@ -123,13 +123,18 @@ node tools/push-via-api.mjs --message "feat: ..."
 
 ## 五、README 里的演示视频
 
-README 顶部的演示视频用 **GitHub 附件（user-attachments）**，不引用仓库里的 mp4：
+README 顶部的演示视频用 **GitHub 附件（user-attachments）**，而且**只写裸 URL，不要包 `<video>` 标签**：
 
 ```md
-<video src="https://github.com/user-attachments/assets/<uuid>" controls muted width="100%"></video>
+https://github.com/user-attachments/assets/<uuid>
+
+*演示 1 · 说明文字*
 ```
 
-- **为什么不用仓库里的 mp4**：`raw.githubusercontent.com` 对 `.mp4` 下发 `application/octet-stream` 且不支持 Range，`<video>` 直接引用播不了；GitHub 附件 URL 会 302 到 S3 签名地址，`video/mp4` + Range 都正常。
-- **怎么拿到这个 URL**：在 GitHub 网页上编辑 `README.md`，把视频拖进编辑框，等它插好链接再 commit。
-- **提交前链接是私有的**：没提交时匿名访问返回 404/403（只有上传者带登录态能拉），提交后才是 200 —— 所以别在草稿里就复制链接。
-- **别把引用删干净**：附件能匿名播放是因为它出现在公开内容里；`docs/verify/readme-demo.mp4` 已不再被 README 引用（保留只为旧的 npm 0.2.1 README 链接不断），下次发版可以删掉。
+- **裸 URL 才会被 GitHub 渲染成它自己的播放器**：页面里会变成 `<video src="https://private-user-images.githubusercontent.com/…?jwt=…">`，走 GitHub 的签名/缓存链路，秒开、能拖进度条。
+- **包 `<video src="https://github.com/user-attachments/assets/…">` 反而更差**：GitHub 把它当成「附件文件」塞进 `<details>` 卡片（要展开），里面的 src 还是直连 S3 的 302 地址 —— 实测下载只有 ~13 KB/s，2.6 MB 的老视频要 3 分钟以上，看起来就是「放不了」。
+- **为什么不用仓库里的 mp4**：`raw.githubusercontent.com` 对 `.mp4` 下发 `application/octet-stream` 且不支持 Range，`<video>` 直接引用播不了（这也是当初绕 jsDelivr 的原因）。
+- **怎么拿到这个 URL**：在 GitHub 网页上编辑 `README.md`，把视频拖进编辑框（它插进来的就是裸 URL），再 commit。
+- **提交前链接是私有的**：没提交时匿名访问 404/403（只有上传者带登录态能拉），提交后才是 200。
+- **别把引用删干净**：附件能匿名播放是因为它出现在公开内容里。
+- GitHub 会重新转码上传的视频（例如 1280×768 的 5.2 MB 源，页面里播的是它自己的版本），所以源文件码率不用抠太狠，但**画面里的隐私信息要提前处理掉**（上一版演示视频就出过头像/昵称泄露）。
