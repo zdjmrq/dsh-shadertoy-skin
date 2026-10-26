@@ -216,8 +216,14 @@
 
     <div class="row">
       <div class="head"><label for="glass">玻璃不透明度</label><output id="glass-out"></output></div>
-      <input type="range" id="glass" min="40" max="90" step="1">
-      <div class="hint">越高文字越清晰，越低背景越明显（40% 起，保证可读性）</div>
+      <input type="range" id="glass" min="20" max="95" step="1">
+      <div class="hint">界面压住背景的程度：越高文字越清晰、背景越淡；越低背景越透亮。它只影响这一层暗色滤镜，不会叠出第二层。</div>
+    </div>
+
+    <div class="row">
+      <div class="head"><label for="brightness">背景亮度</label><output id="brightness-out"></output></div>
+      <input type="range" id="brightness" min="30" max="180" step="5">
+      <div class="hint">画面本身太暗（尤其是黄昏、夜景类着色器）就调高；过高会发白、过曝。</div>
     </div>
 
     <div class="row">
@@ -302,7 +308,7 @@
   const panel = $('panel')
 
   const state = { activeId: null, entries: [], overrides: {} }
-  let defaults = { params: { enabled: true, glass: 72, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: true }, limits: {} }
+  let defaults = { params: { enabled: true, glass: 60, brightness: 100, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: true }, limits: {} }
   let manifest = []
   let localPresets = null
   let open = MODE === 'main'
@@ -525,6 +531,8 @@
     $('enabled').checked = p.enabled !== false
     $('glass').value = String(p.glass)
     $('glass-out').textContent = `${Math.round(p.glass)}%`
+    $('brightness').value = String(p.brightness)
+    $('brightness-out').textContent = `${Math.round(p.brightness)}%`
     $('blur').value = String(p.blur)
     $('blur-out').textContent = p.blur > 0 ? `${p.blur} px` : '关'
     $('scale-out').textContent = `${p.scale}×`
@@ -575,7 +583,8 @@
     })
 
     $('enabled').addEventListener('change', event => setParam('enabled', event.target.checked))
-    $('glass').addEventListener('input', event => setParam('glass', clamp(event.target.value, 40, 90, 72)))
+    $('glass').addEventListener('input', event => setParam('glass', clamp(event.target.value, 20, 95, 60)))
+    $('brightness').addEventListener('input', event => setParam('brightness', clamp(event.target.value, 30, 180, 100)))
     $('blur').addEventListener('input', event => setParam('blur', clamp(event.target.value, 0, 12, 0)))
     $('speed').addEventListener('input', event => setParam('speed', clamp(event.target.value, 0, 2, 1)))
     $('volume').addEventListener('input', event => setParam('volume', clamp(event.target.value, 0, 100, 60)))
@@ -828,6 +837,9 @@
     bindLibrary()
     sync()
     renderLibrary()
+    // Push the stored params once: the player/glass always mirror what this page
+    // shows, and a page refresh is enough to re-sync after an edit elsewhere.
+    if (!STANDALONE) toParent({ type: 'params', params: effective() })
     if (MODE === 'main') {
       document.body.classList.add('mode-main')
       panel.classList.add('open')

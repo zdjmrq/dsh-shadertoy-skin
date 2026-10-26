@@ -58,14 +58,19 @@
     scale: 1,      // 0.5..2 render resolution multiplier
     blur: 0,       // 0..12  css blur px (only applied when > 0)
     fps: 30,       // 15..120 render-loop cap (battery vs smoothness)
-    dim: 0.55,     // 0..1   brightness multiplier (readability)
-    tintMix: 0,    // 0..1   mix toward tint colour
+    dim: 1,        // 0..2   brightness multiplier (readability slider)
+    tintMix: 0,    // 0..1   mix toward tint colour (this is the "glass" veil)
     tint: '#ececec',
     paused: false,
     volume: 60,    // 0..100 mainSound output level
     muted: true,   // default muted; parent UI unmutes
   }
   const TINT = [0.925, 0.925, 0.925]
+
+  // Set once the parent sends an explicit look (dim / tint / tintMix). The parent
+  // derives it from the glass + brightness sliders; the per-theme defaults below
+  // are only a preview fallback for a standalone player (no parent).
+  let lookExplicit = false
 
   function clamp(v, lo, hi, fallback) {
     const n = Number(v)
@@ -79,11 +84,14 @@
     if ('scale' in next) params.scale = clamp(next.scale, 0.5, 2, 1)
     if ('blur' in next) params.blur = clamp(next.blur, 0, 12, 0)
     if ('fps' in next) params.fps = clamp(next.fps, 1, 120, 30)
-    if ('dim' in next) params.dim = clamp(next.dim, 0, 1, 0.55)
-    if ('tintMix' in next) params.tintMix = clamp(next.tintMix, 0, 1, 0)
+    if ('dim' in next) { params.dim = clamp(next.dim, 0, 2, 1); lookExplicit = true }
+    if ('tintMix' in next) { params.tintMix = clamp(next.tintMix, 0, 1, 0); lookExplicit = true }
     if ('volume' in next) params.volume = clamp(next.volume, 0, 100, 60)
     if ('muted' in next) params.muted = Boolean(next.muted)
-    if (typeof next.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(next.tint)) params.tint = next.tint
+    if (typeof next.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(next.tint)) {
+      params.tint = next.tint
+      lookExplicit = true
+    }
     if (typeof next.paused === 'boolean') params.paused = next.paused
     frameInterval = 1000 / Math.max(1, params.fps)
     canvas.style.filter = params.blur > 0 ? `blur(${params.blur.toFixed(2)}px)` : ''
@@ -105,7 +113,7 @@
   function line() {
     const mode = DEBUG_BG ? 'debug-bg' : (program ? 'running' : 'idle')
     const note = diag.note ? ` · ${diag.note}` : ''
-    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · audio=${audioStateLabel} · shader=${diag.preset}${note}`
+    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · audio=${audioStateLabel} · look=${params.dim.toFixed(2)}/${params.tintMix.toFixed(2)} · shader=${diag.preset}${note}`
   }
   function refreshDiag() {
     diagBox.textContent = line()
@@ -914,8 +922,14 @@
           }
           break
         case 'theme':
-          if (message.dark === false) { params.dim = 0.72; params.tintMix = 0.62 }
-          else { params.dim = 0.55; params.tintMix = 0 }
+          // When the parent sends an explicit look (it always does once a settings
+          // surface has talked to it), the theme flip must not reset the sliders.
+          if (!lookExplicit) {
+            // standalone preview: per-theme readability defaults
+            if (message.dark === false) { params.dim = 0.9; params.tintMix = 0.5 }
+            else { params.dim = 1; params.tintMix = 0 }
+          }
+          applyParams({})
           break
         case 'pause':
           params.paused = Boolean(message.paused)
@@ -943,10 +957,14 @@
   // ---------- boot
 
   // dev conveniences: ?dim= .9 &scale= .75 &speed= .5 &blur= 4 &fps= 60 &tintMix= .3
-  //                   &volume= 70 &muted= 0
+  //                   &tint= 090c10 &volume= 70 &muted= 0
   const overrides = {}
   for (const key of ['dim', 'scale', 'speed', 'blur', 'fps', 'tintMix', 'volume']) {
     if (q.has(key)) overrides[key] = Number(q.get(key))
+  }
+  if (q.has('tint')) {
+    const tint = q.get('tint').trim().replace(/^#/, '')
+    if (/^[0-9a-fA-F]{6}$/.test(tint)) overrides.tint = `#${tint}`
   }
   if (q.has('muted')) overrides.muted = q.get('muted') !== '0'
   applyParams(params)

@@ -142,6 +142,22 @@ async function main() {
     const debugText = await diag()
     check('debug=bg reports the debug layer', /debug-bg/.test(debugText), debugText)
 
+    // --- glass veil: the player paints the darkening itself (one layer, no tokens)
+    await open('preset=flow&fps=60&dim=1&tint=090c10&tintMix=0')
+    await waitForFrames(8)
+    const noVeilHash = await shotHash()
+    const noVeilDiag = await diag()
+    await open('preset=flow&fps=60&dim=1&tint=090c10&tintMix=0.7')
+    await waitForFrames(8)
+    const veilHash = await shotHash()
+    const veilDiag = await diag()
+    check('tintMix reaches the shader (look diag)', /look=1\.00\/0\.70/.test(veilDiag), veilDiag)
+    check('tintMix changes the rendered pixels', veilHash !== noVeilHash)
+    await open('preset=flow&fps=60&dim=1.6&tint=090c10&tintMix=0')
+    await waitForFrames(8)
+    const brightDiag = await diag()
+    check('brightness above 1.0 is no longer clamped away', /look=1\.60\/0\.00/.test(brightDiag), brightDiag)
+
     // --- settings panel (standalone mode, dev base)
     await page.goto(`${BASE}/panel.html?base=`, { waitUntil: 'load' })
     // boot() is async (defaults.json + manifest), so wait until the controls render.
@@ -153,6 +169,7 @@ async function main() {
     const panelState = () => page.evaluate(() => ({
       theme: document.documentElement.dataset.theme,
       glass: document.getElementById('glass-out')?.textContent,
+      brightness: document.getElementById('brightness-out')?.textContent,
       fps: document.querySelector('#fps-dd .dd-trigger')?.textContent,
       scale: document.querySelector('#scale-dd .dd-trigger')?.textContent,
       preset: document.querySelector('#preset-dd .dd-trigger')?.textContent,
@@ -162,7 +179,8 @@ async function main() {
     check('panel applies a theme (dark/light)', initial.theme === 'dark' || initial.theme === 'light', String(initial.theme))
     check('panel defaults to 30 fps', initial.fps === '30 fps', String(initial.fps))
     check('panel defaults to 1x render scale', /1×/.test(initial.scale ?? ''), String(initial.scale))
-    check('panel defaults to 72% glass', initial.glass === '72%', String(initial.glass))
+    check('panel defaults to 60% glass', initial.glass === '60%', String(initial.glass))
+    check('panel defaults to 100% brightness', initial.brightness === '100%', String(initial.brightness))
     check('panel selects a built-in preset', /极光/.test(initial.preset ?? ''), String(initial.preset))
 
     // custom dropdown: no native (light) popup — a themed list we control
@@ -188,7 +206,14 @@ async function main() {
     await page.click('#tab-params')
     await page.click('#reset')
     await sleep(150)
-    check('reset restores the default glass', (await panelState()).glass === '72%')
+    check('reset restores the default glass', (await panelState()).glass === '60%')
+    // and the sliders actually move (this is the path that used to be dead because
+    // the parent keyed panels by <iframe> while postMessage reports contentWindow)
+    await page.locator('#glass').fill('35')
+    await page.locator('#brightness').fill('140')
+    const moved = await panelState()
+    check('glass slider moves', moved.glass === '35%', String(moved.glass))
+    check('brightness slider moves', moved.brightness === '140%', String(moved.brightness))
 
     check('no uncaught page errors', consoleErrors.length === 0, consoleErrors.join(' | ').slice(0, 300))
   } finally {

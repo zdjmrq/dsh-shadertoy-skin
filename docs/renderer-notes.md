@@ -29,11 +29,14 @@ node tools/dev-server.mjs 8730
 | `preset` | `aurora` \| `flow` \| 任意 `<name>.glsl` | 加载 `presets/index.json` 里的条目；没有的 id 会直接找 `presets/<id>.glsl`（调试夹具用） |
 | `debug` | `bg` | 洋红整屏，跳过 shader |
 | `fps` | 数字，默认 30 | 帧率上限（30 省电 / 60 顺滑） |
-| `dim` | 0–1，默认 0.55 | 亮度乘数（可读性），暗色主题默认值 |
-| `tintMix` | 0–1，默认 0 | 向 `tint` 颜色混合的比例（亮色主题用） |
+| `dim` | 0–2，默认 1 | 亮度乘数（设置页「背景亮度」滑块） |
+| `tint` | 十六进制颜色，默认 `#ececec` | 滤镜渗入的颜色（暗色主题用近黑，亮色主题用白） |
+| `tintMix` | 0–1，默认 0 | 向 `tint` 混合的比例 = 设置页的「玻璃不透明度」 |
 | `scale` | 0.5–2，默认 1 | 渲染分辨率乘数；低分辨率 = 便宜且"柔" |
 | `blur` | 0–12，默认 0 | CSS `filter: blur()`，**只在 > 0 时启用** |
 | `noes1` | `1` | 只试 GLSL ES 3.00，不回落 ES 1.00（看真实编译错误用） |
+
+> 滤镜只有一层：`c.rgb = mix(clamp(c.rgb,0,1) * uDim, uTint, uTintMix)`。父页面（client 半）把 `glass`/`brightness` 换算成 `dim`/`tint`/`tintMix` 发过来；主题消息只在外壳没发过显式 look 时才改默认值（`lookExplicit`），所以切主题不会重置滑块。
 
 ## postMessage 协议（父页面 = 插件的 client 半）
 
@@ -68,7 +71,8 @@ node tools/dev-server.mjs 8730
 - [x] `postMessage` 协议 + `ready/error/stats` 上报 + 父页面 `params/mouse/theme/pause/reset`
 - [x] 分辨率：`DPR ≤ 1.5 × scale`，`ResizeObserver` 跟随窗口
 - [x] 帧率上限、`document.hidden` 暂停、`prefers-reduced-motion`（后者待接）
-- [x] 可读性：`dim`/`tint` 在 `main()` 里混合（零额外合成），`blur` 走 CSS 且默认 0
+- [x] 可读性：`dim`/`tint`/`tintMix` 在 `main()` 里混合（零额外合成，一层就是整个玻璃滤镜），`blur` 走 CSS 且默认 0
+- [x] 单层滤镜接管「玻璃」：外壳 token 全透明，暗色/亮色滤镜都由播放器画（详见 `docs/00-决策与方案复核.md` §9.4）
 - [x] 无头 Edge 回归脚本跑通：aurora/flow/legacy/es1/broken/missing 六个场景
 
 ## 还没做（后续里程碑）

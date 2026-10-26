@@ -4,22 +4,23 @@
  * Thin browser shell (no React app, no build step) that owns:
  *   1. the background iframe — first child of <body>, behind everything
  *      (`position:fixed; inset:0; z-index:-1; pointer-events:none`);
- *   2. two settings surfaces, both served from disk:
- *      - a sidebar entry (`sidebar.panellist`) whose `main` panel page is the
- *        full settings UI (`/shader-skin/panel.html?mode=main`);
- *      - a small floating quick panel (`/shader-skin/panel.html`) in the corner;
- *   3. the glass look — `theme.overrideTokens()` makes the app shell translucent
- *      so the shader shows through, while cards/popovers keep their own fills.
+ *   2. one settings surface served from disk: a sidebar entry
+ *      (`sidebar.panellist`) whose `main` panel page is the full settings UI
+ *      (`/shader-skin/panel.html?mode=main`). No floating popup.
+ *   3. the glass look — every shell surface that paints `--dsw-alias-bg-base`
+ *      / `--dsw-specific-sidebar-fill` is made fully transparent, and the
+ *      darkening ("glass") is painted ONCE by the player itself as a tint mix.
+ *      See the glass section below for why alpha-only tokens are not enough.
  *
- * State (`$DSH_HOME/shader-skin.json`, v2) is owned by the settings surfaces;
- * this half only reads it to boot and follows their messages.
+ * State (`$DSH_HOME/shader-skin.json`, v2) is owned by the settings surface;
+ * this half reads it to boot and follows its messages.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-shadertoy-skin',
   factory(require) {
     const BASE = '/shader-skin'
     const BG_ID = 'shadertoy-skin-bg'
-        const FALLBACK_DEFAULTS = { enabled: true, glass: 72, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: false }
+    const FALLBACK_DEFAULTS = { enabled: true, glass: 60, brightness: 100, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: false }
     const FALLBACK_PRESET = 'aurora'
     // ⚠️ Keep off while the sidebar route is unstable: registering into
     // `sidebar.panellist` + `main` has frozen the frontend on panel switch.
@@ -29,11 +30,27 @@ window.__ModuleLoader__.load({
     let React = null
     try { React = require('react') } catch { React = null }
 
-    /** Every settings iframe currently mounted (quick panel + main page). */
-    const panelFrames = new Set()
+    /**
+     * Every settings iframe currently mounted, keyed by its WindowProxy.
+     *
+     * `postMessage` gives us `event.source === iframe.contentWindow`, NOT the
+     * iframe element — storing elements here silently dropped every message from
+     * the settings page (sliders appeared dead while their own state still saved).
+     */
+    const panelWindows = new Set()
     function registerPanelFrame(frame) {
-      panelFrames.add(frame)
-      return () => { panelFrames.delete(frame) }
+      if (!frame) return () => {}
+      let win = frame.contentWindow ?? null
+      const add = () => {
+        if (win === null && frame.contentWindow) win = frame.contentWindow
+        if (win !== null) panelWindows.add(win)
+      }
+      if (win !== null) panelWindows.add(win)
+      else frame.addEventListener('load', add, { once: true })
+      return () => {
+        frame.removeEventListener('load', add)
+        if (win !== null) panelWindows.delete(win)
+      }
     }
 
     const clamp = (value, lo, hi, fallback) => {
@@ -116,21 +133,35 @@ window.__ModuleLoader__.load({
 
           // ---------------------------------------------------------------- glass
           //
-          // The shell paints two surfaces from the same tokens (the AppFrame background
-          // and the nested centre column / sidebar), so one token override plus a
-          // sqrt-compensated alpha yields exactly `glass` effective opacity:
-          //   1 - (1 - a)^2 = glass  =>  a = 1 - sqrt(1 - glass)
+          // The shell is a stack of surfaces that ALL paint `--dsw-alias-bg-base`
+          // (AppFrame, the centre column, the page roots, the Windows titlebar's
+          // frame uses `--dsw-specific-sidebar-fill`). Giving those a translucent
+          // colour multiplies out: n nested surfaces at alpha a leave only
+          // (1-a)^n of the shader visible — measured on the real app, one layer of
+          // alpha .225 across ~10 nested surfaces dimmed a bright seascape to ~7%
+          // of its brightness. That is why the old "alpha compensation for exactly
+          // two layers" was both far too dark and looked like a dead slider.
+          //
+          // So: the shell tokens go FULLY transparent (the shader is the only
+          // background), and the single darkening/whitening veil is painted by the
+          // player's own tint mix (`tint` + `tintMix`, see `playerLook()`), one
+          // composition layer, whatever the DOM depth. Sliding the glass slider then
+          // only sends a `params` message — it never touches the theme tokens, so it
+          // cannot emit `theme/change` or trigger a restyle storm.
           //
           // Deliberately NO `:has()` selectors here. Anchoring the whole `#root` with
           // `:has()` makes Chromium re-evaluate the entire tree on every panel switch;
           // that is exactly what froze the app when the sidebar entry was clicked, and
           // dsh-better-sidebar documents the same pitfall (`#root [data-dsh-center-col]`
           // single-node marker instead of `:has()`).
-          const DARK_RGB = '9, 12, 16'
-          const LIGHT_RGB = '255, 255, 255'
+          const DARK_VEIL = '#090c10'
+          const LIGHT_VEIL = '#ffffff'
           const STYLE_ID = 'shadertoy-skin-glass-style'
           const GLASS_CSS = 'html, body { background: transparent !important; }'
-          const GLASS_LAYERS = 2
+          const CLEAR_TOKENS = {
+            '--dsw-alias-bg-base': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
+            '--dsw-specific-sidebar-fill': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
+          }
 
           function ensureGlassStyle() {
             if (document.getElementById(STYLE_ID)) return
@@ -140,43 +171,40 @@ window.__ModuleLoader__.load({
             ;(document.head ?? document.documentElement).append(style)
           }
 
-          let glassApplying = false
-          let lastGlassAlpha = null
+          let glassApplied = false
           function applyGlass() {
-            if (theme === undefined || !booted || glassApplying) return
-            glassApplying = true
-            try {
-              const target = clamp(effective().glass, 0.4, 0.9, 0.72)
-              const alpha = 1 - Math.pow(1 - target, 1 / GLASS_LAYERS)
-              const key = alpha.toFixed(3)
-              // identical value: the token layer is already in place, skip the
-              // publish (every overrideTokens call emits theme/change)
-              if (key === lastGlassAlpha && document.getElementById(STYLE_ID)) return
-              lastGlassAlpha = key
-              const value = {
-                light: `rgba(${LIGHT_RGB}, ${alpha.toFixed(3)})`,
-                dark: `rgba(${DARK_RGB}, ${alpha.toFixed(3)})`,
-              }
-              ensureGlassStyle()
-              glassDispose?.()
-              glassDispose = theme.overrideTokens('shadertoy-skin', {
-                '--dsw-alias-bg-base': value,
-                '--dsw-specific-sidebar-fill': value,
-              })
-            } finally {
-              glassApplying = false
-            }
+            if (theme === undefined || !booted || glassApplied) return
+            glassApplied = true
+            ensureGlassStyle()
+            glassDispose = theme.overrideTokens('shadertoy-skin', CLEAR_TOKENS)
           }
 
           function clearGlass() {
             glassDispose?.()
             glassDispose = null
+            glassApplied = false
             document.getElementById(STYLE_ID)?.remove()
           }
 
           // ------------------------------------------------------------ parameters
           function effective() {
             return { ...store.defaults, ...(store.overrides[store.activeId] ?? {}) }
+          }
+
+          /**
+           * The one place where the sliders become pixels.
+           *
+           * `glass` (20–95%) is how much of the shader the veil hides; `brightness`
+           * (30–180%) scales the shader before the veil. Light theme veils toward
+           * white so dark text stays readable on bright shaders.
+           */
+          function playerLook() {
+            const params = effective()
+            const glass = clamp(params.glass, 20, 95, 60) / 100
+            const brightness = clamp(params.brightness, 30, 180, 100) / 100
+            return isDark()
+              ? { dim: brightness, tint: DARK_VEIL, tintMix: glass }
+              : { dim: brightness, tint: LIGHT_VEIL, tintMix: glass * 0.92 }
           }
 
           function normalizeState(raw) {
@@ -227,20 +255,23 @@ window.__ModuleLoader__.load({
             return { id: item.id, name: item.name || item.id, code }
           }
 
-          function postTo(frame, message) {
-            try { frame?.contentWindow?.postMessage(message, location.origin) } catch { /* frame gone */ }
+          function postTo(target, message) {
+            const win = target?.contentWindow ?? target
+            try { win?.postMessage(message, location.origin) } catch { /* frame gone */ }
           }
 
           function broadcastPanel(message) {
-            for (const frame of panelFrames) postTo(frame, message)
+            for (const win of panelWindows) postTo(win, message)
           }
 
           async function sendInit(frame) {
             try {
               const preset = await resolvePreset(store.activeId ?? FALLBACK_PRESET)
               store.activeId = preset.id
-              postTo(frame, { type: 'init', preset, params: effective() })
+              // theme first: the player keeps per-theme preview defaults only until
+              // it receives an explicit look, and init carries that explicit look
               postTo(frame, { type: 'theme', dark: isDark() })
+              postTo(frame, { type: 'init', preset, params: { ...effective(), ...playerLook() } })
               broadcastPanel({ type: 'preset', id: preset.id, name: preset.name })
             } catch (error) {
               console.warn('[shadertoy-skin] could not start the renderer:', error)
@@ -280,7 +311,7 @@ window.__ModuleLoader__.load({
                 store.overrides[store.activeId] = { ...(message.params ?? {}) }
                 applyGlass()
                 syncEnabled()
-                postTo(background, { type: 'params', params: effective() })
+                postTo(background, { type: 'params', params: { ...effective(), ...playerLook() } })
                 return
               }
               case 'preset': {
@@ -364,7 +395,7 @@ window.__ModuleLoader__.load({
               }
               return
             }
-            if (panelFrames.has(event.source)) void handlePanelMessage(message)
+            if (panelWindows.has(event.source)) void handlePanelMessage(message)
           })
 
           // ------------------------------------------------------------------ theme
@@ -449,7 +480,7 @@ window.__ModuleLoader__.load({
             clearGlass()
             removeBackground()
             for (const dispose of listeners) dispose()
-            panelFrames.clear()
+            panelWindows.clear()
           }
         }, 'shadertoy-skin: background surface, settings surfaces and glass')
       },
