@@ -67,7 +67,7 @@ type IndexInjection =
 ## 4. 持久化的真实可用选项（排序）
 
 **(a) Host 端 node:fs 写 `$DSH_HOME/shader-skin.json` + Host HTTP 路由 —— 推荐** [核验]
-- Host 插件就是普通 Node ESM，可直接 `import { readFile, writeFile, rename } from 'node:fs/promises'`（open-sea-skin `plugin/index.js:6` 即如此）；`$DSH_HOME` 由宿主环境给出（本机 `C:\Users\HUAWEI\.dsh`；解析规则 `$DSH_HOME` → `~/.dsh`，`dsh-home-paths/lib/index.js:109-111`）。写临时文件+rename 原子替换，避免半截 JSON。
+- Host 插件就是普通 Node ESM，可直接 `import { readFile, writeFile, rename } from 'node:fs/promises'`（open-sea-skin `plugin/index.js:6` 即如此）；`$DSH_HOME` 由宿主环境给出（默认 `~/.dsh`；解析规则 `$DSH_HOME` → `~/.dsh`，`dsh-home-paths/lib/index.js:109-111`）。写临时文件+rename 原子替换，避免半截 JSON。
 - 客户端读写：Host `ctx.effect(() => ctx.webServer.register({kind:'prefix', path:'/shader-skin', handler}))`，client 用**相对页面基址** fetch；桌面下 `dsh-app://app/shader-skin/...` 被 shell 转发到 Host 同源（MAIN:12406-12413），生产先例 `dsh-better-sidebar` 的 `/sidebar/api/*`（`src/index.ts:1447-1488`）+ client `hostRouteUrl`/`hostHttpBase`（`src/client/host-route-url.ts`、`desktop-env.ts:34-57`）。**不要**用 `__DSH_TRANSPORT__.streamBaseUrl` 发 HTTP（那是 Host 真实 origin，跨源且插件路由没有 CORS 头 → 浏览器直接失败）。
 - `ctx.fs` 不需要：它是抽象 FS provider（`writeText(target, content, expected?, signal?, sandboxPolicy?)`），面向工具/会话沙箱；插件写自己的配置文件用 node:fs 更直接。
 
