@@ -9,6 +9,10 @@
 
 npm 侧用 **Trusted Publisher（OIDC）**：不需要在仓库里放 `NPM_TOKEN`，发布时由 GitHub Actions 的 OIDC 身份换取短期凭证，并自动生成 provenance 证明。
 
+> ✅ **链路已验证（2026-10-26）**：`v0.1.1` 经 `gh release create` → `publish.yml` → OIDC 发布成功，耗时 13s，
+> provenance（SLSA v1）已写入 sigstore 透明日志，registry 元数据带 `dist.attestations`。
+> 也就是说下面「一、2 首次手工发布」只需在**从零重建这条链路时**再做一次；日常发版直接跳到「二」。
+
 ---
 
 ## 一、需要你（仓库所有者）做的一次性准备
