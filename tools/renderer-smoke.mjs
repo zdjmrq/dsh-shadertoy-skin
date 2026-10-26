@@ -238,7 +238,13 @@ async function main() {
     // valid edit of a built-in forks into "我的" and marks it active
     await page.locator('#code-image').fill('void mainImage(out vec4 o, in vec2 p) { o = vec4(p / iResolution.xy, 0.5, 1.0); }')
     await page.click('#code-save')
-    await page.waitForFunction(() => /副本/.test(document.querySelector('#preset-dd .dd-trigger')?.textContent ?? ''), null, { timeout: 10_000 })
+    // save is async: fork -> save -> load the new source -> note; wait for all of it
+    await page.waitForFunction(() => {
+      const preset = document.querySelector('#preset-dd .dd-trigger')?.textContent ?? ''
+      const note = document.getElementById('code-note')?.textContent ?? ''
+      const hint = document.getElementById('code-hint')?.textContent ?? ''
+      return /副本/.test(preset) && /副本/.test(note) && /正在编辑/.test(hint)
+    }, null, { timeout: 15_000 })
     const forked = await codeState()
     check('saving an edited built-in forks a copy', /副本/.test(forked.preset ?? ''), String(forked.preset))
     check('fork note explains what happened', /副本/.test(forked.note), forked.note)
