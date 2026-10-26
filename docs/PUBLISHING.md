@@ -73,6 +73,16 @@ gh release create "v$(node -p "require('./package.json').version")" --generate-n
 
 也可以用 `workflow_dispatch` 手动触发，但同样要求 tag 已存在且版本一致（手动触发时跳过 tag 校验）。
 
+### 本机网络特殊情况：`git push` 走不通时
+
+这台机器上 `github.com:443` 会被 TLS 重置，而 `api.github.com` 正常，所以 `git push` / `git fetch` 会失败（`gh` 命令本身正常，因为它只走 api.github.com）。此时用仓库里的备用脚本推送：
+
+```powershell
+node tools/push-via-api.mjs --message "feat: ..."
+```
+
+它用 Git Data API（blobs → tree → commit → ref）把当前工作树推成一个 commit，需要 `gh auth login`（scope 含 `repo` 和 `workflow`）。注意：这样推出来的 commit SHA 与本地 `git log` 不同（内容相同），本地 git 与远端是两条平行历史；网络恢复后可以改回常规 `git push`。`gh release create` / `gh run` / CI 都照常可用（走 API）。
+
 ---
 
 ## 三、CI 会拦住什么
