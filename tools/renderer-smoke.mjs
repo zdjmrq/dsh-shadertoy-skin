@@ -170,6 +170,7 @@ async function main() {
       theme: document.documentElement.dataset.theme,
       glass: document.getElementById('glass-out')?.textContent,
       brightness: document.getElementById('brightness-out')?.textContent,
+      panels: document.getElementById('panels-out')?.textContent,
       fps: document.querySelector('#fps-dd .dd-trigger')?.textContent,
       scale: document.querySelector('#scale-dd .dd-trigger')?.textContent,
       preset: document.querySelector('#preset-dd .dd-trigger')?.textContent,
@@ -181,7 +182,18 @@ async function main() {
     check('panel defaults to 1x render scale', /1×/.test(initial.scale ?? ''), String(initial.scale))
     check('panel defaults to 60% glass', initial.glass === '60%', String(initial.glass))
     check('panel defaults to 100% brightness', initial.brightness === '100%', String(initial.brightness))
+    check('panel defaults to opaque cards', initial.panels === '不透明', String(initial.panels))
     check('panel selects a built-in preset', /极光/.test(initial.preset ?? ''), String(initial.preset))
+
+    // card/overlay transparency picker
+    await page.click('#panels-dd .dd-trigger')
+    await page.waitForSelector('#panels-dd .dd.open .dd-menu', { timeout: 5_000 })
+    const panelChoices = await page.locator('#panels-dd .dd-item').count()
+    check('card transparency picker has 3 levels', panelChoices === 3, String(panelChoices))
+    await page.locator('#panels-dd .dd-item', { hasText: '半透明' }).click()
+    check('choosing 半透明 applies it', (await panelState()).panels === '半透明', String((await panelState()).panels))
+    await page.click('#panels-dd .dd-trigger')
+    await page.locator('#panels-dd .dd-item', { hasText: '不透明' }).click()
 
     // custom dropdown: no native (light) popup — a themed list we control
     await page.click('#fps-dd .dd-trigger')

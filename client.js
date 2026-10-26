@@ -162,6 +162,18 @@ window.__ModuleLoader__.load({
             '--dsw-alias-bg-base': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
             '--dsw-specific-sidebar-fill': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
           }
+          // The boxes that stay opaque when the shell goes clear: cards, nested
+          // panels, code blocks, popovers/dialogs, menus and the composer input.
+          const LAYER_TOKENS = [
+            '--dsw-alias-bg-layer-1', '--dsw-alias-bg-layer-2',
+            '--dsw-alias-bg-layer-3', '--dsw-alias-bg-layer-4',
+          ]
+          const RAISED_TOKENS = [
+            '--dsw-alias-bg-overlay', '--dsw-specific-menu', '--dsw-specific-input-major',
+          ]
+
+          /** `panels` = opaque (leave theme fills) | half | clear. */
+          const PANEL_ALPHA = { half: 0.62, clear: 0.22 }
 
           function ensureGlassStyle() {
             if (document.getElementById(STYLE_ID)) return
@@ -171,18 +183,37 @@ window.__ModuleLoader__.load({
             ;(document.head ?? document.documentElement).append(style)
           }
 
-          let glassApplied = false
+          function rgba(color, alpha) {
+            return { light: `rgba(255, 255, 255, ${alpha})`, dark: `rgba(${color}, ${alpha})` }
+          }
+
+          function glassTokens() {
+            const tokens = { ...CLEAR_TOKENS }
+            const alpha = PANEL_ALPHA[effective().panels] ?? null
+            if (alpha === null) return tokens
+            const raised = Math.min(0.96, alpha + 0.32)
+            for (const token of LAYER_TOKENS) tokens[token] = rgba('9, 12, 16', alpha)
+            for (const token of RAISED_TOKENS) tokens[token] = rgba('9, 12, 16', raised)
+            return tokens
+          }
+
+          let glassSignature = null
           function applyGlass() {
-            if (theme === undefined || !booted || glassApplied) return
-            glassApplied = true
+            if (theme === undefined || !booted) return
+            const tokens = glassTokens()
+            const signature = JSON.stringify(tokens)
+            // same token set: nothing to publish (every overrideTokens call emits theme/change)
+            if (signature === glassSignature) return
+            glassSignature = signature
             ensureGlassStyle()
-            glassDispose = theme.overrideTokens('shadertoy-skin', CLEAR_TOKENS)
+            glassDispose?.()
+            glassDispose = theme.overrideTokens('shadertoy-skin', tokens)
           }
 
           function clearGlass() {
             glassDispose?.()
             glassDispose = null
-            glassApplied = false
+            glassSignature = null
             document.getElementById(STYLE_ID)?.remove()
           }
 
@@ -350,45 +381,82 @@ window.__ModuleLoader__.load({
 
           // ------------------------------------------------------------------ mouse
           //
-          // iMouse follows an actual DRAG only. Hovering over the UI must not move
-          // the shader (the old build forwarded every pointermove, so any mouse
-          // motion stirred the background). Press -> anchor, move while pressed ->
-          // xy, release -> one last message with a negated click flag, which is how
-          // ShaderToy shaders detect `iMouse.z < 0.0`.
-          let pointerDown = false
-          let anchorX = 0
-          let anchorY = 0
-          let lastX = 0
-          let lastY = 0
+          // iMouse follows a drag that starts on the *page surface* — never on DSH's
+          // own controls. Clicking a button, selecting a reply (copy/paste), dragging
+          // a scrollbar or typing in the composer must not steer the shader; that was
+          // the second complaint after "hover moves the background".
+          //
+          // Press -> anchor, drag -> xy, release -> one message with a negated click
+          // flag, which is how ShaderToy shaders detect `iMouse.z < 0.0`.
+          const UI_SELECTOR = [
+            'button', 'a', 'input', 'textarea', 'select', 'summary', 'label',
+            '[contenteditable="true"]', '[role="button"]', '[role="tab"]',
+            '[role="menuitem"]', '[role="option"]', '[role="dialog"]',
+            '[role="listbox"]', '[data-shell-overlay]', '[data-rightbar-col]',
+            '[data-shell-bottom]', '[data-shell-leading]', '[data-shortcut-modal]',
+          ].join(',')
+
+          function selectionIsRange() {
+            try { return window.getSelection?.()?.type === 'Range' } catch { return false }
+          }
+
+          /** True when the pointer went down on DSH chrome / selectable content. */
+          function isUiTarget(target) {
+            if (!(target instanceof Element)) return true
+            if (target.closest(UI_SELECTOR)) return true
+            // Selectable text (chat replies, code blocks, tables): the drag is a
+            // copy/select gesture. Checked by computed style because DSH has no
+            // stable class for "selectable content".
+            let node = target
+            for (let depth = 0; node !== null && node !== document.body && depth < 6; depth += 1) {
+              if (getComputedStyle(node).userSelect === 'text') return true
+              node = node.parentElement
+            }
+            return selectionIsRange()
+          }
+
+          let drag = null
           let pending = null
           let scheduled = 0
           const flushPointer = () => {
             scheduled = 0
             if (pending === null) return
-            postTo(background, { type: 'mouse', mouse: pending })
+            const message = pending
             pending = null
+            // a text selection appeared between the event and the frame: copying,
+            // not steering
+            if (selectionIsRange()) { drag = null; return }
+            postTo(background, { type: 'mouse', mouse: message })
           }
           const queuePointer = (x, y, down) => {
-            pending = down ? [x, y, anchorX, anchorY] : [x, y, -Math.abs(anchorX), -Math.abs(anchorY)]
+            pending = down
+              ? [x, y, drag.anchorX, drag.anchorY]
+              : [x, y, -Math.abs(drag.anchorX), -Math.abs(drag.anchorY)]
             if (scheduled === 0) scheduled = requestAnimationFrame(flushPointer)
           }
           on(window, 'pointermove', event => {
-            if (!document.hasFocus() || !background || !pointerDown) return
-            lastX = event.clientX
-            lastY = window.innerHeight - event.clientY
-            queuePointer(lastX, lastY, true)
+            if (drag === null || !document.hasFocus() || !background) return
+            if (selectionIsRange()) { drag = null; return }
+            drag.x = event.clientX
+            drag.y = window.innerHeight - event.clientY
+            drag.live = true
+            queuePointer(drag.x, drag.y, true)
           }, { passive: true })
           on(window, 'pointerdown', event => {
-            if (event.button !== 0) return
-            pointerDown = true
-            anchorX = lastX = event.clientX
-            anchorY = lastY = window.innerHeight - event.clientY
-            queuePointer(lastX, lastY, true)
+            if (event.button !== 0 || !background || !document.hasFocus()) return
+            if (isUiTarget(event.target)) { drag = null; return }
+            const x = event.clientX
+            const y = window.innerHeight - event.clientY
+            drag = { anchorX: x, anchorY: y, x, y, live: false }
           }, { passive: true })
           const release = () => {
-            if (!pointerDown) return
-            pointerDown = false
-            queuePointer(lastX, lastY, false)
+            if (drag === null) return
+            const { x, y, anchorX, anchorY, live } = drag
+            drag = null
+            if (!live) return
+            // ShaderToy convention: while released iMouse.zw are the negated click point
+            pending = [x, y, -Math.abs(anchorX), -Math.abs(anchorY)]
+            if (scheduled === 0) scheduled = requestAnimationFrame(flushPointer)
           }
           on(window, 'pointerup', release, { passive: true })
           on(window, 'pointercancel', release, { passive: true })

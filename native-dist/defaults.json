@@ -3,6 +3,7 @@
     "enabled": true,
     "glass": 60,
     "brightness": 100,
+    "panels": "opaque",
     "blur": 0,
     "scale": 1,
     "fps": 30,
@@ -13,6 +14,7 @@
   "limits": {
     "glass": { "min": 20, "max": 95, "step": 1, "unit": "%" },
     "brightness": { "min": 30, "max": 180, "step": 5, "unit": "%" },
+    "panels": { "values": ["opaque", "half", "clear"] },
     "blur": { "min": 0, "max": 12, "step": 0.5, "unit": "px" },
     "fps": { "values": [15, 20, 30, 60] },
     "scale": { "values": [0.5, 0.75, 1, 1.25, 1.5] },

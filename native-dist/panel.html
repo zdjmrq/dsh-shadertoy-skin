@@ -237,6 +237,12 @@
     </div>
 
     <div class="row">
+      <div class="head"><label>卡片 / 弹层</label><output id="panels-out"></output></div>
+      <div id="panels-dd"></div>
+      <div class="hint">卡片、代码块、弹层、输入框的底色：不透明最清楚；半透明 / 透明让背景透出来（文字可读性会下降）。</div>
+    </div>
+
+    <div class="row">
       <div class="head"><label for="blur">模糊</label><output id="blur-out"></output></div>
       <input type="range" id="blur" min="0" max="12" step="0.5">
     </div>
@@ -339,7 +345,7 @@
   const panel = $('panel')
 
   const state = { activeId: null, entries: [], overrides: {} }
-  let defaults = { params: { enabled: true, glass: 60, brightness: 100, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: true }, limits: {} }
+  let defaults = { params: { enabled: true, glass: 60, brightness: 100, panels: 'opaque', blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: true }, limits: {} }
   let manifest = []
   let localPresets = null
   let open = MODE === 'main'
@@ -582,6 +588,9 @@
   let presetDd
   let scaleDd
   let fpsDd
+  let panelsDd
+
+  const PANEL_KINDS = { opaque: '不透明', half: '半透明', clear: '透明' }
 
   function sync() {
     const p = effective()
@@ -590,6 +599,7 @@
     $('glass-out').textContent = `${Math.round(p.glass)}%`
     $('brightness').value = String(p.brightness)
     $('brightness-out').textContent = `${Math.round(p.brightness)}%`
+    $('panels-out').textContent = PANEL_KINDS[p.panels] ?? PANEL_KINDS.opaque
     $('blur').value = String(p.blur)
     $('blur-out').textContent = p.blur > 0 ? `${p.blur} px` : '关'
     $('scale-out').textContent = `${p.scale}×`
@@ -611,6 +621,7 @@
     if (presetDd) presetDd.setOptions(presetOptions(), state.activeId ?? '')
     if (scaleDd) scaleDd.setValue(String(p.scale))
     if (fpsDd) fpsDd.setValue(String(p.fps))
+    if (panelsDd) panelsDd.setValue(p.panels ?? 'opaque')
     $('scale-hint').textContent = `实际渲染缓冲：${bufferSize()}（DPR ≤ 1.5）`
     $('preset-kind').textContent = state.activeId ? (entryById(state.activeId) ? '我的' : '内置') : ''
   }
@@ -637,6 +648,15 @@
       options: (defaults.limits.fps?.values ?? [15, 20, 30, 60]).map(value => ({ value: String(value), text: `${value} fps` })),
       value: String(effective().fps),
       onChange: value => setParam('fps', Number(value)),
+    })
+    panelsDd = makeDropdown($('panels-dd'), {
+      options: [
+        { value: 'opaque', text: '不透明（默认，最清楚）' },
+        { value: 'half', text: '半透明' },
+        { value: 'clear', text: '透明（最透，文字会难读一些）' },
+      ],
+      value: effective().panels ?? 'opaque',
+      onChange: value => setParam('panels', value),
     })
 
     $('enabled').addEventListener('change', event => setParam('enabled', event.target.checked))
