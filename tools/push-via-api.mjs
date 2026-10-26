@@ -74,17 +74,28 @@ if (dryRun) {
   process.exit(0)
 }
 
-let parent
-try {
+// The Git Data API refuses to work on a repository with zero commits, so bootstrap
+// an empty repository through the Contents API first (that call creates the branch).
+async function resolveParent() {
+  try {
+    const ref = await call(`/git/ref/heads/${branch}`)
+    console.log(`parent commit: ${ref.object.sha}`)
+    return ref.object.sha
+  } catch (error) {
+    const text = String(error)
+    if (!text.includes('404') && !text.includes('409')) throw error
+  }
+  console.log('repository is empty: bootstrapping an initial commit')
+  const content = Buffer.from('# dsh-shadertoy-skin\n', 'utf8').toString('base64')
+  await call('/contents/README.md', {
+    method: 'PUT',
+    body: JSON.stringify({ message: 'chore: initialize repository', content, branch }),
+  })
   const ref = await call(`/git/ref/heads/${branch}`)
-  parent = ref.object.sha
-  console.log(`parent commit: ${parent}`)
-} catch (error) {
-  const text = String(error)
-  // 404: no branch yet. 409 "Git Repository is empty": the repo has no commits at all.
-  if (!text.includes('404') && !text.includes('409') && !text.includes('Git Repository is empty')) throw error
-  console.log('remote branch does not exist yet, creating the first commit')
+  return ref.object.sha
 }
+
+const parent = await resolveParent()
 
 const blobs = await mapLimit(tracked, 6, async file => {
   const content = await readFile(`${ROOT}/${file}`)

@@ -138,6 +138,13 @@ async function main() {
 
     // --- settings panel (standalone mode, dev base)
     await page.goto(`${BASE}/panel.html?base=`, { waitUntil: 'load' })
+    // boot() is async (defaults.json + manifest), so wait until it has rendered the
+    // controls before asserting; CI runners are slower than a local machine.
+    await page.waitForFunction(() => {
+      const panel = document.getElementById('panel')
+      const fps = document.getElementById('fps')
+      return panel?.classList.contains('open') === true && (fps?.options.length ?? 0) >= 4
+    }, null, { timeout: 20_000 })
     const panelState = () => page.evaluate(() => ({
       fps: document.getElementById('fps')?.value,
       scale: document.getElementById('scale')?.value,
@@ -151,8 +158,7 @@ async function main() {
     }))
     const initial = await panelState()
     check('panel opens in standalone mode', initial.panelOpen === true)
-    check('panel defaults to 30 fps', initial.fps === '30', String(initial.fps))
-    check('panel defaults to 1x render scale', initial.scale === '1', String(initial.scale))
+    check('panel defaults to 30 fps', initial.fps === '30', String(initial.fps))    check('panel defaults to 1x render scale', initial.scale === '1', String(initial.scale))
     check('panel defaults to 72% glass', initial.glass === '72', String(initial.glass))
     check('panel offers fps choices 15/20/30/60', initial.fpsOptions.join(',') === '15,20,30,60', initial.fpsOptions.join(','))
     check('panel offers render scales 0.5..1.5', initial.scaleOptions.join(',') === '0.5,0.75,1,1.25,1.5', initial.scaleOptions.join(','))
