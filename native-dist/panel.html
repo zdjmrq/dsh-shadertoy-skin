@@ -66,11 +66,15 @@
   .panel.wide { width: 560px; }
   .panel.open { display: block; }
 
-  /* full-page mode (rendered in the main column through the sidebar entry) */
-  body.mode-main { overflow: auto; height: 100%; }
-  /* standalone preview (parent === window): let the dev page scroll, the panel is
-     taller than a 720p viewport once every row is visible */
-  body.standalone { overflow: auto; height: auto; }
+  /* full-page mode (rendered in the main column through the sidebar entry).
+     `html` must carry the height too: a percentage height on `body` alone resolves
+     against `html`'s auto height, so the page just grew past the viewport and the
+     bottom of the settings was unreachable. */
+  html.mode-main, body.mode-main { height: 100%; }
+  body.mode-main { overflow-y: auto; overflow-x: hidden; }
+  /* standalone preview (parent === window): same fixed-height scrolling body */
+  html.standalone, body.standalone { height: 100%; }
+  body.standalone { overflow-y: auto; overflow-x: hidden; }
   body.mode-main .fab { display: none; }
   body.mode-main .panel {
     display: block; width: 100%; max-width: 960px; margin: 0 auto;
@@ -1081,7 +1085,10 @@
   async function boot() {
     applyTheme()
     watchParentTheme()
-    if (STANDALONE) document.body.classList.add('standalone')
+    if (STANDALONE) {
+      document.documentElement.classList.add('standalone')
+      document.body.classList.add('standalone')
+    }
     try { defaults = await fetchJson('defaults.json') } catch { /* built-in defaults */ }
     try { manifest = await fetchJson(`${BASE}/presets/index.json`) } catch { manifest = [] }
     manifest = Array.isArray(manifest) ? manifest : []
@@ -1107,6 +1114,7 @@
     // shows, and a page refresh is enough to re-sync after an edit elsewhere.
     if (!STANDALONE) toParent({ type: 'params', params: effective() })
     if (MODE === 'main') {
+      document.documentElement.classList.add('mode-main')
       document.body.classList.add('mode-main')
       panel.classList.add('open')
     } else if (STANDALONE) {
