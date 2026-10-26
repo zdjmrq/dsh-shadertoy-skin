@@ -30,6 +30,7 @@ jobs:
           node --check tools/check-bundle.mjs
           node --check tools/host-route-test.mjs
           node --check tools/renderer-smoke.mjs
+          node --check tools/audio-smoke.mjs
           node --check tools/dev-server.mjs
           node --check tools/push-via-api.mjs
       - name: Bundle checks (manifest, files, licence hygiene, npm pack content)
@@ -56,3 +57,8 @@ jobs:
         run: npm run test:renderer
         env:
           PLAYWRIGHT_CHANNEL: chrome
+      - name: Audio smoke test (mainSound -> readPixels -> WebAudio)
+        run: npm run test:audio
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+          SMOKE_PORT: '8732'

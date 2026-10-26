@@ -102,6 +102,13 @@ async function main() {
     const file = join('native-dist/presets', item.file)
     check(`preset ${item.id}: file exists`, existsSync(join(ROOT, file)), file)
     check(`preset ${item.id}: not a dev fixture`, !String(item.id).startsWith('_') && !String(item.file).startsWith('_'))
+    check(`preset ${item.id}: hasSound is boolean`, typeof item.hasSound === 'boolean', String(item.hasSound))
+    if (item.soundFile !== undefined) {
+      const soundFile = join('native-dist/presets', item.soundFile)
+      check(`preset ${item.id}: sound file exists`, existsSync(join(ROOT, soundFile)), soundFile)
+      check(`preset ${item.id}: soundFile implies hasSound`, item.hasSound === true)
+    }
+    if (item.hasSound === true) check(`preset ${item.id}: declares a sound file`, typeof item.soundFile === 'string')
   }
 
   const suspicious = [/(?:www\.)?shadertoy\.com\/(?:view|embed)\//i, /[A-Za-z]:\\/, /file:\/\/\//]

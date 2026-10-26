@@ -43,6 +43,8 @@
     "native-dist/presets/index.json",
     "native-dist/presets/aurora.glsl",
     "native-dist/presets/flow.glsl",
+    "native-dist/presets/pulse.glsl",
+    "native-dist/presets/pulse-sound.glsl",
     "README.md",
     "LICENSE"
   ],
@@ -68,6 +70,7 @@
     "test": "node tools/check-bundle.mjs && node tools/host-route-test.mjs",
     "test:host": "node tools/host-route-test.mjs",
     "test:renderer": "node tools/renderer-smoke.mjs",
+    "test:audio": "node tools/audio-smoke.mjs",
     "pack:check": "npm pack --dry-run --json"
   },
   "devDependencies": {

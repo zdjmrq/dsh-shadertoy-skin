@@ -14,8 +14,8 @@
  *
  * @module dsh-shadertoy-skin
  */
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
+import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -45,11 +45,90 @@ const MIME = Object.freeze({
 })
 
 const EMPTY_STATE = Object.freeze({
-  version: 1,
+  version: 2,
   activeId: null,
   entries: [],
-  params: {},
+  overrides: {},
 })
+
+/**
+ * Best-effort reader for ShaderToy's exported JSON (also accepts our own shape).
+ * Returns undefined when the file is not a usable shader document.
+ */
+function parseShaderDocument(text) {
+  let raw
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  const shader = raw?.Shader ?? raw?.shader ?? raw
+  const passes = shader?.renderpass ?? shader?.passes
+  let image = ''
+  let sound = ''
+  if (Array.isArray(passes)) {
+    for (const pass of passes) {
+      const type = String(pass?.type ?? 'image').toLowerCase()
+      const source = typeof pass?.code === 'string' ? pass.code : ''
+      if (source === '') continue
+      if (type === 'sound') sound = source
+      else if (image === '') image = source
+    }
+  }
+  if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
+  if (image === '' && typeof shader?.image === 'string') image = shader.image
+  if (image === '' && typeof raw?.image === 'string') image = raw.image
+  if (image === '') return undefined
+  const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
+  return { image, sound: sound || undefined, name: name || undefined }
+}
+
+/** List the user-imported presets directory ($DSH_HOME/shader-skin/presets). */
+async function listLocalPresets() {
+  let names
+  try {
+    names = await readdir(localDir())
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return []
+    throw error
+  }
+  const out = []
+  for (const name of names.sort()) {
+    const isJson = /\.json$/i.test(name)
+    const isSource = /\.(glsl|txt)$/i.test(name)
+    if (!isJson && !isSource) continue
+    const file = join(localDir(), name)
+    try {
+      const info = await stat(file)
+      if (!info.isFile() || info.size > 1_500_000) continue
+      const text = await readFile(file, 'utf8')
+      if (isJson) {
+        const parsed = parseShaderDocument(text)
+        if (parsed === undefined) continue
+        out.push({
+          file: name,
+          name: parsed.name ?? name.replace(/\.json$/i, ''),
+          kind: 'shadertoy',
+          hasSound: Boolean(parsed.sound),
+          size: info.size,
+        })
+        continue
+      }
+      // a .glsl/.txt file only counts when it actually looks like a shader
+      if (!/\b(?:mainImage|mainSound|void\s+main)\s*\(/.test(text)) continue
+      out.push({
+        file: name,
+        name: name.replace(/\.[^.]+$/, ''),
+        kind: 'glsl',
+        hasSound: /\bmainSound\s*\(/.test(text),
+        size: info.size,
+      })
+    } catch {
+      // unreadable / vanished: skip rather than fail the whole listing
+    }
+  }
+  return out
+}
 
 function dshHome() {
   const fromEnv = process.env.DSH_HOME
@@ -133,19 +212,62 @@ async function readJsonBody(req, limit = MAX_STATE_BYTES) {
 }
 
 /** Accept only the shape the client half writes; unknown keys are dropped. */
+const PARAM_KEYS = new Set(['enabled', 'glass', 'blur', 'scale', 'fps', 'speed', 'volume', 'muted'])
+
+function sanitizeParams(raw) {
+  const out = {}
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return out
+  for (const [key, value] of Object.entries(raw)) {
+    if (!PARAM_KEYS.has(key)) continue
+    if (key === 'enabled' || key === 'muted') {
+      if (typeof value === 'boolean') out[key] = value
+      continue
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) out[key] = value
+  }
+  return out
+}
+
+function sanitizeEntry(raw, index) {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`entry #${index} must be an object`)
+  if (typeof raw.id !== 'string' || raw.id.trim() === '') throw new Error(`entry #${index} needs a string id`)
+  const code = raw.code !== null && typeof raw.code === 'object' && !Array.isArray(raw.code) ? raw.code : {}
+  if (typeof code.image !== 'string' || code.image.trim() === '') throw new Error(`entry "${raw.id}" needs code.image`)
+  const entry = {
+    id: raw.id,
+    name: typeof raw.name === 'string' && raw.name.trim() !== '' ? raw.name.slice(0, 120) : raw.id,
+    source: ['paste', 'file', 'local'].includes(raw.source) ? raw.source : 'paste',
+    code: { image: code.image },
+  }
+  if (typeof code.sound === 'string' && code.sound.trim() !== '') entry.code.sound = code.sound
+  if (typeof raw.license === 'string') entry.license = raw.license.slice(0, 80)
+  if (typeof raw.origin === 'string') entry.origin = raw.origin.slice(0, 300)
+  return entry
+}
+
 function sanitizeState(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('state must be an object')
-  const entries = Array.isArray(raw.entries) ? raw.entries : []
-  for (const entry of entries) {
-    if (entry === null || typeof entry !== 'object' || typeof entry.id !== 'string') throw new Error('each entry needs a string id')
+  const entries = (Array.isArray(raw.entries) ? raw.entries : []).map(sanitizeEntry)
+  if (entries.length > 200) throw new Error('too many entries (max 200)')
+  const codeBytes = entries.reduce((total, entry) => total + entry.code.image.length + (entry.code.sound?.length ?? 0), 0)
+  if (codeBytes > 1_500_000) throw new Error('shader code too large (max 1.5 MB in total)')
+
+  const overrides = {}
+  if (raw.overrides !== null && typeof raw.overrides === 'object' && !Array.isArray(raw.overrides)) {
+    for (const [id, value] of Object.entries(raw.overrides)) {
+      const params = sanitizeParams(value)
+      if (Object.keys(params).length > 0) overrides[id] = params
+    }
   }
-  return {
-    version: 1,
-    activeId: typeof raw.activeId === 'string' ? raw.activeId : null,
-    entries,
-    params: raw.params !== null && typeof raw.params === 'object' && !Array.isArray(raw.params) ? raw.params : {},
-    updatedAt: Date.now(),
+  const activeId = typeof raw.activeId === 'string' && raw.activeId !== '' ? raw.activeId : null
+
+  // v1 kept one global `params` object; fold it into the active preset's override.
+  if (raw.version !== 2 && activeId !== null) {
+    const legacy = sanitizeParams(raw.params)
+    if (Object.keys(legacy).length > 0) overrides[activeId] = { ...legacy, ...(overrides[activeId] ?? {}) }
   }
+
+  return { version: 2, activeId, overrides, entries, updatedAt: Date.now() }
 }
 
 async function handleState(req, res) {
@@ -207,6 +329,22 @@ export async function handler(req, res) {
   if (suffix === '/state') return handleState(req, res)
   if (suffix === '/health') {
     finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify({ ok: true, name, version: VERSION }))
+    return
+  }
+  // Escape hatch for iterating on UI that lives inside #root: create
+  // $DSH_HOME/shader-skin.safe and the client half skips the sidebar entry.
+  if (suffix === '/safe-mode') {
+    const on = existsSync(join(dshHome(), 'shader-skin.safe'))
+    finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify({ on }))
+    return
+  }
+  if (suffix === '/local/index.json') {
+    try {
+      const presets = await listLocalPresets()
+      finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify(presets))
+    } catch {
+      fail(res, 500, 'local preset listing failed')
+    }
     return
   }
   if (suffix.startsWith('/local/')) {

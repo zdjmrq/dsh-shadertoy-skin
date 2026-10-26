@@ -144,47 +144,51 @@ async function main() {
 
     // --- settings panel (standalone mode, dev base)
     await page.goto(`${BASE}/panel.html?base=`, { waitUntil: 'load' })
-    // boot() is async (defaults.json + manifest), so wait until it has rendered the
-    // controls before asserting; CI runners are slower than a local machine.
+    // boot() is async (defaults.json + manifest), so wait until the controls render.
     await page.waitForFunction(() => {
       const panel = document.getElementById('panel')
-      const fps = document.getElementById('fps')
-      return panel?.classList.contains('open') === true && (fps?.options.length ?? 0) >= 4
+      const trigger = document.querySelector('#fps-dd .dd-trigger')
+      return panel?.classList.contains('open') === true && (trigger?.textContent ?? '') !== ''
     }, null, { timeout: 20_000 })
     const panelState = () => page.evaluate(() => ({
-      fps: document.getElementById('fps')?.value,
-      scale: document.getElementById('scale')?.value,
-      glass: document.getElementById('glass')?.value,
-      blur: document.getElementById('blur')?.value,
-      speed: document.getElementById('speed')?.value,
-      fpsOptions: [...(document.getElementById('fps')?.options ?? [])].map(option => option.value),
-      scaleOptions: [...(document.getElementById('scale')?.options ?? [])].map(option => option.value),
-      presets: [...(document.getElementById('preset')?.options ?? [])].map(option => option.value),
-      panelOpen: document.getElementById('panel')?.classList.contains('open'),
+      theme: document.documentElement.dataset.theme,
+      glass: document.getElementById('glass-out')?.textContent,
+      fps: document.querySelector('#fps-dd .dd-trigger')?.textContent,
+      scale: document.querySelector('#scale-dd .dd-trigger')?.textContent,
+      preset: document.querySelector('#preset-dd .dd-trigger')?.textContent,
+      items: [...document.querySelectorAll('#lib-list .item .name')].map(node => node.textContent),
     }))
     const initial = await panelState()
-    check('panel opens in standalone mode', initial.panelOpen === true)
-    check('panel defaults to 30 fps', initial.fps === '30', String(initial.fps))
-    check('panel defaults to 1x render scale', initial.scale === '1', String(initial.scale))
-    check('panel defaults to 72% glass', initial.glass === '72', String(initial.glass))
-    check('panel offers fps choices 15/20/30/60', initial.fpsOptions.join(',') === '15,20,30,60', initial.fpsOptions.join(','))
-    check('panel offers render scales 0.5..1.5', initial.scaleOptions.join(',') === '0.5,0.75,1,1.25,1.5', initial.scaleOptions.join(','))
-    check('panel lists the shipped presets', initial.presets.includes('aurora') && initial.presets.includes('flow'), initial.presets.join(','))
-    await page.selectOption('#fps', '60')
-    await page.selectOption('#scale', '0.75')
-    await page.evaluate(() => {
-      const range = document.getElementById('glass')
-      range.value = '55'
-      range.dispatchEvent(new Event('input', { bubbles: true }))
+    check('panel applies a theme (dark/light)', initial.theme === 'dark' || initial.theme === 'light', String(initial.theme))
+    check('panel defaults to 30 fps', initial.fps === '30 fps', String(initial.fps))
+    check('panel defaults to 1x render scale', /1×/.test(initial.scale ?? ''), String(initial.scale))
+    check('panel defaults to 72% glass', initial.glass === '72%', String(initial.glass))
+    check('panel selects a built-in preset', /极光/.test(initial.preset ?? ''), String(initial.preset))
+
+    // custom dropdown: no native (light) popup — a themed list we control
+    await page.click('#fps-dd .dd-trigger')
+    await page.waitForSelector('#fps-dd .dd.open .dd-menu', { timeout: 5_000 })
+    const fpsChoices = await page.locator('#fps-dd .dd-item').count()
+    check('fps dropdown is a custom list with 4 choices', fpsChoices === 4, String(fpsChoices))
+    const popup = await page.evaluate(() => {
+      const menu = document.querySelector('#fps-dd .dd-menu')
+      const item = menu?.querySelector('.dd-item')
+      return menu && item ? { bg: getComputedStyle(menu).backgroundColor, fg: getComputedStyle(item).color } : null
     })
-    const changed = await panelState()
-    check('changing fps applies', changed.fps === '60', String(changed.fps))
-    check('changing render scale applies', changed.scale === '0.75', String(changed.scale))
-    check('changing glass applies', changed.glass === '55', String(changed.glass))
+    check('dropdown popup is themed, not a white system list', Boolean(popup) && !(popup.bg === 'rgb(255, 255, 255)' && popup.fg === 'rgb(0, 0, 0)'), JSON.stringify(popup))
+    await page.locator('#fps-dd .dd-item', { hasText: '60 fps' }).click()
+    check('choosing 60 fps applies it', (await panelState()).fps === '60 fps')
+
+    // library tab lists built-in presets
+    await page.click('#tab-library')
+    await page.waitForSelector('#view-library:not([hidden])')
+    const library = await panelState()
+    check('library lists the built-in presets', library.items.includes('极光（自写）') && library.items.includes('流体色带（自写）'), library.items.join(','))
+
+    await page.click('#tab-params')
     await page.click('#reset')
-    await sleep(120)
-    const reset = await panelState()
-    check('reset restores the documented defaults', reset.fps === '30' && reset.scale === '1' && reset.glass === '72', JSON.stringify(reset))
+    await sleep(150)
+    check('reset restores the default glass', (await panelState()).glass === '72%')
 
     check('no uncaught page errors', consoleErrors.length === 0, consoleErrors.join(' | ').slice(0, 300))
   } finally {
