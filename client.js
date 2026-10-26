@@ -207,6 +207,25 @@ window.__ModuleLoader__.load({
           const RAISED_TOKENS = [
             '--dsw-alias-bg-overlay', '--dsw-specific-menu',
           ]
+          /**
+           * Content fills that never go through the `bg-layer-*` tokens: the
+           * changed-files header strip, deliverable/plan cards, markdown code
+           * blocks + inline code, and the user-message bubble. In the light theme
+           * those default to opaque near-white (the static neutral-50/100 scale),
+           * which is what made some assistant replies look like solid white
+           * patches while every other card was translucent. Each entry is
+           * [token, weight]: the weight scales the current `panels` alpha.
+           */
+          const CONTENT_TOKENS = [
+            ['--dsw-static-neutral-50', 0.62],
+            ['--dsw-static-neutral-100', 0.62],
+            ['--dsw-static-neutral-800', 0.62],
+            ['--dsw-static-neutral-850', 0.62],
+            ['--dsw-alias-markdown-code-block', 0.9],
+            ['--dsw-alias-markdown-code-block-banner', 1],
+            ['--dsw-alias-markdown-inline-code', 0.7],
+            ['--dsw-specific-bubble', 1],
+          ]
 
           /** `panels` = opaque (leave theme fills) | half | clear. */
           const PANEL_ALPHA = { half: 0.62, clear: 0.22 }
@@ -230,6 +249,9 @@ window.__ModuleLoader__.load({
             const raised = Math.min(0.96, alpha + 0.32)
             for (const token of LAYER_TOKENS) tokens[token] = rgba('9, 12, 16', alpha)
             for (const token of RAISED_TOKENS) tokens[token] = rgba('9, 12, 16', raised)
+            for (const [token, weight] of CONTENT_TOKENS) {
+              tokens[token] = rgba('9, 12, 16', Math.min(0.96, alpha * weight))
+            }
             return tokens
           }
 

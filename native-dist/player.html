@@ -118,6 +118,11 @@
       if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
         stopAudioScheduler('once')
         setAudioState('ended', 'music played once')
+      } else if (params.audioMode === 'loop' && audioLoopPeriod() > 0 && audio.time >= params.audioSeconds) {
+        // once → loop after the piece already ended: play it again from the top
+        audio.time = 0
+        audio.chunks = 0
+        if (!audio.running) startAudioScheduler()
       } else if (!audio.running) {
         startAudioScheduler()
       }
@@ -132,7 +137,7 @@
   function line() {
     const mode = DEBUG_BG ? 'debug-bg' : (program ? 'running' : 'idle')
     const note = diag.note ? ` · ${diag.note}` : ''
-    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · audio=${audioStateLabel} · look=${params.dim.toFixed(2)}/${params.tintMix.toFixed(2)} · loop=${params.loop ? `${params.loopSeconds.toFixed(0)}s` : 'off'} · shader=${diag.preset}${note}`
+    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · audio=${audioStateLabel} · look=${params.dim.toFixed(2)}/${params.tintMix.toFixed(2)} · loop=${params.loop ? `${params.loopSeconds.toFixed(0)}s` : 'off'} · music=${params.audioMode === 'once' ? `once/${params.audioSeconds.toFixed(0)}s` : `loop/${params.audioSeconds.toFixed(0)}s`} · shader=${diag.preset}${note}`
   }
   function refreshDiag() {
     diagBox.textContent = line()
@@ -558,8 +563,40 @@
     return true
   }
 
-  /** Render one chunk into the FBO and decode it into audio.left/right. */
-  function renderAudioChunk() {
+  /** Length of the music-loop seam fade, in seconds (keeps the repeat click-free). */
+  const AUDIO_SEAM_FADE = 0.04
+
+  /**
+   * Loop period for the *music* timeline. ShaderToy sound passes are finite pieces
+   * (they fade out and then stay silent), so "循环播放" cannot just keep feeding
+   * t=60,70,… — it has to wrap the audio clock at the configured length.
+   */
+  function audioLoopPeriod() {
+    const period = Number(params.audioSeconds)
+    return params.audioMode === 'loop' && Number.isFinite(period) && period > 0 ? period : 0
+  }
+
+  /** Per-sample gain that fades the music in/out at the loop seam and at "stop". */
+  function seamGain(time) {
+    let gain = 1
+    const period = audioLoopPeriod()
+    if (period > 0) {
+      if (time < AUDIO_SEAM_FADE) gain = Math.min(gain, Math.max(0, time) / AUDIO_SEAM_FADE)
+      const left = period - time
+      if (left < AUDIO_SEAM_FADE) gain = Math.min(gain, Math.max(0, left) / AUDIO_SEAM_FADE)
+    } else if (params.audioMode === 'once') {
+      const left = params.audioSeconds - time
+      if (left < AUDIO_SEAM_FADE) gain = Math.min(gain, Math.max(0, left) / AUDIO_SEAM_FADE)
+    }
+    return gain
+  }
+
+  /**
+   * Render one chunk that starts at `startTime` into the FBO and decode it into
+   * audio.left/right. The caller owns the clock (`audio.time` is not advanced here),
+   * so a chunk can be re-rendered at a wrapped time.
+   */
+  function renderAudioChunk(startTime, chunkSeconds) {
     if (!audio.program || !audio.sampleRate) return false
     if (!ensureAudioTarget()) return false
     const L = audio.locs
@@ -572,7 +609,7 @@
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
       for (let i = 0; i < 4; i++) { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, blackTex) }
       if (L.iResolution) gl.uniform3f(L.iResolution, AUDIO_CHUNK, 1, 1)
-      if (L.iTime) gl.uniform1f(L.iTime, audio.time)
+      if (L.iTime) gl.uniform1f(L.iTime, startTime)
       if (L.iTimeDelta) gl.uniform1f(L.iTimeDelta, 0)
       if (L.iFrame) gl.uniform1i(L.iFrame, audio.chunks)
       if (L.iMouse) gl.uniform4f(L.iMouse, 0, 0, 0, 0)
@@ -590,11 +627,14 @@
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     }
     const bytes = audio.bytes
+    const perSample = chunkSeconds / AUDIO_CHUNK
     let peak = 0
     let sum = 0
     for (let i = 0; i < AUDIO_CHUNK; i++) {
-      const l = (((bytes[i * 4] << 8) | bytes[i * 4 + 1]) / 65535) * 2 - 1
-      const r = (((bytes[i * 4 + 2] << 8) | bytes[i * 4 + 3]) / 65535) * 2 - 1
+      const time = startTime + i * perSample
+      const gain = seamGain(time)
+      const l = ((((bytes[i * 4] << 8) | bytes[i * 4 + 1]) / 65535) * 2 - 1) * gain
+      const r = ((((bytes[i * 4 + 2] << 8) | bytes[i * 4 + 3]) / 65535) * 2 - 1) * gain
       audio.left[i] = l
       audio.right[i] = r
       const al = l < 0 ? -l : l
@@ -605,7 +645,6 @@
     }
     audio.peak = peak
     audio.rms = Math.sqrt(sum / (AUDIO_CHUNK * 2))
-    audio.time += audioChunkSeconds() * Math.max(params.speed, 0)
     if (AUDIOPROBE) window.__audioProbe = { peak, rms: audio.rms, chunks: audio.chunks }
     return true
   }
@@ -613,7 +652,13 @@
   function scheduleAudioChunk(when) {
     const ctx = audio.ctx
     if (!ctx || !audio.gain) return false
-    if (!renderAudioChunk()) return false
+    const chunkSeconds = audioChunkSeconds()
+    const period = audioLoopPeriod()
+    let start = audio.time
+    if (period > 0 && start >= period) start = start % period
+    if (params.audioMode === 'once' && start >= params.audioSeconds) return false
+    if (!renderAudioChunk(start, chunkSeconds)) return false
+    audio.time = start + chunkSeconds * Math.max(params.speed, 0)
     try {
       const buffer = ctx.createBuffer(2, AUDIO_CHUNK, audio.sampleRate)
       buffer.copyToChannel(audio.left, 0)
@@ -625,7 +670,7 @@
       source.start(when)
       audio.sources.add(source)
       audio.chunks++
-      audio.scheduledUntil = when + audioChunkSeconds()
+      audio.scheduledUntil = when + chunkSeconds
       return true
     } catch (error) {
       setAudioState('error', `audio schedule: ${error.message}`)
@@ -640,6 +685,10 @@
       setAudioState('ended', 'music played once')
       return
     }
+    // music loop: switching modes (or shortening the length) may leave the clock
+    // past the new seam — restart the piece instead of playing silence forever
+    const period = audioLoopPeriod()
+    if (period > 0 && audio.time >= period) audio.time = audio.time % period
     audio.running = true
     const startAt = audio.ctx.currentTime + AUDIO_PREBUFFER
     audio.scheduledUntil = startAt

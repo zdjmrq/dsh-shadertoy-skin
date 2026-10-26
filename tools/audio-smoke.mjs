@@ -179,6 +179,32 @@ async function main() {
     check('no new audio chunks after the end', afterEnd.audio.chunks === chunksAtEnd, `${chunksAtEnd} -> ${afterEnd.audio.chunks}`)
     check('the image keeps rendering after the music ends', (await framesOf()) > framesAtEnd, `${framesAtEnd} -> ${await framesOf()}`)
 
+    // ---- audioMode=loop: a finite piece replays — the audio clock wraps at 音乐时长
+    await open('preset=dev/decay-sound&fps=30&dim=1&audioprobe=1&muted=0&volume=70&audioMode=loop&audioSeconds=2')
+    await waitFor(() => window.__player?.ready === true, 20_000, 'music-loop ready')
+    await waitFor(() => window.__player?.audio?.state === 'running', 15_000, 'music-loop running')
+    const samples = []
+    for (let i = 0; i < 40; i++) {
+      samples.push(await page.evaluate(() => ({
+        time: window.__audioInternals?.time ?? null,
+        state: window.__player?.audio?.state ?? null,
+        peak: window.__audioProbe?.peak ?? 0,
+        chunks: window.__player?.audio?.chunks ?? 0,
+      })))
+      await sleep(120)
+    }
+    const clock = samples.map(sample => sample.time).filter(time => typeof time === 'number')
+    const wrapped = clock.some((time, index) => index > 0 && time < clock[index - 1] - 0.5)
+    check('music loop wraps the audio clock at 音乐时长', wrapped && clock.length > 10 && Math.max(...clock) < 3.5,
+      `max=${Math.max(...clock).toFixed(2)} wrapped=${wrapped}`)
+    check('music loop keeps running (never "ended")', samples.every(sample => sample.state === 'running'),
+      samples.map(sample => sample.state).join(','))
+    const audibleAfterWrap = samples.some((sample, index) => index > 0
+      && typeof clock[index] === 'number' && typeof clock[index - 1] === 'number'
+      && clock[index] < clock[index - 1] - 0.5 && sample.peak > 0.05)
+    check('the piece is audible again after the wrap', audibleAfterWrap,
+      samples.slice(0, 8).map(sample => `${sample.time?.toFixed(2)}:${sample.peak.toFixed(2)}`).join(' '))
+
     check('no uncaught page errors', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 300))
 
     console.log('')

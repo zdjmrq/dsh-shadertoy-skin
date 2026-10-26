@@ -134,14 +134,27 @@
   textarea { resize: vertical; min-height: 92px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.5; }
 
   /* code tab: editable shader source of the running skin.
-     Both boxes are drag-resizable in height (bottom-right corner); the heights are
-     remembered in localStorage so the layout survives reloads. */
+     Both boxes are drag-resizable in height. The native textarea resizer is
+     disabled on purpose: it is a 15px invisible corner chrome that Electron
+     users never find (and hit-testing it through our padding is fiddly), so a
+     real, visible grip sits right under each box. Heights are remembered in
+     localStorage so the layout survives reloads. */
   .code-area {
     min-height: 240px; max-height: none; white-space: pre; overflow: auto;
-    tab-size: 2; font-size: 11.5px; line-height: 1.6; resize: vertical;
+    tab-size: 2; font-size: 11.5px; line-height: 1.6; resize: none;
   }
   .code-area.sound { min-height: 90px; }
-  .code-area::-webkit-resizer { background: transparent; }
+  .code-grip {
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    height: 16px; margin: 2px 0 8px; border-radius: 6px; cursor: ns-resize;
+    touch-action: none; user-select: none; outline-offset: 2px;
+  }
+  .code-grip:hover { background: var(--field-hover); }
+  .code-grip:focus-visible { outline: 2px solid var(--accent); }
+  .code-grip::before, .code-grip::after {
+    content: ""; width: 14px; height: 2px; border-radius: 1px; background: var(--faint);
+  }
+  body.dragging-code { cursor: ns-resize; }
   #code-title { color: var(--accent); font-size: 11px; }
   #code-hint { margin: -2px 0 4px; }
 
@@ -283,24 +296,24 @@
     </div>
 
     <div class="row switch">
-      <label for="loop">循环播放</label>
+      <label for="loop">画面循环</label>
       <input type="checkbox" id="loop">
     </div>
     <div class="row" id="loop-seconds-row">
       <div class="head"><label for="loop-seconds">循环周期</label><output id="loop-seconds-out"></output></div>
       <input type="range" id="loop-seconds" min="5" max="120" step="1">
-      <div class="hint">有的作品播一次就停住了：打开后每到一个周期把画面时间轴（iTime）归零重播。只重置画面，不影响声音；带音乐的作品建议关闭，避免音画不同步。</div>
+      <div class="hint">有的作品播一次就停住了：打开后每到「循环周期」就把画面时间轴（iTime）归零重播，适合一次性的开场动画。带淡入淡出的作品（比如马里奥）每轮会看到它重新淡入，这是着色器本身的效果，不是没循环。只重置画面，不影响声音。</div>
     </div>
 
     <div class="row" id="audio-mode-row">
       <div class="head"><label>音乐播放</label><output id="audio-mode-out"></output></div>
       <div id="audio-mode-dd"></div>
-      <div class="hint">「只播一次」= 放完「音乐时长」就停，画面继续常驻（像马里奥这种静态图 + 一首歌正合适）；「循环播放」= 一直放。</div>
+      <div class="hint">ShaderToy 的音乐通常是一段有长度的曲子（放完就静音），所以「循环重放」要配合下面的「音乐时长」：每到这个时长就把音乐时间轴归零再来一遍，接缝处做了 40ms 淡入淡出。「只播一次」= 放完就停，画面继续常驻。</div>
     </div>
     <div class="row" id="audio-seconds-row">
       <div class="head"><label for="audio-seconds">音乐时长</label><output id="audio-seconds-out"></output></div>
       <input type="range" id="audio-seconds" min="10" max="600" step="5">
-      <div class="hint">从切到这个背景开始计时；到点后音乐停止，画面不受影响。</div>
+      <div class="hint">这首曲子有多长：循环重放时按它从头再来，只播一次时按它停止。从切到这个背景开始计时；开「画面循环」也建议把它设成和循环周期一致的时长。</div>
     </div>
 
     <div class="row" id="volume-row">
@@ -358,11 +371,13 @@
     <div class="row">
       <div class="head"><label for="code-image">Image 代码</label><output id="code-image-info"></output></div>
       <textarea id="code-image" class="code-area" spellcheck="false" autocapitalize="off" autocorrect="off" wrap="off" placeholder="void mainImage(out vec4 fragColor, in vec2 fragCoord) { ... }"></textarea>
+      <div class="code-grip" data-code="code-image" role="separator" aria-orientation="horizontal" aria-label="拖动调整 Image 代码框高度（上下方向键也可以）" tabindex="0" title="拖动调整高度"></div>
     </div>
 
     <div class="row">
       <div class="head"><label for="code-sound">Sound 代码（可选，mainSound）</label><output id="code-sound-info"></output></div>
       <textarea id="code-sound" class="code-area sound" spellcheck="false" autocapitalize="off" autocorrect="off" wrap="off" placeholder="vec2 mainSound(float time) { ... }"></textarea>
+      <div class="code-grip" data-code="code-sound" role="separator" aria-orientation="horizontal" aria-label="拖动调整 Sound 代码框高度（上下方向键也可以）" tabindex="0" title="拖动调整高度"></div>
     </div>
 
     <div class="actions">
@@ -631,7 +646,7 @@
   let audioModeDd
 
   const PANEL_KINDS = { opaque: '不透明', half: '半透明', clear: '透明' }
-  const AUDIO_MODES = { loop: '循环播放', once: '只播一次' }
+  const AUDIO_MODES = { loop: '循环重放', once: '只播一次' }
 
   function sync() {
     const p = effective()
@@ -660,7 +675,7 @@
     $('audio-mode-out').textContent = AUDIO_MODES[p.audioMode] ?? AUDIO_MODES.loop
     $('audio-seconds').value = String(p.audioSeconds ?? 60)
     $('audio-seconds-out').textContent = `${Math.round(p.audioSeconds ?? 60)} s`
-    $('audio-seconds-row').hidden = p.audioMode !== 'once'
+    $('audio-seconds-row').hidden = !sound
     $('volume').disabled = !sound
     $('muted').disabled = !sound
     $('muted').checked = p.muted === true
@@ -715,7 +730,7 @@
     })
     audioModeDd = makeDropdown($('audio-mode-dd'), {
       options: [
-        { value: 'loop', text: '循环播放（一直放）' },
+        { value: 'loop', text: '循环重放（每「音乐时长」秒从头再来）' },
         { value: 'once', text: '只播一次（播完停，画面常驻）' },
       ],
       value: effective().audioMode === 'once' ? 'once' : 'loop',
@@ -981,7 +996,7 @@
     $('code-title').textContent = name
     $('code-hint').textContent = `${editable
       ? '正在编辑「我的」背景：保存后立刻重新编译运行，改动只存在本机。'
-      : '内置作品只读：保存会另存为「我的副本」并立刻运行，内置原件不动。'} 两个代码框都能拖右下角调高度（会记住）。`
+      : '内置作品只读：保存会另存为「我的副本」并立刻运行，内置原件不动。'} 两个代码框都能拖下面的把手调高度（聚焦把手后按 ↑/↓ 也行），会记住。`
     updateCodeInfo()
     setCodeNote('')
   }
@@ -1040,6 +1055,52 @@
     }
   }
 
+  /** Visible drag grips under the code boxes (the native textarea resizer is off). */
+  function bindCodeGrips() {
+    for (const grip of document.querySelectorAll('.code-grip')) {
+      const area = $(grip.dataset.code)
+      if (!area) continue
+      const isSound = area.classList.contains('sound')
+      const minHeight = isSound ? 80 : 160
+      const maxHeight = () => Math.max(minHeight + 80, Math.round(window.innerHeight * 0.72))
+      const setHeight = (height) => {
+        const clamped = Math.min(maxHeight(), Math.max(minHeight, Math.round(height)))
+        area.style.height = `${clamped}px`
+      }
+      let startY = 0
+      let startHeight = 0
+      const stop = () => {
+        document.body.classList.remove('dragging-code')
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', stop)
+        window.removeEventListener('pointercancel', stop)
+        saveCodeHeights()
+      }
+      const onMove = (event) => {
+        if (typeof event.clientY !== 'number') return
+        event.preventDefault()
+        setHeight(startHeight + (event.clientY - startY))
+      }
+      grip.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        startY = event.clientY
+        startHeight = area.offsetHeight
+        document.body.classList.add('dragging-code')
+        try { grip.setPointerCapture(event.pointerId) } catch { /* older engines */ }
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', stop)
+        window.addEventListener('pointercancel', stop)
+      })
+      grip.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+        event.preventDefault()
+        setHeight(area.offsetHeight + (event.key === 'ArrowDown' ? (event.shiftKey ? 64 : 16) : (event.shiftKey ? -64 : -16)))
+        saveCodeHeights()
+      })
+    }
+  }
+
   function bindCode() {
     $('code-save').addEventListener('click', () => { void saveCode() })
     $('code-revert').addEventListener('click', () => {
@@ -1048,10 +1109,7 @@
     $('code-image').addEventListener('input', updateCodeInfo)
     $('code-sound').addEventListener('input', updateCodeInfo)
     restoreCodeHeights()
-    // remember a manually dragged box height (the native resize handle is at the
-    // bottom-right corner of each textarea)
-    $('view-code').addEventListener('pointerup', saveCodeHeights)
-    $('view-code').addEventListener('mouseup', saveCodeHeights)
+    bindCodeGrips()
     // Ctrl/Cmd+S inside the editor saves & runs instead of the browser dialog
     $('view-code').addEventListener('keydown', event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
