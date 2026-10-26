@@ -113,7 +113,9 @@
     const head = document.createElement('b')
     head.textContent = `${STAGE_TITLES[stage] || stage}\n`
     errBox.append(head, document.createTextNode(log))
-    errBox.classList.add('open')
+    // standalone: show the full-screen reader; embedded: never cover the app,
+    // report to the shell so the settings panel can surface it instead
+    if (STANDALONE) errBox.classList.add('open')
     report(text)
     post({ type: 'error', stage, log })
   }

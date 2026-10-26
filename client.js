@@ -51,6 +51,7 @@ window.__ModuleLoader__.load({
 
         ctx.effect(() => {
           const listeners = []
+          const timers = []
           const on = (target, event, handler, options) => {
             target.addEventListener(event, handler, options)
             listeners.push(() => target.removeEventListener(event, handler, options))
@@ -65,14 +66,48 @@ window.__ModuleLoader__.load({
 
           // ---------------------------------------------------------------- glass
           //
-          // On the Windows desktop shell two surfaces paint the same area
-          // (`.frame` with --dsw-specific-sidebar-fill, then `.centerCol` with
-          // --dsw-alias-bg-base), so equal alphas would compound into a darker
-          // column. Compensate with a = 1 - sqrt(1 - g) so the *effective*
-          // opacity of two stacked layers equals g.
-          const GLASS_LAYERS = 2
+          // Two things happen together:
+          //   1. `--dsw-alias-bg-base` / `--dsw-specific-sidebar-fill` become
+          //      translucent, so every surface painted from those tokens lets the
+          //      shader through while cards, menus and dialogs keep their own
+          //      (untouched) fills;
+          //   2. a style patch paints the desktop AppFrame once and makes its
+          //      nested columns/phases transparent, so translucent paints do not
+          //      stack up into a darker centre.
+          //
+          // If the patch matches (official shell on 0.2.x) the effective opacity is
+          // exactly `glass`; if a future shell no longer matches, we compensate for
+          // the two stacked token surfaces instead. The probe decides at runtime.
           const DARK_RGB = '9, 12, 16'
           const LIGHT_RGB = '255, 255, 255'
+          const STYLE_ID = 'shadertoy-skin-glass-style'
+          const GLASS_CSS = `
+html, body { background: transparent !important; }
+/* paint the shared frame once ... */
+body #root div:has(> [data-shell-overlay]) { background: var(--dsw-alias-bg-base) !important; }
+/* ... and never compound the nested columns / conversation phases / dock */
+body #root div:has(> [data-shell-overlay]) > :is(:first-child, :nth-child(2), [data-rightbar-col]),
+body #root div:has(> [data-shell-overlay]) > :nth-child(2) [data-phase],
+body #root div:has(> [data-shell-overlay]) [data-rightbar-col] [data-dockkit-host="dock"] > [data-dockkit-content] {
+  background: transparent !important;
+}
+`
+
+          function shellDetected() {
+            try {
+              return document.querySelector('#root div:has(> [data-shell-overlay])') !== null
+            } catch {
+              return false
+            }
+          }
+
+          function ensureGlassStyle() {
+            if (document.getElementById(STYLE_ID)) return
+            const style = document.createElement('style')
+            style.id = STYLE_ID
+            style.textContent = GLASS_CSS
+            ;(document.head ?? document.documentElement).append(style)
+          }
 
           function glassValue(alpha) {
             return {
@@ -84,7 +119,10 @@ window.__ModuleLoader__.load({
           function applyGlass() {
             if (theme === undefined) return
             const target = clamp(state.params.glass, 0.4, 0.9, 0.72)
-            const alpha = GLASS_LAYERS > 1 ? 1 - Math.pow(1 - target, 1 / GLASS_LAYERS) : target
+            // one painted surface when the shell patch applies, otherwise two
+            const layers = shellDetected() ? 1 : 2
+            const alpha = 1 - Math.pow(1 - target, 1 / layers)
+            ensureGlassStyle()
             const value = glassValue(alpha)
             glassDispose?.()
             glassDispose = theme.overrideTokens('shadertoy-skin', {
@@ -96,6 +134,7 @@ window.__ModuleLoader__.load({
           function clearGlass() {
             glassDispose?.()
             glassDispose = null
+            document.getElementById(STYLE_ID)?.remove()
           }
 
           // ------------------------------------------------------------- renderer
@@ -111,7 +150,19 @@ window.__ModuleLoader__.load({
             frame.src = `${BASE}/player.html`
             const host = document.body || document.documentElement
             host.insertBefore(frame, host.firstChild)
-            const onLoad = () => { void sendInit(frame) }
+            const onLoad = () => {
+              void sendInit(frame)
+              const onMessage = event => {
+                if (event.origin !== location.origin || event.source !== frame.contentWindow) return
+                const message = event.data
+                if (message && typeof message === 'object' && message.type === 'error') {
+                  console.warn('[shadertoy-skin] renderer reported an error:', message.stage, message.log)
+                  postTo(panel, { type: 'error', stage: message.stage, log: String(message.log ?? '').slice(0, 400) })
+                }
+              }
+              window.addEventListener('message', onMessage)
+              listeners.push(() => window.removeEventListener('message', onMessage))
+            }
             frame.addEventListener('load', onLoad)
             listeners.push(() => frame.removeEventListener('load', onLoad))
             return frame
@@ -259,11 +310,17 @@ window.__ModuleLoader__.load({
             booted = true
             syncEnabled()
             createPanel()
+            // the React shell may mount (and re-mount) after us: re-probe the glass
+            // geometry a few times so the layer compensation matches the live DOM
+            for (const delay of [300, 1200, 3000]) {
+              timers.push(setTimeout(() => { if (booted) applyGlass() }, delay))
+            }
           })()
 
           return () => {
             booted = false
             if (scheduled !== 0) cancelAnimationFrame(scheduled)
+            for (const id of timers) clearTimeout(id)
             clearGlass()
             removeBackground()
             document.getElementById(PANEL_ID)?.remove()

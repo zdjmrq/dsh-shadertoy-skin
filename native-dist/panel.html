@@ -175,8 +175,9 @@
   /** Effective rendering buffer size for the current scale, for the hint text. */
   function bufferSize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
-    const w = Math.round(window.innerWidth * dpr * state.params.scale)
-    const h = Math.round(window.innerHeight * dpr * state.params.scale)
+    const scale = Number(merged().scale) || 1
+    const w = Math.round(window.innerWidth * dpr * scale)
+    const h = Math.round(window.innerHeight * dpr * scale)
     return `${w} × ${h}`
   }
 
@@ -309,6 +310,16 @@
   }
 
   async function boot() {
+    if (!STANDALONE) {
+      window.addEventListener('message', event => {
+        if (event.origin !== location.origin) return
+        const message = event.data
+        if (message && message.type === 'error') {
+          $('note').textContent = `渲染错误（${message.stage}）：${String(message.log ?? '').slice(0, 260)}`
+          $('note').style.color = '#ff9d8f'
+        }
+      })
+    }
     try {
       defaults = await fetchJson('defaults.json')
     } catch { /* keep built-in defaults */ }
