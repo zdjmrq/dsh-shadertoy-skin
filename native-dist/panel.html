@@ -209,6 +209,7 @@
   .item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .item .badge { flex: 0 0 auto; font-size: 9px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; line-height: 16px; }
   .item .badge.sound { color: var(--accent); border-color: var(--accent); }
+  .item .badge.nc { color: var(--danger); border-color: var(--danger); }
   .item .tools { display: flex; gap: 4px; flex: 0 0 auto; }
   .import-box { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; margin-top: 10px; }
   .import-box h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
@@ -519,7 +520,12 @@
     return entryById(state.activeId) ? Boolean(preset.code?.sound) : Boolean(preset.hasSound)
   }
   const presetOptions = () => [
-    ...manifest.map(item => ({ value: item.id, text: item.name || item.id, kind: '内置' })),
+    ...manifest.map(item => ({
+      value: item.id,
+      text: item.name || item.id,
+      // bundled ShaderToy works keep their own licence; surface it right in the picker
+      kind: item.license && item.license !== 'MIT' ? `内置 · ${item.license}` : '内置',
+    })),
     ...state.entries.map(item => ({ value: item.id, text: item.name || item.id, kind: '我的' })),
   ]
   const textOfPreset = option => `${option.text}${option.kind ? ` · ${option.kind}` : ''}`
@@ -834,8 +840,8 @@
   function renderLibrary() {
     const list = $('lib-list')
     const rows = [
-      ...manifest.map(item => ({ id: item.id, name: item.name || item.id, kind: '内置', sound: Boolean(item.hasSound), entry: null })),
-      ...state.entries.map(item => ({ id: item.id, name: item.name, kind: '我的', sound: Boolean(item.code?.sound), entry: item })),
+      ...manifest.map(item => ({ id: item.id, name: item.name || item.id, kind: '内置', license: item.license, sound: Boolean(item.hasSound), entry: null })),
+      ...state.entries.map(item => ({ id: item.id, name: item.name, kind: '我的', license: null, sound: Boolean(item.code?.sound), entry: item })),
     ]
     list.replaceChildren(...rows.map(row => {
       const name = el('span', { className: 'name' })
@@ -843,6 +849,12 @@
       name.title = row.name
       const badge = el('span', { className: 'badge' })
       badge.textContent = row.kind
+      // Third-party presets must not look MIT: flag the licence on the row.
+      const foreign = Boolean(row.license && row.license !== 'MIT')
+      const licence = el('span', { className: 'badge nc' })
+      licence.textContent = foreign ? 'CC BY-NC-SA' : ''
+      licence.hidden = !foreign
+      licence.title = foreign ? `第三方作品：${row.license}（署名 / 非商业 / 相同方式共享），不是 MIT` : ''
       const sound = el('span', { className: 'badge sound' })
       sound.textContent = row.sound ? '有声' : ''
       sound.hidden = !row.sound
@@ -882,7 +894,7 @@
         })
         tools.append(rename, remove)
       }
-      return el('div', { className: `item${state.activeId === row.id ? ' active' : ''}` }, name, sound, badge, tools)
+      return el('div', { className: `item${state.activeId === row.id ? ' active' : ''}` }, name, sound, licence, badge, tools)
     }))
   }
 
@@ -1023,7 +1035,9 @@
     $('code-title').textContent = name
     $('code-hint').textContent = `${editable
       ? '正在编辑「我的」背景：保存后立刻重新编译运行，改动只存在本机。'
-      : '内置作品只读：保存会另存为「我的副本」并立刻运行，内置原件不动。'} 两个代码框都能拖下面的把手调高度（聚焦把手后按 ↑/↓ 也行），会记住。`
+      : '内置作品只读：保存会另存为「我的副本」并立刻运行，内置原件不动。'} 两个代码框都能拖下面的把手调高度（聚焦把手后按 ↑/↓ 也行），会记住。${builtin && builtin.license && builtin.license !== 'MIT'
+      ? ` 注意：这个内置作品是 ${builtin.license}（署名 / 非商业 / 相同方式共享），不是 MIT；另存的副本同样受它约束。`
+      : ''}`
     updateCodeInfo()
     setCodeNote('')
   }

@@ -1,7 +1,7 @@
 [
   {
     "id": "aurora",
-    "name": "极光（自写）",
+    "name": "极光",
     "file": "aurora.glsl",
     "license": "MIT",
     "author": "dsh-shadertoy-skin",
@@ -10,7 +10,7 @@
   },
   {
     "id": "flow",
-    "name": "流体色带（自写）",
+    "name": "流体色带",
     "file": "flow.glsl",
     "license": "MIT",
     "author": "dsh-shadertoy-skin",
@@ -19,12 +19,35 @@
   },
   {
     "id": "pulse",
-    "name": "脉冲（自写，带音乐）",
+    "name": "脉冲（带音乐）",
     "file": "pulse.glsl",
     "soundFile": "pulse-sound.glsl",
     "license": "MIT",
     "author": "dsh-shadertoy-skin",
     "hasSound": true,
     "note": "程序化电子乐 + 随节拍呼吸的画面，用来验证音频链路"
+  },
+  {
+    "id": "seascape",
+    "name": "海面（Seascape）",
+    "file": "seascape.glsl",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Alexander Alekseev aka TDM",
+    "sourceUrl": "https://www.shadertoy.com/view/Ms2SD1",
+    "hasSound": false,
+    "note": "第三方作品（非商业）：桌面背景修改版，修过 NaN 粉块并做了等价优化"
+  },
+  {
+    "id": "mario",
+    "name": "马里奥（带音乐）",
+    "file": "mario.glsl",
+    "soundFile": "mario-sound.glsl",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Inigo Quilez",
+    "sourceUrl": "https://www.shadertoy.com/user/iq",
+    "hasSound": true,
+    "note": "第三方作品（非商业）：像素画 + 一首曲子，适合「音乐只播一次」"
   }
 ]

@@ -194,6 +194,8 @@ async function main() {
       scaleHint: document.getElementById('scale-hint')?.textContent,
       preset: document.querySelector('#preset-dd .dd-trigger')?.textContent,
       items: [...document.querySelectorAll('#lib-list .item .name')].map(node => node.textContent),
+      presetChoices: [...document.querySelectorAll('#preset-dd .dd-item')].map(node => node.textContent),
+      ncBadges: document.querySelectorAll('#lib-list .item .badge.nc:not([hidden])').length,
     }))
     const initial = await panelState()
     check('panel applies a theme (dark/light)', initial.theme === 'dark' || initial.theme === 'light', String(initial.theme))
@@ -284,7 +286,12 @@ async function main() {
     await page.click('#tab-library')
     await page.waitForSelector('#view-library:not([hidden])')
     const library = await panelState()
-    check('library lists the built-in presets', library.items.includes('极光（自写）') && library.items.includes('流体色带（自写）'), library.items.join(','))
+    check('library lists the built-in presets',
+      ['极光', '流体色带', '脉冲（带音乐）', '海面（Seascape）', '马里奥（带音乐）'].every((name) => library.items.includes(name)),
+      library.items.join(','))
+    check('third-party presets carry a CC licence badge', library.ncBadges === 2, String(library.ncBadges))
+    check('preset picker shows the third-party licence', library.presetChoices.some((text) => /CC BY-NC-SA/.test(text)),
+      library.presetChoices.join(' | '))
 
     await page.click('#tab-params')
     await page.click('#reset')
@@ -306,6 +313,8 @@ async function main() {
       image: document.getElementById('code-image')?.value ?? '',
       note: document.getElementById('code-note')?.textContent ?? '',
       preset: document.querySelector('#preset-dd .dd-trigger')?.textContent,
+      presetChoices: [...document.querySelectorAll('#preset-dd .dd-item')].map(node => node.textContent),
+      ncBadges: document.querySelectorAll('#lib-list .item .badge.nc:not([hidden])').length,
     }))
     const codeInitial = await codeState()
     check('code tab shows the running built-in shader', /极光/.test(codeInitial.title ?? '') && codeInitial.image.includes('mainImage'), codeInitial.title)

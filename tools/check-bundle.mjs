@@ -3,11 +3,13 @@
  * Bundle checks — fast, dependency-free, runs in CI before anything else.
  *
  * Verifies the package is actually installable/publishable and that the *public*
- * artefact cannot accidentally ship non-redistributable shader code:
+ * artefact ships only code whose licence allows redistribution:
  *   - manifest shape (name / repository / dsh.bundle / dsh.client / exports / files)
  *   - every declared entry point and packaged file exists
  *   - no absolute local paths or `file://` URLs in the bundle patch
- *   - shipped presets are MIT and free of Shadertoy view links (i.e. no NC code)
+ *   - shipped presets are MIT or CC BY-NC-SA 3.0 (the two bundled ShaderToy works:
+ *     attribution + licence URL + source URL required, CC notice in the file header)
+ *   - Shadertoy view links are only allowed inside those CC BY-NC-SA presets
  *   - user-imported presets (`native-dist/presets/local`) are absent
  *   - `npm pack --dry-run` file list is exactly the intended set
  *
@@ -97,25 +99,46 @@ async function main() {
   // --- presets integrity + licence hygiene
   const manifest = await readJson('native-dist/presets/index.json')
   check('preset manifest is a non-empty array', Array.isArray(manifest) && manifest.length > 0)
+  // Bundled ShaderToy works are allowed, but only under a licence that permits
+  // redistribution — and then attribution + licence/source links are mandatory.
+  const ALLOWED_PRESET_LICENCES = new Set(['MIT', 'CC BY-NC-SA 3.0'])
+  const presetLicences = new Map()
   for (const item of manifest) {
-    check(`preset ${item.id}: id/file/license`, Boolean(item.id && item.file && item.license === 'MIT'), JSON.stringify(item))
-    const file = join('native-dist/presets', item.file)
+    check(`preset ${item.id}: id/file/license`, Boolean(item.id && item.file && ALLOWED_PRESET_LICENCES.has(item.license)), JSON.stringify(item))
+    const file = join('native-dist/presets', item.file).replaceAll('\\', '/')
     check(`preset ${item.id}: file exists`, existsSync(join(ROOT, file)), file)
+    presetLicences.set(file, item.license)
     check(`preset ${item.id}: not a dev fixture`, !String(item.id).startsWith('_') && !String(item.file).startsWith('_'))
     check(`preset ${item.id}: hasSound is boolean`, typeof item.hasSound === 'boolean', String(item.hasSound))
+    if (item.license === 'CC BY-NC-SA 3.0') {
+      check(`preset ${item.id}: third-party work credits its author`, typeof item.author === 'string' && item.author.trim() !== '', String(item.author))
+      check(`preset ${item.id}: third-party work links the CC licence`, /^https:\/\/creativecommons\.org\/licenses\/by-nc-sa\/3\.0\/?$/.test(String(item.licenseUrl ?? '')), String(item.licenseUrl))
+      check(`preset ${item.id}: third-party work links its source`, /^https:\/\//.test(String(item.sourceUrl ?? '')), String(item.sourceUrl))
+      check(`preset ${item.id}: file carries the CC licence notice`, /Attribution-NonCommercial-ShareAlike 3\.0/.test(await readFile(join(ROOT, file), 'utf8')))
+    }
     if (item.soundFile !== undefined) {
-      const soundFile = join('native-dist/presets', item.soundFile)
+      const soundFile = join('native-dist/presets', item.soundFile).replaceAll('\\', '/')
       check(`preset ${item.id}: sound file exists`, existsSync(join(ROOT, soundFile)), soundFile)
+      presetLicences.set(soundFile, item.license)
       check(`preset ${item.id}: soundFile implies hasSound`, item.hasSound === true)
+      if (item.license === 'CC BY-NC-SA 3.0') {
+        check(`preset ${item.id}: sound file carries the CC licence notice`, /Attribution-NonCommercial-ShareAlike 3\.0/.test(await readFile(join(ROOT, soundFile), 'utf8')))
+      }
     }
     if (item.hasSound === true) check(`preset ${item.id}: declares a sound file`, typeof item.soundFile === 'string')
   }
 
-  const suspicious = [/(?:www\.)?shadertoy\.com\/(?:view|embed)\//i, /[A-Za-z]:\\/, /file:\/\/\//]
+  const localContentPatterns = [/[A-Za-z]:\\/, /file:\/\/\//]
+  const shadertoyView = /(?:www\.)?shadertoy\.com\/(?:view|embed)\//i
   for (const rel of packagedFiles.filter(file => file.endsWith('.glsl') || file.endsWith('.html') || file.endsWith('.js'))) {
     const text = await readFile(join(ROOT, rel), 'utf8')
-    for (const pattern of suspicious) {
-      check(`no non-redistributable / local content in ${rel} (${pattern})`, !pattern.test(text))
+    for (const pattern of localContentPatterns) {
+      check(`no local paths in ${rel} (${pattern})`, !pattern.test(text))
+    }
+    if (shadertoyView.test(text)) {
+      check(`${rel}: Shadertoy view links only in CC BY-NC-SA presets`,
+        presetLicences.get(rel.replaceAll('\\', '/')) === 'CC BY-NC-SA 3.0',
+        `license=${presetLicences.get(rel.replaceAll('\\', '/')) ?? 'n/a'}`)
     }
   }
   check('no user-imported presets directory', !existsSync(join(ROOT, 'native-dist/presets/local')))
@@ -139,6 +162,11 @@ async function main() {
       check('npm pack includes defaults.json', files.includes('native-dist/defaults.json'))
       check('npm pack includes cordis.patch.yml', files.includes('cordis.patch.yml'))
       check('npm pack includes both halves', files.includes('index.js') && files.includes('client.js'))
+      check('npm pack includes third-party notices', files.includes('THIRD-PARTY-NOTICES.md'))
+      check('npm pack includes the bundled third-party presets',
+        files.includes('native-dist/presets/seascape.glsl')
+        && files.includes('native-dist/presets/mario.glsl')
+        && files.includes('native-dist/presets/mario-sound.glsl'))
       check('npm pack excludes dev fixtures', !files.some(file => file.includes('presets/dev/') || file.startsWith('native-dist/presets/_')))
       check('npm pack excludes local presets', !files.some(file => file.includes('presets/local/')))
       check('npm pack excludes docs/tools', !files.some(file => file.startsWith('docs/') || file.startsWith('tools/')))
