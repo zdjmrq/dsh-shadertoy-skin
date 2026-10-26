@@ -8,9 +8,13 @@
 
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
-![马里奥像素画背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-mario.png)
-![Seascape 海面背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-seascape.png)
-![代码页：查看 / 修改 / 保存并运行当前作品的着色器](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-code.png)
+![马里奥像素画背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-mario.jpg)
+![Seascape 海面背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-seascape.jpg)
+![代码页：查看 / 修改 / 保存并运行当前作品的着色器](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-code.jpg)
+
+[![▶ 点击播放演示视频（1280×810，约 2.6 MB）](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-demo-poster.jpg)](https://github.com/zdjmrq/dsh-shadertoy-skin/blob/main/docs/verify/readme-demo.mp4)
+
+<video src="https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-demo.mp4" controls muted width="100%"></video>
 
 > 截图里的 ShaderToy 作品版权归原作者：像素马里奥（作者见对应作品页）、Seascape（© TDM，CC BY-NC-SA 3.0）。**截图仅作效果展示**，本仓库代码仍是 MIT，且不收录这些作品代码。
 
@@ -26,6 +30,26 @@ npm 包名**没有 scope、也不带作者用户名**：不是 `@zdjmrq/dsh-shad
 ```sh
 npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 ```
+
+## 参数与默认值
+
+默认值集中在 [`native-dist/defaults.json`](native-dist/defaults.json)，面板读它来渲染选项与「恢复默认」，Host 用它做兜底——**改一个文件就能改默认值**。
+
+| 参数 | 默认 | 可选 | 说明 |
+|---|---|---|---|
+| `enabled` | `true` | 开/关 | 关掉只移除背景层，设置页仍在 |
+| `glass` | `60` (%) | 20–95 | 玻璃不透明度：界面压住背景的程度。越高文字越清晰、背景越淡；越低背景越透亮 |
+| `brightness` | `100` (%) | 30–180 | 背景亮度（着色器输出乘数）。黄昏、夜景类作品看着太暗就调高 |
+| `panels` | `opaque` | opaque / half / clear | 卡片、代码块、弹层、**聊天输入框**、编辑器表面的底色：不透明 / 半透明 / 透明。想让背景从框里透出来就调它 |
+| `blur` | `0` px | 0–12 | 只在 > 0 时启用 CSS `filter` |
+| `scale` | `1`× | 0.5 / 0.75 / 1 / 1.25 / 1.5 | 渲染分辨率倍率（DPR 上限 1.5） |
+| `fps` | `30` | 15 / 20 / 30 / 60 | 渲染帧率上限；聊天时 30 足够 |
+| `speed` | `1`× | 0–2 | 时间轴倍速 |
+| `loop` / `loopSeconds` | `false` / `20` s | 开/关 · 5–120 s | **画面循环**：有的作品播一次就不动了，打开后每个周期把 `iTime` 归零重播（只重置画面，不影响声音） |
+| `audioMode` / `audioSeconds` | `loop` / `60` s | loop / once · 10–600 s | **音乐播放方式**：`loop` 一直放；`once` = 放完「音乐时长」就停、**画面继续常驻**（马里奥这种静态图 + 一首歌正合适） |
+| `volume` / `muted` | `60` / `false` | 0–100 / 开/关 | 带 `mainSound` 的作品默认出声；浏览器可能拦截自动播放，点一下界面任意位置即可解锁 |
+
+> 两个滑块的分工：**玻璃不透明度**控制「界面压暗多少」，**背景亮度**控制「画面本身多亮」。前者影响可读性，后者只影响画面。背景看着黑，先加亮度；文字看着花，再加玻璃。
 
 ## 状态
 
@@ -53,26 +77,6 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 - [x] 深浅色主题适配（设置页与玻璃都跟随 DSH；亮色主题滤镜走向白色）
 - [x] **启动自愈**：桌面端 client 插件行与服务是并发激活的，首次启动时 `theme`/`slots` 可能还没就绪（旧版因此「重启后要手动关开一次插件」）。现在服务现取 + 启动后 10 秒内多次自检（背景层缺失就重建、token 被重置就重设、播放器没 `ready` 就重发 init、侧栏没注册上就补注册），**装好重启即生效**
 - [ ] 多 pass（Buffer A–D）、音频可视化回馈、兼容性静态体检
-
-## 参数与默认值
-
-默认值集中在 [`native-dist/defaults.json`](native-dist/defaults.json)，面板读它来渲染选项与「恢复默认」，Host 用它做兜底——**改一个文件就能改默认值**。
-
-| 参数 | 默认 | 可选 | 说明 |
-|---|---|---|---|
-| `enabled` | `true` | 开/关 | 关掉只移除背景层，设置页仍在 |
-| `glass` | `60` (%) | 20–95 | 玻璃不透明度：界面压住背景的程度。越高文字越清晰、背景越淡；越低背景越透亮 |
-| `brightness` | `100` (%) | 30–180 | 背景亮度（着色器输出乘数）。黄昏、夜景类作品看着太暗就调高 |
-| `panels` | `opaque` | opaque / half / clear | 卡片、代码块、弹层、**聊天输入框**、编辑器表面的底色：不透明 / 半透明 / 透明。想让背景从框里透出来就调它 |
-| `blur` | `0` px | 0–12 | 只在 > 0 时启用 CSS `filter` |
-| `scale` | `1`× | 0.5 / 0.75 / 1 / 1.25 / 1.5 | 渲染分辨率倍率（DPR 上限 1.5） |
-| `fps` | `30` | 15 / 20 / 30 / 60 | 渲染帧率上限；聊天时 30 足够 |
-| `speed` | `1`× | 0–2 | 时间轴倍速 |
-| `loop` / `loopSeconds` | `false` / `20` s | 开/关 · 5–120 s | **画面循环**：有的作品播一次就不动了，打开后每个周期把 `iTime` 归零重播（只重置画面，不影响声音） |
-| `audioMode` / `audioSeconds` | `loop` / `60` s | loop / once · 10–600 s | **音乐播放方式**：`loop` 一直放；`once` = 放完「音乐时长」就停、**画面继续常驻**（马里奥这种静态图 + 一首歌正合适） |
-| `volume` / `muted` | `60` / `false` | 0–100 / 开/关 | 带 `mainSound` 的作品默认出声；浏览器可能拦截自动播放，点一下界面任意位置即可解锁 |
-
-> 两个滑块的分工：**玻璃不透明度**控制「界面压暗多少」，**背景亮度**控制「画面本身多亮」。前者影响可读性，后者只影响画面。背景看着黑，先加亮度；文字看着花，再加玻璃。
 
 ## 要求
 
