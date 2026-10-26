@@ -80,7 +80,9 @@ try {
   parent = ref.object.sha
   console.log(`parent commit: ${parent}`)
 } catch (error) {
-  if (!String(error).includes('404')) throw error
+  const text = String(error)
+  // 404: no branch yet. 409 "Git Repository is empty": the repo has no commits at all.
+  if (!text.includes('404') && !text.includes('409') && !text.includes('Git Repository is empty')) throw error
   console.log('remote branch does not exist yet, creating the first commit')
 }
 
