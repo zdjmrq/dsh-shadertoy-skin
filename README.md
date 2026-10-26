@@ -83,9 +83,59 @@ dsh plugin --profile desktop add dsh-shadertoy-skin
 dsh plugin --profile desktop add github:zdjmrq/dsh-shadertoy-skin#main
 ```
 
-安装后左侧栏会多一行 **「Shader 背景」**，点开在主区域就是整页设置（参数 / 背景库）；默认背景是「极光」。
+**Web 版（`dsh web`）**：把 `--profile desktop` 换成 `--profile web`，装完重启 `dsh web` 再刷新页面：
+
+```sh
+dsh plugin --profile web add dsh-shadertoy-skin
+```
+
+安装后左侧栏会多一行 **「Shader 背景」**，点开在主区域就是整页设置（参数 / 背景库）；默认背景是「极光」。升级到新版看下面「[更新](#更新)」。
 
 **开发期的安全阀**：如果界面出现卡死等异常，新建一个空文件 `$DSH_HOME/shader-skin.safe` 再刷新页面——客户端会跳过侧边栏入口与整页设置（只保留背景层），界面立刻可用；删掉该文件再重启即恢复。
+
+## 更新
+
+先确认 npm 上的最新版本（也可以在 DSH 侧栏「插件」里看已安装版本）：
+
+```sh
+npm view dsh-shadertoy-skin version
+```
+
+### 桌面版（DeepSeek Harness 客户端）
+
+1. **完全退出客户端**（关窗口不算，要退出进程；插件命令会锁 profile）；
+2. 任意终端执行（`@latest` 才会跨小版本升级）：
+
+```sh
+dsh plugin --profile desktop add dsh-shadertoy-skin@latest
+```
+
+3. 重新打开客户端 —— 左栏「Shader 背景」和整页设置就是新版。
+
+> 不习惯命令行：侧栏「插件」→「已安装」→ 卸载 `dsh-shadertoy-skin` → 再「添加插件」填一次包名 → **完全退出并重启**。DSH 插件管理器对第三方插件只提供卸载 / 安装，没有「更新」按钮。
+>
+> 本地背景库、参数、代码页改过的作品都在 `$DSH_HOME/shader-skin.json`，重装/升级**不会丢**。
+
+### Web 版（`dsh web`）
+
+`dsh web` 用的是 **`web` profile**（等价于 `dsh --profile web`），和桌面版的 `desktop` profile 是**两套独立依赖**，更新命令也不同：
+
+```sh
+dsh plugin --profile web add dsh-shadertoy-skin@latest
+```
+
+然后在跑 `dsh web` 的终端里 `Ctrl+C` 停掉、重新 `dsh web`，再刷新浏览器页面（Web 版的 client 插件在页面加载时注入，**重启服务 + 刷新页面**才完整生效）。
+
+| 你用的 | profile | 更新命令 |
+|---|---|---|
+| 桌面客户端 | `desktop` | `dsh plugin --profile desktop add dsh-shadertoy-skin@latest` |
+| `dsh web` | `web` | `dsh plugin --profile web add dsh-shadertoy-skin@latest` |
+
+两个 profile 别弄混：桌面客户端只读 `~/.dsh/profiles/desktop`，`dsh web` 只读 `~/.dsh/profiles/web`；给桌面装的插件 Web 版不会自动有，反之亦然。
+
+### 只改了前端资源？
+
+`player.html` / `panel.html` / `defaults.json` 由 Host 半**按请求读盘（no-cache）**，手动改这些文件后刷新页面即可；但 `index.js` / `client.js`（Host 半 / Client 半）的改动必须重启对应进程：桌面 = 退出重开客户端，Web = 重启 `dsh web` 并刷新页面。
 
 ## 从 ShaderToy 装一个作品
 
