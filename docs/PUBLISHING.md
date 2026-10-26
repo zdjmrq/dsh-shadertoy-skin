@@ -118,3 +118,18 @@ node tools/push-via-api.mjs --message "feat: ..."
 | 配置过期 | Trusted Publisher 建好 2 天内没成功发布过 → 删掉重建 |
 
 官方文档：<https://docs.npmjs.com/trusted-publishers>
+
+---
+
+## 五、README 里的演示视频
+
+README 顶部的演示视频用 **GitHub 附件（user-attachments）**，不引用仓库里的 mp4：
+
+```md
+<video src="https://github.com/user-attachments/assets/<uuid>" controls muted width="100%"></video>
+```
+
+- **为什么不用仓库里的 mp4**：`raw.githubusercontent.com` 对 `.mp4` 下发 `application/octet-stream` 且不支持 Range，`<video>` 直接引用播不了；GitHub 附件 URL 会 302 到 S3 签名地址，`video/mp4` + Range 都正常。
+- **怎么拿到这个 URL**：在 GitHub 网页上编辑 `README.md`，把视频拖进编辑框，等它插好链接再 commit。
+- **提交前链接是私有的**：没提交时匿名访问返回 404/403（只有上传者带登录态能拉），提交后才是 200 —— 所以别在草稿里就复制链接。
+- **别把引用删干净**：附件能匿名播放是因为它出现在公开内容里；`docs/verify/readme-demo.mp4` 已不再被 README 引用（保留只为旧的 npm 0.2.1 README 链接不断），下次发版可以删掉。
