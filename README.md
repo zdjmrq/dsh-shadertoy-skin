@@ -8,8 +8,9 @@
 
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
-> **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的三个作品只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
-> **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库本身只收录 MIT 代码）。
+> **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的 5 个预设只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
+> **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库自写代码是 MIT，两个第三方预设按各自许可证收录）。
+> **欢迎 issue 和 PR**：装不上、画面不对、想要新功能 → 开 [Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)（附截图和 `$DSH_HOME/shader-skin.json` 里对应条目更好排查）；bug 修复、文档修正、自写预设 → 直接提 [PR](https://github.com/zdjmrq/dsh-shadertoy-skin/pulls)。
 >
 > **Recommended: browse [shadertoy.com](https://www.shadertoy.com/)** — import any piece into the background library, tune it to your taste, and feel free to share screenshots, settings or improvements via Issues / PRs.
 
@@ -19,12 +20,12 @@ https://github.com/user-attachments/assets/c8801ca1-e96e-4bfe-83bc-6e99b5551cf4
 
 https://github.com/user-attachments/assets/001acdf6-90e2-4b2c-85fc-e9d076678597
 
-*演示 2 · [Seascape](https://www.shadertoy.com/view/Ms2SD1)（© TDM，CC BY-NC-SA 3.0）的个人修改版：摄像机抬到近地轨道，只留海面*
+*演示 2 · [Seascape](https://www.shadertoy.com/view/Ms2SD1)（© TDM，CC BY-NC-SA 3.0）的个人修改版：摄像机抬到近地轨道，只留海面 —— 已作为内置预设「海面（Seascape）」随插件提供*
 
 ![马里奥像素画背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-mario.jpg)
 ![代码页：查看 / 修改 / 保存并运行当前作品的着色器](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-code.jpg)
 
-> 视频与截图里的 ShaderToy 作品版权归原作者：像素马里奥（作者见对应作品页）、Seascape（© TDM，CC BY-NC-SA 3.0）。**视频与截图仅作效果展示**，本仓库代码仍是 MIT，且不收录这些作品代码。
+> 视频与截图里的 ShaderToy 作品版权归原作者：像素马里奥「Mario」（© Inigo Quilez）、Seascape（© Alexander Alekseev aka TDM），两者均以 **CC BY-NC-SA 3.0** 收录为内置预设（非 MIT，见文末许可证）。**视频与截图仅作效果展示**，插件自写代码仍是 MIT。
 
 ## 名字 / 包名（认准这两个）
 
@@ -41,10 +42,10 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 
 ## 从 ShaderToy 装一个作品
 
-插件自带三个 MIT 自写着色器，但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
+插件自带 5 个预设（3 个自写 MIT + 2 个第三方 CC BY-NC-SA 3.0，见文末许可证），但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
 
 > **推荐一试**：[`shadertoy.com/view/4dfXWj`](https://www.shadertoy.com/view/4dfXWj) —— 装进来效果挺带感，导入方式见下面任意一种。
-> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0），装在本机自己玩没问题，但别把作品代码提交进仓库或随包再分发。
+> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0）：装在本机自己玩没问题；想提交进仓库或随包分发，先确认许可证允许，并带上署名与相同许可证（本仓库的两个第三方预设就是这么收录的）。
 
 ### 1. 粘贴代码（最稳，不用抓网页）
 
@@ -133,6 +134,7 @@ $DSH_HOME/shader-skin/presets/        （Windows 默认 C:\Users\<你>\.dsh\shad
 - [x] **画面循环**：有些作品播一次就停住，可设周期把 `iTime` 归零重播（只重置画面）
 - [x] 设置页配色改用 **DSH 品牌蓝**（亮色 `#3568dc` / 暗色 `#7aaaff`），小字号数值也清楚
 - [x] **背景库**：内置 + 我的背景列表、切换、改名、删除；粘贴代码导入、文件导入（ShaderToy JSON / GLSL）、从 `$DSH_HOME/shader-skin/presets/` 导入
+- [x] **随包 5 个预设**：自写的「极光 / 流体色带 / 脉冲」（MIT）+ 第三方「海面（Seascape）」「马里奥」（CC BY-NC-SA 3.0，署名/非商业/相同方式共享，背景库和下拉里带 `CC BY-NC-SA` 标）
 - [x] **代码页**：查看当前运行作品的 Image / Sound 源码，直接改 → **保存并运行**（内置作品会自动另存为「我的副本」，原件不动；编辑器里 Ctrl/⌘+S 同样保存）
 - [x] **iMouse 只在「按住左键 + 从空白处开始拖动」时驱动**：点按钮、拖滚动条、选中/复制回复文字都不会再带动背景；松手发一次释放（`iMouse.z < 0`）
 - [x] **卡片透明度三档**（不透明 / 半透明 / 透明）：控制卡片、代码块、弹层、输入框、聊天输入栏的底色，让背景能透进这些「框」里
@@ -235,9 +237,21 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 
 ## 预设与许可证（重要）
 
-- 随包只有**自写**的 MIT 着色器，**不包含任何 ShaderToy 作品代码**。
-- ShaderToy 作品默认受 **CC BY-NC-SA 3.0**（作者未另行声明时）保护，**不能**随 MIT 包再分发。自己收藏/自用没问题，但别把作品代码提交到 git、别打进要发布的包。
-- 「我的背景」只存在本机 `$DSH_HOME/shader-skin.json`，不会上传。
+随包预设分两类（完整清单见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)）：
+
+| 预设 | 来源 | 许可证 |
+|---|---|---|
+| `极光` / `流体色带` / `脉冲（带音乐）` | 本项目自写 | **MIT**（可商用、随便改） |
+| `海面（Seascape）` | [Seascape](https://www.shadertoy.com/view/Ms2SD1)，© Alexander Alekseev aka TDM | **CC BY-NC-SA 3.0**（非 MIT） |
+| `马里奥（带音乐）` | [Mario](https://www.shadertoy.com/user/iq)，© Inigo Quilez | **CC BY-NC-SA 3.0**（非 MIT） |
+
+两个第三方作品是**按上游许可证收录的**（上游允许再分发），所以：
+
+- **署名**：保留作者与许可证声明（文件头、`presets/index.json`、背景库里的红色 `CC BY-NC-SA` 标记）；
+- **非商业**：这两个 shader 不能用于商业用途。要把这个插件用于商业产品，请先删掉 `native-dist/presets/seascape.glsl`、`mario.glsl`、`mario-sound.glsl`（或只保留自写预设）；
+- **相同方式共享**：改过的版本再分发时仍要留在 CC BY-NC-SA 3.0 下。设置页「代码」里另存的「我的副本」同样受这个约束。
+
+其余从 ShaderToy 导入的作品（默认 CC BY-NC-SA 3.0，作者可另行声明）**只存在本机** `$DSH_HOME/shader-skin.json`，不会上传，也不会进包；想把自己的修改提交进仓库/随包分发，先确认许可证允许，并带上署名与相同的许可证。
 
 ## 开发
 
@@ -273,13 +287,20 @@ native-dist/
   player.html         零依赖 WebGL2 播放器（渲染 + 滤镜 + mainSound 音频）
   panel.html          设置页（参数 / 背景库 / 代码，深浅色自适应）
   defaults.json       全部默认参数（改这里就改默认值）
-  presets/*.glsl      随包 MIT 着色器 + `pulse-sound.glsl`
+  presets/*.glsl      随包预设：3 个自写 MIT + 2 个第三方 CC BY-NC-SA 3.0（`seascape` / `mario`）
   presets/dev/        测试夹具（不进 npm 包）
 locale/ icon.svg      插件管理器展示资源
 tools/                开发服务器 / 包检查 / 渲染冒烟 / 音频冒烟 / 实机检查
+THIRD-PARTY-NOTICES.md  第三方作品的作者 / 来源 / 许可证清单
 .github/workflows/    CI + npm 发布（OIDC trusted publishing）
 ```
 
+## 参与（issue / PR 都欢迎）
+
+- **报问题**：直接[开 Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)。附上 DSH 版本、系统/显卡、截图，以及 `$DSH_HOME/shader-skin.json` 里对应预设的条目（贴之前先删掉不想公开的内容）；播放器自己的诊断行也能帮大忙。
+- **提改进**：bug 修复、文档修正、新的自写预设都欢迎 [PR](https://github.com/zdjmrq/dsh-shadertoy-skin/pulls)。自写预设请标 MIT；第三方作品要带作者与许可证（参考 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)）。
+- **分享你的背景**：装了什么作品、参数怎么调的，开 Issue 贴截图就行；想把它做成内置预设，先确认原作者的许可证允许再分发。
+
 ## License
 
-[MIT](LICENSE)。第三方着色器代码的许可证由其作者决定，本仓库不收录。
+[MIT](LICENSE) 适用于插件代码与三个自写预设。**随包的两个第三方作品（`seascape` / `mario`）不是 MIT**，它们按上游的 [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/) 收录，署名见文件头与 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
