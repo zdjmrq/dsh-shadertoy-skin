@@ -13,8 +13,9 @@
     --line: rgba(15, 23, 42, .12);
     --field: rgba(15, 23, 42, .045);
     --field-hover: rgba(15, 23, 42, .09);
-    --accent: #0b8a80;
-    --accent-soft: rgba(11, 138, 128, .12);
+    /* DSH native brand blue (one step darker than #4176e6 so 11px values stay readable) */
+    --accent: #3568dc;
+    --accent-soft: rgba(53, 104, 220, .12);
     --pop: rgba(255, 255, 255, .99);
     --shadow: 0 18px 44px rgba(15, 23, 42, .18);
     --danger: #c0362c;
@@ -27,8 +28,9 @@
     --line: rgba(255, 255, 255, .13);
     --field: rgba(255, 255, 255, .06);
     --field-hover: rgba(255, 255, 255, .11);
-    --accent: #8fe9e4;
-    --accent-soft: rgba(143, 233, 228, .14);
+    /* DSH deepseek-400: the same blue the native dark UI uses */
+    --accent: #7aaaff;
+    --accent-soft: rgba(122, 170, 255, .16);
     --pop: rgba(18, 24, 32, .99);
     --shadow: 0 18px 50px rgba(0, 0, 0, .45);
     --danger: #ff8d7e;
@@ -66,6 +68,9 @@
 
   /* full-page mode (rendered in the main column through the sidebar entry) */
   body.mode-main { overflow: auto; height: 100%; }
+  /* standalone preview (parent === window): let the dev page scroll, the panel is
+     taller than a 720p viewport once every row is visible */
+  body.standalone { overflow: auto; height: auto; }
   body.mode-main .fab { display: none; }
   body.mode-main .panel {
     display: block; width: 100%; max-width: 960px; margin: 0 auto;
@@ -118,12 +123,15 @@
   input[type=text]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   textarea { resize: vertical; min-height: 92px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.5; }
 
-  /* code tab: editable shader source of the running skin */
+  /* code tab: editable shader source of the running skin.
+     Both boxes are drag-resizable in height (bottom-right corner); the heights are
+     remembered in localStorage so the layout survives reloads. */
   .code-area {
-    min-height: 320px; max-height: 48vh; white-space: pre; overflow: auto;
+    min-height: 240px; max-height: none; white-space: pre; overflow: auto;
     tab-size: 2; font-size: 11.5px; line-height: 1.6; resize: vertical;
   }
-  .code-area.sound { min-height: 104px; max-height: 26vh; }
+  .code-area.sound { min-height: 90px; }
+  .code-area::-webkit-resizer { background: transparent; }
   #code-title { color: var(--accent); font-size: 11px; }
   #code-hint { margin: -2px 0 4px; }
 
@@ -264,6 +272,27 @@
       <input type="range" id="speed" min="0" max="2" step="0.05">
     </div>
 
+    <div class="row switch">
+      <label for="loop">循环播放</label>
+      <input type="checkbox" id="loop">
+    </div>
+    <div class="row" id="loop-seconds-row">
+      <div class="head"><label for="loop-seconds">循环周期</label><output id="loop-seconds-out"></output></div>
+      <input type="range" id="loop-seconds" min="5" max="120" step="1">
+      <div class="hint">有的作品播一次就停住了：打开后每到一个周期把画面时间轴（iTime）归零重播。只重置画面，不影响声音；带音乐的作品建议关闭，避免音画不同步。</div>
+    </div>
+
+    <div class="row" id="audio-mode-row">
+      <div class="head"><label>音乐播放</label><output id="audio-mode-out"></output></div>
+      <div id="audio-mode-dd"></div>
+      <div class="hint">「只播一次」= 放完「音乐时长」就停，画面继续常驻（像马里奥这种静态图 + 一首歌正合适）；「循环播放」= 一直放。</div>
+    </div>
+    <div class="row" id="audio-seconds-row">
+      <div class="head"><label for="audio-seconds">音乐时长</label><output id="audio-seconds-out"></output></div>
+      <input type="range" id="audio-seconds" min="10" max="600" step="5">
+      <div class="hint">从切到这个背景开始计时；到点后音乐停止，画面不受影响。</div>
+    </div>
+
     <div class="row" id="volume-row">
       <div class="head"><label for="volume">音量</label><output id="volume-out"></output></div>
       <input type="range" id="volume" min="0" max="100" step="1">
@@ -345,7 +374,7 @@
   const panel = $('panel')
 
   const state = { activeId: null, entries: [], overrides: {} }
-  let defaults = { params: { enabled: true, glass: 60, brightness: 100, panels: 'opaque', blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: true }, limits: {} }
+  let defaults = { params: { enabled: true, glass: 60, brightness: 100, panels: 'opaque', blur: 0, scale: 1, fps: 30, speed: 1, loop: false, loopSeconds: 20, audioMode: 'loop', audioSeconds: 60, volume: 60, muted: true }, limits: {} }
   let manifest = []
   let localPresets = null
   let open = MODE === 'main'
@@ -589,8 +618,10 @@
   let scaleDd
   let fpsDd
   let panelsDd
+  let audioModeDd
 
   const PANEL_KINDS = { opaque: '不透明', half: '半透明', clear: '透明' }
+  const AUDIO_MODES = { loop: '循环播放', once: '只播一次' }
 
   function sync() {
     const p = effective()
@@ -606,22 +637,36 @@
     $('fps-out').textContent = `${p.fps} fps`
     $('speed').value = String(p.speed)
     $('speed-out').textContent = `${Number(p.speed).toFixed(2)}×`
+    $('loop').checked = p.loop === true
+    $('loop-seconds').value = String(p.loopSeconds ?? 20)
+    $('loop-seconds-out').textContent = `${Math.round(p.loopSeconds ?? 20)} s`
+    $('loop-seconds-row').hidden = p.loop !== true
     $('volume').value = String(p.volume)
     $('volume-out').textContent = `${Math.round(p.volume)}%`
     const sound = hasSound()
     $('volume-row').classList.toggle('dim', !sound)
     $('mute-row').classList.toggle('dim', !sound)
+    $('audio-mode-row').classList.toggle('dim', !sound)
+    $('audio-mode-out').textContent = AUDIO_MODES[p.audioMode] ?? AUDIO_MODES.loop
+    $('audio-seconds').value = String(p.audioSeconds ?? 60)
+    $('audio-seconds-out').textContent = `${Math.round(p.audioSeconds ?? 60)} s`
+    $('audio-seconds-row').hidden = p.audioMode !== 'once'
     $('volume').disabled = !sound
     $('muted').disabled = !sound
     $('muted').checked = p.muted === true
     $('volume-hint').textContent = sound
-      ? (p.muted ? '已静音' : (audioState === 'running' ? '有声播放中' : audioState === 'suspended' ? '浏览器拦截了自动播放：点「开声音」，或点一下界面任意位置解锁' : '该作品带声音'))
+      ? (p.muted ? '已静音'
+        : audioState === 'running' ? '有声播放中'
+          : audioState === 'suspended' ? '浏览器拦截了自动播放：点「开声音」，或点一下界面任意位置解锁'
+            : audioState === 'ended' ? '音乐已播完（「只播一次」），画面照常'
+              : '该作品带声音')
       : '这个背景没有声音代码'
     $('audio').hidden = !(sound && audioState === 'suspended')
     if (presetDd) presetDd.setOptions(presetOptions(), state.activeId ?? '')
     if (scaleDd) scaleDd.setValue(String(p.scale))
     if (fpsDd) fpsDd.setValue(String(p.fps))
     if (panelsDd) panelsDd.setValue(p.panels ?? 'opaque')
+    if (audioModeDd) audioModeDd.setValue(p.audioMode === 'once' ? 'once' : 'loop')
     $('scale-hint').textContent = `实际渲染缓冲：${bufferSize()}（DPR ≤ 1.5）`
     $('preset-kind').textContent = state.activeId ? (entryById(state.activeId) ? '我的' : '内置') : ''
   }
@@ -658,12 +703,23 @@
       value: effective().panels ?? 'opaque',
       onChange: value => setParam('panels', value),
     })
+    audioModeDd = makeDropdown($('audio-mode-dd'), {
+      options: [
+        { value: 'loop', text: '循环播放（一直放）' },
+        { value: 'once', text: '只播一次（播完停，画面常驻）' },
+      ],
+      value: effective().audioMode === 'once' ? 'once' : 'loop',
+      onChange: value => setParam('audioMode', value),
+    })
 
     $('enabled').addEventListener('change', event => setParam('enabled', event.target.checked))
     $('glass').addEventListener('input', event => setParam('glass', clamp(event.target.value, 20, 95, 60)))
     $('brightness').addEventListener('input', event => setParam('brightness', clamp(event.target.value, 30, 180, 100)))
     $('blur').addEventListener('input', event => setParam('blur', clamp(event.target.value, 0, 12, 0)))
     $('speed').addEventListener('input', event => setParam('speed', clamp(event.target.value, 0, 2, 1)))
+    $('loop').addEventListener('change', event => setParam('loop', event.target.checked))
+    $('loop-seconds').addEventListener('input', event => setParam('loopSeconds', clamp(event.target.value, 5, 120, 20)))
+    $('audio-seconds').addEventListener('input', event => setParam('audioSeconds', clamp(event.target.value, 10, 600, 60)))
     $('volume').addEventListener('input', event => setParam('volume', clamp(event.target.value, 0, 100, 60)))
     $('muted').addEventListener('change', event => setParam('muted', event.target.checked))
     $('reset').addEventListener('click', () => {
@@ -872,6 +928,24 @@
 
   // ------------------------------------------------------------- code tab
   let codeLoadToken = 0
+  const CODE_HEIGHTS_KEY = 'shadertoy-skin.codeHeights'
+
+  /** Restore the user's own code-box heights (drag the bottom-right corner to change). */
+  function restoreCodeHeights() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CODE_HEIGHTS_KEY) ?? 'null')
+      if (!saved || typeof saved !== 'object') return
+      if (Number.isFinite(saved.image)) $('code-image').style.height = `${saved.image}px`
+      if (Number.isFinite(saved.sound)) $('code-sound').style.height = `${saved.sound}px`
+    } catch { /* storage may be blocked */ }
+  }
+
+  function saveCodeHeights() {
+    try {
+      const heights = { image: $('code-image').offsetHeight, sound: $('code-sound').offsetHeight }
+      localStorage.setItem(CODE_HEIGHTS_KEY, JSON.stringify(heights))
+    } catch { /* storage may be blocked */ }
+  }
 
   async function loadCode() {
     const token = ++codeLoadToken
@@ -895,9 +969,9 @@
     $('code-image').value = image
     $('code-sound').value = sound
     $('code-title').textContent = name
-    $('code-hint').textContent = editable
+    $('code-hint').textContent = `${editable
       ? '正在编辑「我的」背景：保存后立刻重新编译运行，改动只存在本机。'
-      : '内置作品只读：保存会另存为「我的副本」并立刻运行，内置原件不动。'
+      : '内置作品只读：保存会另存为「我的副本」并立刻运行，内置原件不动。'} 两个代码框都能拖右下角调高度（会记住）。`
     updateCodeInfo()
     setCodeNote('')
   }
@@ -963,6 +1037,11 @@
     })
     $('code-image').addEventListener('input', updateCodeInfo)
     $('code-sound').addEventListener('input', updateCodeInfo)
+    restoreCodeHeights()
+    // remember a manually dragged box height (the native resize handle is at the
+    // bottom-right corner of each textarea)
+    $('view-code').addEventListener('pointerup', saveCodeHeights)
+    $('view-code').addEventListener('mouseup', saveCodeHeights)
     // Ctrl/Cmd+S inside the editor saves & runs instead of the browser dialog
     $('view-code').addEventListener('keydown', event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
@@ -1002,6 +1081,7 @@
   async function boot() {
     applyTheme()
     watchParentTheme()
+    if (STANDALONE) document.body.classList.add('standalone')
     try { defaults = await fetchJson('defaults.json') } catch { /* built-in defaults */ }
     try { manifest = await fetchJson(`${BASE}/presets/index.json`) } catch { manifest = [] }
     manifest = Array.isArray(manifest) ? manifest : []

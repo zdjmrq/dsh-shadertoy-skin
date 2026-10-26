@@ -195,14 +195,17 @@ window.__ModuleLoader__.load({
             '--dsw-alias-bg-base': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
             '--dsw-specific-sidebar-fill': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
           }
-          // The boxes that stay opaque when the shell goes clear: cards, nested
-          // panels, code blocks, popovers/dialogs, menus and the composer input.
+          // The boxes that follow the `panels` level: cards, nested panels, code
+          // blocks, the composer/editor surface (`bg-module-platform`) and the
+          // message input (`specific-input-major`). Popovers/menus get a higher
+          // alpha below so they stay readable.
           const LAYER_TOKENS = [
             '--dsw-alias-bg-layer-1', '--dsw-alias-bg-layer-2',
             '--dsw-alias-bg-layer-3', '--dsw-alias-bg-layer-4',
+            '--dsw-alias-bg-module-platform', '--dsw-specific-input-major',
           ]
           const RAISED_TOKENS = [
-            '--dsw-alias-bg-overlay', '--dsw-specific-menu', '--dsw-specific-input-major',
+            '--dsw-alias-bg-overlay', '--dsw-specific-menu',
           ]
 
           /** `panels` = opaque (leave theme fills) | half | clear. */
