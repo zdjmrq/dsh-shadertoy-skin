@@ -89,3 +89,4 @@ node tools/dev-server.mjs 8730
 - `alpha:false` + iframe `opacity` 做透明度；画布本身不透明（省合成开销）。
 - 时间轴：`iTime` 累加 `dt × speed`，切作品归零；`iTimeDelta` 用真实帧间隔（不乘 speed）。
 - GLSL ES 3.00 保留字（`patch`、`sample`、`input`、`output` 等）会让 ES3 编译失败、静默掉到 ES1 —— 这是已知坑，写 shader 时避免。
+- **`precise` 限定符在 WebGL2 里不存在**（GLSL 4.0 / ESSL 3.20 才有）：`precise float x = …` 会直接 `undeclared identifier`，ES3/ES1 都编译不过。ShaderToy 上防「驱动 FMA 收缩导致共享晶格点哈希不一致」的写法要换成**整数哈希**（`uint` 位混合），见 `docs/00-决策与方案复核.md` §9.6。

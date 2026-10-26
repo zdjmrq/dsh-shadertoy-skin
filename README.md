@@ -36,6 +36,8 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 - [x] 设置页：**左栏一行「Shader 背景」→ 主区域整页**（不是弹窗），带页头、参数 / 背景库两个页签
 - [x] 参数：启用、作品切换、**玻璃不透明度**、**背景亮度**、模糊、渲染分辨率、帧率上限、播放速度、音量/静音、本背景恢复默认
 - [x] **背景库**：内置 + 我的背景列表、切换、改名、删除；粘贴代码导入、文件导入（ShaderToy JSON / GLSL）、从 `$DSH_HOME/shader-skin/presets/` 导入
+- [x] **代码页**：查看当前运行作品的 Image / Sound 源码，直接改 → **保存并运行**（内置作品会自动另存为「我的副本」，原件不动；编辑器里 Ctrl/⌘+S 同样保存）
+- [x] **iMouse 只在按住左键拖动时驱动**：松手发一次释放（`iMouse.z < 0`），鼠标划过界面不会再把背景搅动
 - [x] **每背景独立参数**（`overrides`）
 - [x] **`mainSound` 音频**：4096 采样块 → `readPixels` → WebAudio 前瞻调度 + Gain/限幅，音量与静音实时生效
 - [x] 深浅色主题适配（设置页与玻璃都跟随 DSH；亮色主题滤镜走向白色）
@@ -126,6 +128,21 @@ $DSH_HOME/shader-skin/presets/        （Windows 默认 C:\Users\<你>\.dsh\shad
 
 设置页 → 背景库 → 「从本地目录导入」→ 点 **导入**。这个目录不进包、不进 git。
 
+## 改代码 / 微调作品
+
+设置页第三个页签 **「代码」** 显示的就是**当前正在跑**的那份源码：
+
+| 你想做的事 | 怎么做 |
+|---|---|
+| 看看它怎么写的 | 切到「代码」，Image（和可选 Sound）源码直接可读，顶部显示作品名与行数/字符数 |
+| 改几行立刻看效果 | 改完点 **「保存并运行」**（或 Ctrl/⌘+S）：保存状态 → 播放器重新编译 → 画面即时更新；编译错误会显示在按钮下方（带行号） |
+| 改坏了想还原 | 点 **「放弃修改」**，重新读取当前已保存的版本（想彻底恢复默认就去「参数 → 本背景恢复默认」，或从「背景库」重新导入） |
+| 内置作品能改吗 | 能改，但内置文件是只读的：保存时会自动另存为 **「<原名>（我的副本）」** 并切过去运行，内置原件不动 |
+
+> 注意：ShaderToy 的 WebGL2 着色器语言是 ESSL 3.00，**不支持 `precise` 限定符**（那是 GLSL 4.0 / ESSL 3.20 的东西，ShaderToy 的 Vulkan 后端才有）。需要「共享晶格点必须同哈希」这类修复时，用**整数哈希**（`uint` + 位混合）代替 `precise`——效果是确定的，也不会被驱动 FMA 收缩影响。
+
+![代码页](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/page-code.png)
+
 ## 预设与许可证（重要）
 
 - 随包只有**自写**的 MIT 着色器，**不包含任何 ShaderToy 作品代码**。
@@ -164,7 +181,7 @@ client.js             Client 半：背景 iframe + 玻璃 token + 设置页注�
 cordis.patch.yml      bundle patch（插入 shadertoy-skin 行）
 native-dist/
   player.html         零依赖 WebGL2 播放器（渲染 + 滤镜 + mainSound 音频）
-  panel.html          设置页（参数 / 背景库，深浅色自适应）
+  panel.html          设置页（参数 / 背景库 / 代码，深浅色自适应）
   defaults.json       全部默认参数（改这里就改默认值）
   presets/*.glsl      随包 MIT 着色器 + `pulse-sound.glsl`
   presets/dev/        测试夹具（不进 npm 包）

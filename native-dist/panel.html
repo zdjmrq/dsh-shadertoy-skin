@@ -118,6 +118,15 @@
   input[type=text]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   textarea { resize: vertical; min-height: 92px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.5; }
 
+  /* code tab: editable shader source of the running skin */
+  .code-area {
+    min-height: 320px; max-height: 48vh; white-space: pre; overflow: auto;
+    tab-size: 2; font-size: 11.5px; line-height: 1.6; resize: vertical;
+  }
+  .code-area.sound { min-height: 104px; max-height: 26vh; }
+  #code-title { color: var(--accent); font-size: 11px; }
+  #code-hint { margin: -2px 0 4px; }
+
   /* custom dropdown: the native <select> popup ignores our palette */
   .dd { position: relative; }
   .dd-trigger {
@@ -201,6 +210,7 @@
   <div class="tabs" role="tablist">
     <button type="button" id="tab-params" role="tab" class="active">参数</button>
     <button type="button" id="tab-library" role="tab">背景库</button>
+    <button type="button" id="tab-code" role="tab">代码</button>
   </div>
 
   <div id="view-params" class="sub">
@@ -294,6 +304,27 @@
     </div>
 
     <p class="note" id="lib-note">内置作品随插件包提供；我的背景只保存在本机，不会上传。</p>
+  </div>
+
+  <div id="view-code" hidden>
+    <div class="head"><label>当前运行的作品</label><output id="code-title"></output></div>
+    <div class="hint" id="code-hint">内置作品只读：保存会另存为「我的副本」并立刻运行。改动只存在本机。</div>
+
+    <div class="row">
+      <div class="head"><label for="code-image">Image 代码</label><output id="code-image-info"></output></div>
+      <textarea id="code-image" class="code-area" spellcheck="false" autocapitalize="off" autocorrect="off" wrap="off" placeholder="void mainImage(out vec4 fragColor, in vec2 fragCoord) { ... }"></textarea>
+    </div>
+
+    <div class="row">
+      <div class="head"><label for="code-sound">Sound 代码（可选，mainSound）</label><output id="code-sound-info"></output></div>
+      <textarea id="code-sound" class="code-area sound" spellcheck="false" autocapitalize="off" autocorrect="off" wrap="off" placeholder="vec2 mainSound(float time) { ... }"></textarea>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="code-save" type="button">保存并运行</button>
+      <button class="btn" id="code-revert" type="button">放弃修改</button>
+    </div>
+    <p class="note" id="code-note"></p>
   </div>
 </section>
 
@@ -449,14 +480,28 @@
     try { parent.postMessage(message, location.origin) } catch { /* parent gone */ }
   }
 
+  function saveState() {
+    const body = JSON.stringify({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides })
+    return fetch(`${BASE}/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body })
+      .then(response => {
+        setNote(response.ok ? '改动即时生效并已保存。' : `保存失败（HTTP ${response.status}）`, !response.ok)
+        return response.ok
+      })
+      .catch(() => {
+        setNote('保存失败：Host 路由不可用。', true)
+        return false
+      })
+  }
+
   function scheduleSave() {
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      const body = JSON.stringify({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides })
-      fetch(`${BASE}/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body })
-        .then(response => setNote(response.ok ? '改动即时生效并已保存。' : `保存失败（HTTP ${response.status}）`, !response.ok))
-        .catch(() => setNote('保存失败：Host 路由不可用。', true))
-    }, 320)
+    saveTimer = setTimeout(() => { void saveState() }, 320)
+  }
+
+  /** Persist right now — needed before telling the host to load a new preset. */
+  async function saveNow() {
+    clearTimeout(saveTimer)
+    return saveState()
   }
 
   function setNote(text, isError = false) {
@@ -470,14 +515,23 @@
     scheduleSave()
   }
 
-  function setActive(id) {
-    if (!id || id === state.activeId) return
+  async function setActive(id) {
+    if (!id) return
+    if (id === state.activeId) {
+      toParent({ type: 'preset', id })
+      toParent({ type: 'params', params: effective() })
+      return
+    }
     state.activeId = id
     sync()
+    renderLibrary()
+    // Persist BEFORE the host reloads `/state` for the new preset: a brand-new
+    // entry only exists on disk once this PUT succeeds, otherwise the host falls
+    // back to the first built-in and shows the wrong shader.
+    await saveNow()
     toParent({ type: 'preset', id })
     toParent({ type: 'params', params: effective() })
-    scheduleSave()
-    renderLibrary()
+    if (!$('view-code').hidden) void loadCode()
   }
 
   function setParam(key, value) {
@@ -514,10 +568,13 @@
   function setTab(next) {
     $('tab-params').classList.toggle('active', next === 'params')
     $('tab-library').classList.toggle('active', next === 'library')
+    $('tab-code').classList.toggle('active', next === 'code')
     $('view-params').hidden = next !== 'params'
     $('view-library').hidden = next !== 'library'
+    $('view-code').hidden = next !== 'code'
     panel.classList.toggle('wide', next === 'library')
     if (next === 'library') void loadLocalPresets()
+    if (next === 'code') void loadCode()
     requestAnimationFrame(() => { sync(); reportSize() })
   }
 
@@ -599,6 +656,7 @@
     $('close').addEventListener('click', () => setOpen(false))
     $('tab-params').addEventListener('click', () => setTab('params'))
     $('tab-library').addEventListener('click', () => setTab('library'))
+    $('tab-code').addEventListener('click', () => setTab('code'))
     $('fab').addEventListener('click', () => setOpen(true))
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && MODE === 'popup' && open && !document.querySelector('.dd.open')) setOpen(false)
@@ -679,16 +737,18 @@
         })
         const remove = el('button', { type: 'button', className: 'btn tiny danger' })
         remove.textContent = '删除'
-        remove.addEventListener('click', () => {
+        remove.addEventListener('click', async () => {
           if (!window.confirm(`删除「${row.entry.name}」？此操作不可恢复。`)) return
+          const wasActive = state.activeId === row.id
           state.entries = state.entries.filter(item => item.id !== row.id)
           delete state.overrides[row.id]
-          if (state.activeId === row.id) {
-            state.activeId = manifest[0]?.id ?? null
+          if (wasActive) state.activeId = manifest[0]?.id ?? null
+          await saveNow()
+          if (wasActive) {
             toParent({ type: 'preset', id: state.activeId })
             toParent({ type: 'params', params: effective() })
+            if (!$('view-code').hidden) void loadCode()
           }
-          scheduleSave()
           renderLibrary()
           sync()
         })
@@ -760,7 +820,7 @@
         $('paste-image').value = ''
         $('paste-sound').value = ''
         setTab('params')
-        setActive(entry.id)
+        void setActive(entry.id)
         setNote(`已加入「${entry.name}」。`)
       } catch (err) {
         error.textContent = err.message
@@ -790,6 +850,108 @@
     $('lib-reload').addEventListener('click', () => { void loadLocalPresets(true) })
   }
 
+  // ------------------------------------------------------------- code tab
+  let codeLoadToken = 0
+
+  async function loadCode() {
+    const token = ++codeLoadToken
+    const entry = entryById(state.activeId)
+    const builtin = builtinById(state.activeId)
+    const editable = Boolean(entry)
+    let name = '没有选中作品'
+    let image = ''
+    let sound = ''
+    if (entry) {
+      name = entry.name
+      image = entry.code?.image ?? ''
+      sound = entry.code?.sound ?? ''
+    } else if (builtin) {
+      name = builtin.name || builtin.id
+      try { image = await fetchText(`${BASE}/presets/${builtin.file}`) } catch { image = '' }
+      const soundFile = builtin.soundFile ?? `${builtin.id}-sound.glsl`
+      try { sound = await fetchText(`${BASE}/presets/${soundFile}`) } catch { sound = '' }
+    }
+    if (token !== codeLoadToken) return
+    $('code-image').value = image
+    $('code-sound').value = sound
+    $('code-title').textContent = name
+    $('code-hint').textContent = editable
+      ? '正在编辑「我的」背景：保存后立刻重新编译运行，改动只存在本机。'
+      : '内置作品只读：保存会另存为「我的副本」并立刻运行，内置原件不动。'
+    updateCodeInfo()
+    setCodeNote('')
+  }
+
+  function updateCodeInfo() {
+    const image = $('code-image').value
+    $('code-image-info').textContent = `${image.split('\n').length} 行 · ${image.length} 字符`
+    $('code-sound-info').textContent = $('code-sound').value.trim() ? 'mainSound' : ''
+  }
+
+  function setCodeNote(text, isError = false) {
+    const note = $('code-note')
+    note.textContent = text
+    note.classList.toggle('error', isError)
+  }
+
+  async function saveCode() {
+    const image = $('code-image').value
+    const sound = $('code-sound').value.trim()
+    if (!looksLikeImage(image)) {
+      setCodeNote('Image 代码里找不到 mainImage() 或 main()，没有保存。', true)
+      return
+    }
+    if (sound !== '' && !looksLikeSound(sound)) {
+      setCodeNote('Sound 代码里找不到 mainSound()（不需要就清空它）。', true)
+      return
+    }
+    const entry = entryById(state.activeId)
+    const builtin = builtinById(state.activeId)
+    try {
+      if (entry) {
+        entry.code = { ...(entry.code ?? {}), image }
+        if (sound !== '') entry.code.sound = sound
+        else delete entry.code.sound
+        entry.source = 'edit'
+        sync()
+        renderLibrary()
+        await saveNow()
+        toParent({ type: 'preset', id: entry.id })
+        toParent({ type: 'params', params: effective() })
+        updateCodeInfo()
+        setCodeNote('已保存并重新运行。')
+        return
+      }
+      if (!builtin) {
+        setCodeNote('当前没有可编辑的作品。', true)
+        return
+      }
+      // built-ins are read-only package files -> save the edit as a copy
+      const copy = addEntry({ name: `${builtin.name || builtin.id}（我的副本）`, image, sound, source: 'edit', origin: builtin.id })
+      await setActive(copy.id)
+      await loadCode()
+      setCodeNote('内置作品只读，已另存为「我的副本」并运行。')
+    } catch (error) {
+      setCodeNote(`保存失败：${error.message}`, true)
+    }
+  }
+
+  function bindCode() {
+    $('code-save').addEventListener('click', () => { void saveCode() })
+    $('code-revert').addEventListener('click', () => {
+      void loadCode().then(() => setCodeNote('已重新读取当前运行的作品。'))
+    })
+    $('code-image').addEventListener('input', updateCodeInfo)
+    $('code-sound').addEventListener('input', updateCodeInfo)
+    // Ctrl/Cmd+S inside the editor saves & runs instead of the browser dialog
+    $('view-code').addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        void saveCode()
+      }
+    })
+  }
+
   // ---------------------------------------------------------------- messages
   if (!STANDALONE) {
     window.addEventListener('message', event => {
@@ -800,7 +962,9 @@
         audioState = typeof message.state === 'string' ? message.state : 'none'
         sync()
       } else if (message.type === 'error') {
-        setNote(`渲染错误（${message.stage}）：${String(message.log ?? '').slice(0, 220)}`, true)
+        const text = `渲染错误（${message.stage}）：${String(message.log ?? '').slice(0, 220)}`
+        setNote(text, true)
+        setCodeNote(text, true)
       } else if (message.type === 'theme') {
         applyTheme()
       } else if (message.type === 'preset') {
@@ -808,6 +972,7 @@
           state.activeId = message.id
           sync()
           renderLibrary()
+          if (!$('view-code').hidden) void loadCode()
         }
       }
     })
@@ -835,6 +1000,7 @@
     if (!state.activeId) state.activeId = manifest[0]?.id ?? 'aurora'
     bindParams()
     bindLibrary()
+    bindCode()
     sync()
     renderLibrary()
     // Push the stored params once: the player/glass always mirror what this page

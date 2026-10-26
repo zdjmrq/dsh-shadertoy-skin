@@ -215,6 +215,39 @@ async function main() {
     check('glass slider moves', moved.glass === '35%', String(moved.glass))
     check('brightness slider moves', moved.brightness === '140%', String(moved.brightness))
 
+    // --- code tab: view the running skin's source, edit it, save & run
+    await page.click('#tab-code')
+    await page.waitForFunction(() => (document.getElementById('code-image')?.value ?? '').includes('mainImage'), null, { timeout: 10_000 })
+    const codeState = () => page.evaluate(() => ({
+      title: document.getElementById('code-title')?.textContent,
+      image: document.getElementById('code-image')?.value ?? '',
+      note: document.getElementById('code-note')?.textContent ?? '',
+      preset: document.querySelector('#preset-dd .dd-trigger')?.textContent,
+    }))
+    const codeInitial = await codeState()
+    check('code tab shows the running built-in shader', /极光/.test(codeInitial.title ?? '') && codeInitial.image.includes('mainImage'), codeInitial.title)
+    check('code tab marks a built-in as read-only', /只读/.test(await page.textContent('#code-hint')))
+
+    // invalid source is rejected without creating a fork
+    await page.locator('#code-image').fill('not glsl at all')
+    await page.click('#code-save')
+    await sleep(120)
+    check('code save rejects source without mainImage/main', /找不到/.test((await codeState()).note), (await codeState()).note)
+    check('invalid source creates no fork', !/副本/.test((await codeState()).preset ?? ''), String((await codeState()).preset))
+
+    // valid edit of a built-in forks into "我的" and marks it active
+    await page.locator('#code-image').fill('void mainImage(out vec4 o, in vec2 p) { o = vec4(p / iResolution.xy, 0.5, 1.0); }')
+    await page.click('#code-save')
+    await page.waitForFunction(() => /副本/.test(document.querySelector('#preset-dd .dd-trigger')?.textContent ?? ''), null, { timeout: 10_000 })
+    const forked = await codeState()
+    check('saving an edited built-in forks a copy', /副本/.test(forked.preset ?? ''), String(forked.preset))
+    check('fork note explains what happened', /副本/.test(forked.note), forked.note)
+    check('fork is now editable', /正在编辑/.test(await page.textContent('#code-hint')))
+    await page.click('#tab-library')
+    await page.waitForSelector('#view-library:not([hidden])')
+    const afterFork = await page.evaluate(() => [...document.querySelectorAll('#lib-list .item .name')].map(node => node.textContent))
+    check('fork appears in the library list', afterFork.some(name => /副本/.test(name)), afterFork.join(','))
+
     check('no uncaught page errors', consoleErrors.length === 0, consoleErrors.join(' | ').slice(0, 300))
   } finally {
     await browser?.close().catch(() => {})
