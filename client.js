@@ -19,13 +19,12 @@ window.__ModuleLoader__.load({
   factory(require) {
     const BASE = '/shader-skin'
     const BG_ID = 'shadertoy-skin-bg'
-    const PANEL_ID = 'shadertoy-skin-panel'
-    const FALLBACK_DEFAULTS = { enabled: true, glass: 72, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: false }
+        const FALLBACK_DEFAULTS = { enabled: true, glass: 72, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: false }
     const FALLBACK_PRESET = 'aurora'
     // ⚠️ Keep off while the sidebar route is unstable: registering into
     // `sidebar.panellist` + `main` has frozen the frontend on panel switch.
     // Flip to true only after the cause is isolated (see docs/renderer-notes.md).
-    const ENABLE_SIDEBAR_ENTRY = false
+    const ENABLE_SIDEBAR_ENTRY = true
 
     let React = null
     try { React = require('react') } catch { React = null }
@@ -84,12 +83,15 @@ window.__ModuleLoader__.load({
         if (!frame) return undefined
         return registerPanelFrame(frame)
       }, [])
-      return h('iframe', {
-        ref,
-        title: 'ShaderToy 背景设置',
-        src: `${BASE}/panel.html?mode=main`,
-        style: { width: '100%', height: '100%', border: 0, display: 'block', background: 'transparent' },
-      })
+      // absolute fill: the shell's main-panel container does not always give a
+      // percentage height, so the iframe must not rely on `height: 100%`.
+      return h('div', { style: { position: 'relative', height: '100%', minHeight: 0 } },
+        h('iframe', {
+          ref,
+          title: 'ShaderToy 背景设置',
+          src: `${BASE}/panel.html?mode=main`,
+          style: { position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, display: 'block', background: 'transparent' },
+        }))
     }
 
     return {
@@ -110,7 +112,6 @@ window.__ModuleLoader__.load({
           const slots = ctx.get('slots')
           let glassDispose = null
           let background = null
-          let panel = null
           let booted = false
 
           // ---------------------------------------------------------------- glass
@@ -269,31 +270,12 @@ window.__ModuleLoader__.load({
           }
 
           // ----------------------------------------------------------------- panel
-          function createPanel() {
-            if (document.getElementById(PANEL_ID)) return
-            const frame = document.createElement('iframe')
-            frame.id = PANEL_ID
-            frame.title = 'ShaderToy background settings'
-            frame.setAttribute('allow', 'autoplay')
-            frame.style.cssText = 'position:fixed;right:16px;bottom:16px;width:44px;height:44px;border:0;background:transparent;z-index:6000;overflow:hidden;'
-            frame.src = `${BASE}/panel.html`
-            document.body.append(frame)
-            panel = frame
-            registerPanelFrame(frame)
-          }
+          // Settings now live in the main column through the sidebar entry; there is
+          // no floating popup any more (it was fragile and the user prefers a page).
 
           async function handlePanelMessage(message) {
             if (!message || typeof message !== 'object') return
             switch (message.type) {
-              case 'resize': {
-                const width = clamp(message.w, 44, 720, 44)
-                const height = clamp(message.h, 44, 900, 44)
-                if (panel) {
-                  panel.style.width = `${width}px`
-                  panel.style.height = `${height}px`
-                }
-                return
-              }
               case 'params': {
                 store.overrides[store.activeId] = { ...(message.params ?? {}) }
                 applyGlass()
@@ -449,7 +431,6 @@ window.__ModuleLoader__.load({
             if (!store.activeId) store.activeId = FALLBACK_PRESET
             booted = true
             syncEnabled()
-            createPanel()
             const safeMode = await fetchJson(`${BASE}/safe-mode`).catch(() => ({ on: false }))
             if (safeMode?.on === true) {
               console.warn('[shadertoy-skin] safe mode: sidebar entry disabled ($DSH_HOME/shader-skin.safe exists)')
@@ -467,10 +448,8 @@ window.__ModuleLoader__.load({
             for (const id of timers) clearTimeout(id)
             clearGlass()
             removeBackground()
-            document.getElementById(PANEL_ID)?.remove()
             for (const dispose of listeners) dispose()
             panelFrames.clear()
-            panel = null
           }
         }, 'shadertoy-skin: background surface, settings surfaces and glass')
       },

@@ -68,15 +68,21 @@
   body.mode-main { overflow: auto; height: 100%; }
   body.mode-main .fab { display: none; }
   body.mode-main .panel {
-    display: block; width: 100%; max-width: 820px; margin: 0 auto;
+    display: block; width: 100%; max-width: 960px; margin: 0 auto;
     border: 0; box-shadow: none; background: transparent;
-    padding: 22px 24px 40px;
+    padding: 28px 32px 48px;
   }
-  body.mode-main .panel.wide { width: 100%; }
-  body.mode-main .tabs { max-width: 320px; }
+  body.mode-main .panel.wide { width: 100%; max-width: 960px; }
+  body.mode-main .tabs { max-width: 260px; margin-bottom: 18px; }
   body.mode-main .list { max-height: none; }
-  body.mode-main .sub { max-width: 560px; }
+  body.mode-main .sub { max-width: 620px; }
   body.mode-main .close { display: none; }
+  body.mode-main header { display: none; }
+
+  .page-head { display: none; }
+  body.mode-main .page-head { display: block; margin: 0 0 20px; }
+  .page-head h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; letter-spacing: .01em; color: var(--fg); }
+  .page-head p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
 
   header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   h1 { margin: 0; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
@@ -182,6 +188,11 @@
 </button>
 
 <section class="panel" id="panel" role="dialog" aria-modal="false" aria-label="Shader 背景设置">
+  <div class="page-head">
+    <h2>ShaderToy 背景</h2>
+    <p>用实时着色器当聊天背景。改动即时生效，并自动保存到本机（<code>$DSH_HOME/shader-skin.json</code>）。</p>
+  </div>
+
   <header>
     <h1>Shader <b>·</b> 背景</h1>
     <button class="close" id="close" type="button" aria-label="关闭">×</button>

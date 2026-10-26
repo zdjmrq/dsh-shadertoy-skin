@@ -25,7 +25,7 @@ M0（渲染器 + 插件骨架 + 设置面板）已完成，持续加功能：
 - [x] **每背景独立参数**（`overrides`），可「本背景恢复默认」
 - [x] **`mainSound` 音频**：4096 采样块 → `readPixels` → WebAudio 前瞻调度 + Gain/限幅，音量与静音实时生效
 - [x] 深浅色主题适配（设置面板与玻璃都跟随 DSH）
-- [ ] 侧边栏入口：**暂时关闭**（注册进 `sidebar.panellist` + `main` 会卡死前端，已用常量 `ENABLE_SIDEBAR_ENTRY` 关掉，待定位后再开）
+- [x] **侧边栏入口**：左栏一行「Shader 背景」，点开在主区域呈现**整页设置**（不是弹窗），带页头、参数/背景库两个页签
 - [ ] 多 pass（Buffer A–D）、音频可视化回馈、兼容性静态体检
 
 ## 参数与默认值
@@ -59,7 +59,7 @@ dsh plugin --profile desktop add dsh-shadertoy-skin
 dsh plugin --profile desktop add github:zdjmrq/dsh-shadertoy-skin#main
 ```
 
-安装后背景默认是「极光」，右下角有设置圆钮（参数/背景库两个页签）。
+安装后左侧栏会多一行 **「Shader 背景」**，点开在主区域就是整页设置（参数 / 背景库）；默认背景是「极光」。
 
 **开发期的安全阀**：如果界面出现卡死等异常，新建一个空文件 `$DSH_HOME/shader-skin.safe` 再刷新页面——客户端会跳过所有注入进 `#root` 的 UI（侧边栏入口等），只保留背景层与悬浮面板；删掉该文件即可恢复。
 
