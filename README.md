@@ -33,7 +33,7 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 - [x] Host 半：静态路由 + `$DSH_HOME/shader-skin.json` 原子状态存取 + `$DSH_HOME/shader-skin/presets/` 本地预设目录
 - [x] Client 半：把播放器挂成 body 首子节点、转发 iMouse / 主题 / 可见性，全部资源走 `ctx.effect` 清理
 - [x] 玻璃壳：外壳表面（AppFrame / 侧栏 / 页面容器）全透明，**暗色滤镜只由播放器画一层**（`tintMix`），不再靠多层半透明 token 叠出来（叠 N 层会把背景压到几乎全黑，旧版就栽在这）
-- [x] 设置页：**左栏一行「Shader 背景」→ 主区域整页**（不是弹窗），带页头、参数 / 背景库两个页签
+- [x] 设置页：**左栏一行「Shader 背景」→ 主区域整页**（不是弹窗），带页头、参数 / 背景库 / 代码三个页签
 - [x] 参数：启用、作品切换、**玻璃不透明度**、**背景亮度**、模糊、渲染分辨率、帧率上限、播放速度、音量/静音、本背景恢复默认
 - [x] **背景库**：内置 + 我的背景列表、切换、改名、删除；粘贴代码导入、文件导入（ShaderToy JSON / GLSL）、从 `$DSH_HOME/shader-skin/presets/` 导入
 - [x] **代码页**：查看当前运行作品的 Image / Sound 源码，直接改 → **保存并运行**（内置作品会自动另存为「我的副本」，原件不动；编辑器里 Ctrl/⌘+S 同样保存）
@@ -42,6 +42,7 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 - [x] **每背景独立参数**（`overrides`）
 - [x] **`mainSound` 音频**：4096 采样块 → `readPixels` → WebAudio 前瞻调度 + Gain/限幅，音量与静音实时生效
 - [x] 深浅色主题适配（设置页与玻璃都跟随 DSH；亮色主题滤镜走向白色）
+- [x] **启动自愈**：桌面端 client 插件行与服务是并发激活的，首次启动时 `theme`/`slots` 可能还没就绪（旧版因此「重启后要手动关开一次插件」）。现在服务现取 + 启动后 10 秒内多次自检（背景层缺失就重建、token 被重置就重设、播放器没 `ready` 就重发 init、侧栏没注册上就补注册），**装好重启即生效**
 - [ ] 多 pass（Buffer A–D）、音频可视化回馈、兼容性静态体检
 
 ## 参数与默认值
