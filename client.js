@@ -30,6 +30,13 @@ window.__ModuleLoader__.load({
     let React = null
     try { React = require('react') } catch { React = null }
 
+    /** The module table can be incomplete at factory time; retry lazily. */
+    function ensureReact() {
+      if (React !== null) return React
+      try { React = require('react') } catch { React = null }
+      return React
+    }
+
     /**
      * Every settings iframe currently mounted, keyed by its WindowProxy.
      *
@@ -125,11 +132,31 @@ window.__ModuleLoader__.load({
           }
 
           const store = { activeId: null, entries: [], overrides: {}, defaults: FALLBACK_DEFAULTS }
-          const theme = ctx.get('theme')
-          const slots = ctx.get('slots')
+          // Resolve client services on every use. Capturing `ctx.get('theme')` once at
+          // effect setup was a real startup bug: client plugin rows activate
+          // concurrently with the theme/slots providers, so at that moment the service
+          // could still be `undefined` — the reference then stayed undefined forever,
+          // glass was never applied and the sidebar row was never registered until the
+          // plugin was toggled off/on (which re-ran `apply` when everything was up).
+          const service = name => {
+            try { return ctx.get(name) } catch { return undefined }
+          }
+          const waitForService = async (name, timeoutMs = 15000) => {
+            const started = Date.now()
+            while (Date.now() - started < timeoutMs) {
+              const found = service(name)
+              if (found !== undefined && found !== null) return found
+              await new Promise(resolve => { timers.push(setTimeout(resolve, 50)) })
+              if (!booted) return undefined
+            }
+            return service(name)
+          }
           let glassDispose = null
           let background = null
           let booted = false
+          let sidebarRegistered = false
+          let playerReady = false
+          let playerInitAttempts = 0
 
           // ---------------------------------------------------------------- glass
           //
@@ -197,17 +224,33 @@ window.__ModuleLoader__.load({
             return tokens
           }
 
+          /** True when every overridden token is present as an inline body style. */
+          function tokensIntact(tokens) {
+            const style = document.body?.style
+            if (!style) return false
+            return Object.keys(tokens).every(name => style.getPropertyValue(name) !== '')
+          }
+
           let glassSignature = null
-          function applyGlass() {
-            if (theme === undefined || !booted) return
+          /**
+           * Publish the glass token layer. Safe to call repeatedly: it re-applies only
+           * when the token set changed or the inline overrides are missing (the app
+           * shell may reset body styles during its own startup).
+           */
+          function applyGlass(force = false) {
+            if (!booted) return false
+            const theme = service('theme')
+            if (theme === undefined) return false
             const tokens = glassTokens()
             const signature = JSON.stringify(tokens)
-            // same token set: nothing to publish (every overrideTokens call emits theme/change)
-            if (signature === glassSignature) return
+            if (!force && signature === glassSignature
+              && document.getElementById(STYLE_ID) !== null
+              && tokensIntact(tokens)) return true
             glassSignature = signature
             ensureGlassStyle()
             glassDispose?.()
             glassDispose = theme.overrideTokens('shadertoy-skin', tokens)
+            return tokensIntact(tokens)
           }
 
           function clearGlass() {
@@ -296,6 +339,14 @@ window.__ModuleLoader__.load({
           }
 
           async function sendInit(frame) {
+            if (frame === null || playerInitAttempts >= 4) return
+            playerInitAttempts += 1
+            const retry = (delay) => {
+              if (playerInitAttempts >= 4) return
+              timers.push(setTimeout(() => {
+                if (booted && !playerReady && background === frame) void sendInit(frame)
+              }, delay))
+            }
             try {
               const preset = await resolvePreset(store.activeId ?? FALLBACK_PRESET)
               store.activeId = preset.id
@@ -304,8 +355,10 @@ window.__ModuleLoader__.load({
               postTo(frame, { type: 'theme', dark: isDark() })
               postTo(frame, { type: 'init', preset, params: { ...effective(), ...playerLook() } })
               broadcastPanel({ type: 'preset', id: preset.id, name: preset.name })
+              retry(3000)
             } catch (error) {
               console.warn('[shadertoy-skin] could not start the renderer:', error)
+              retry(900)
             }
           }
 
@@ -322,6 +375,8 @@ window.__ModuleLoader__.load({
             frame.src = `${BASE}/player.html`
             const host = document.body || document.documentElement
             host.insertBefore(frame, host.firstChild)
+            playerReady = false
+            playerInitAttempts = 0
             frame.addEventListener('load', () => { void sendInit(frame) })
             return frame
           }
@@ -468,7 +523,10 @@ window.__ModuleLoader__.load({
             const message = event.data
             if (!message || typeof message !== 'object') return
             if (background && event.source === background.contentWindow) {
-              if (message.type === 'audio') broadcastPanel({ type: 'audio', ...message })
+              if (message.type === 'ready') {
+                playerReady = true
+                playerInitAttempts = 0
+              } else if (message.type === 'audio') broadcastPanel({ type: 'audio', ...message })
               else if (message.type === 'error') {
                 console.warn('[shadertoy-skin] renderer reported an error:', message.stage, message.log)
                 broadcastPanel({ type: 'error', stage: message.stage, log: String(message.log ?? '').slice(0, 400) })
@@ -503,9 +561,10 @@ window.__ModuleLoader__.load({
           // skip the sidebar entry / main panel entirely (background keeps working).
           // Useful while iterating on UI that lives inside #root.
           function registerSidebar() {
-            if (slots === undefined || React === null) {
-              console.warn('[shadertoy-skin] slots service or react unavailable; sidebar entry skipped')
-              return
+            const slots = service('slots')
+            if (slots === undefined || ensureReact() === null) {
+              console.warn('[shadertoy-skin] slots service or react unavailable yet; sidebar entry deferred')
+              return false
             }
             const register = (slotKey, definition, component) => {
               try {
@@ -531,10 +590,54 @@ window.__ModuleLoader__.load({
               name: 'main',
               key: 'shadertoy-skin',
             }, MainSettingsPage)
+            return true
+          }
+
+          // -------------------------------------------------------------- self-heal
+          //
+          // Desktop startup is a race: client rows activate concurrently with the
+          // services they use, the shell resets body styles once while it paints, and
+          // the player reports `ready` only after its first frame. A single early
+          // attempt is not enough — this surface verification runs a bounded number of
+          // times after boot (plus once on the first real user gesture) and repairs
+          // whichever piece is missing:
+          //   • the background iframe was never created / got detached  -> recreate
+          //   • the glass token overrides were reset with the body styles -> re-apply
+          //   • the player never received init / never reported ready    -> re-init
+          //   • the sidebar row could not register while slots was still missing -> retry
+          function verifySurface() {
+            if (!booted) return
+            if (effective().enabled === false) return
+            const frame = document.getElementById(BG_ID)
+            if (frame === null) {
+              syncEnabled()
+              return
+            }
+            if (frame !== background) background = frame
+            if (!sidebarRegistered && ENABLE_SIDEBAR_ENTRY) {
+              try { sidebarRegistered = registerSidebar() } catch { /* retried later */ }
+            }
+            applyGlass()
+            if (!playerReady && playerInitAttempts < 4) void sendInit(background)
+          }
+
+          function scheduleVerify() {
+            for (const delay of [0, 250, 700, 1500, 3000, 6000, 10000]) {
+              timers.push(setTimeout(() => { if (booted) verifySurface() }, delay))
+            }
+            // the first real interaction is also the moment a slow desktop shell has
+            // definitely finished mounting
+            const kick = () => verifySurface()
+            on(window, 'focus', kick)
+            on(window, 'pointerdown', kick, { once: true, passive: true })
+            on(document, 'visibilitychange', () => { if (!document.hidden) verifySurface() })
           }
 
           // ------------------------------------------------------------------- boot
           void (async () => {
+            if (document.body === null) {
+              await new Promise(resolve => { document.addEventListener('DOMContentLoaded', resolve, { once: true }) })
+            }
             store.defaults = { ...FALLBACK_DEFAULTS }
             const defaults = await fetchJson(`${BASE}/defaults.json`).catch(() => null)
             if (defaults?.params && typeof defaults.params === 'object') store.defaults = { ...FALLBACK_DEFAULTS, ...defaults.params }
@@ -542,15 +645,18 @@ window.__ModuleLoader__.load({
             if (!store.activeId) store.activeId = FALLBACK_PRESET
             booted = true
             syncEnabled()
+            // Services keep activating after us: wait for the theme before publishing
+            // the glass, otherwise the overrides are lost for this whole page life.
+            await waitForService('theme')
+            applyGlass()
             const safeMode = await fetchJson(`${BASE}/safe-mode`).catch(() => ({ on: false }))
             if (safeMode?.on === true) {
               console.warn('[shadertoy-skin] safe mode: sidebar entry disabled ($DSH_HOME/shader-skin.safe exists)')
             } else if (ENABLE_SIDEBAR_ENTRY && booted) {
-              try { registerSidebar() } catch (error) { console.warn('[shadertoy-skin] sidebar registration skipped:', error) }
+              await waitForService('slots')
+              try { sidebarRegistered = registerSidebar() } catch (error) { console.warn('[shadertoy-skin] sidebar registration skipped:', error) }
             }
-            for (const delay of [300, 1200, 3000]) {
-              timers.push(setTimeout(() => { if (booted) applyGlass() }, delay))
-            }
+            scheduleVerify()
           })()
 
           return () => {
