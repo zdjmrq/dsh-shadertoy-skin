@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShaderToy 背景设置</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body {
+    font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #eef4f6;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; }
+
+  /* collapsed entry point */
+  .fab {
+    width: 44px; height: 44px; padding: 0; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(12,16,22,.62);
+    backdrop-filter: blur(14px) saturate(130%);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #9fb3bd;
+    transition: color .18s ease, border-color .18s ease, background .18s ease, transform .1s ease;
+  }
+  .fab:hover { color: #8fe9e4; border-color: rgba(143,233,228,.5); background: rgba(16,22,30,.75); }
+  .fab:active { transform: scale(.94); }
+  .fab[aria-expanded="true"] { color: #dafdfb; border-color: rgba(143,233,228,.55); background: rgba(143,233,228,.14); }
+  .fab svg { display: block; }
+
+  /* panel */
+  .panel {
+    width: 392px; box-sizing: border-box; padding: 16px 18px 14px;
+    border-radius: 18px; border: 1px solid rgba(255,255,255,.12);
+    background: rgba(10,14,20,.88);
+    backdrop-filter: blur(24px) saturate(140%);
+    box-shadow: 0 18px 50px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
+    display: none;
+  }
+  .panel.open { display: block; }
+  .panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .panel h1 { margin: 0; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,255,255,.62); font-weight: 500; }
+  .panel h1 b { color: #8fe9e4; font-weight: 600; }
+  .close { background: none; border: 0; color: rgba(255,255,255,.55); font-size: 18px; line-height: 1; cursor: pointer; padding: 3px 6px; border-radius: 6px; }
+  .close:hover { color: #fff; background: rgba(255,255,255,.08); }
+
+  .row { margin-top: 13px; }
+  .row:first-of-type { margin-top: 0; }
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .head label { font-size: 11px; letter-spacing: .08em; color: rgba(255,255,255,.72); }
+  .head output { font-size: 11px; color: #8fe9e4; font-variant-numeric: tabular-nums; }
+  .hint { margin-top: 5px; font-size: 10px; color: rgba(255,255,255,.42); }
+
+  input[type=range] { appearance: none; display: block; width: 100%; height: 16px; margin: 0; padding: 0; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: rgba(255,255,255,.2); }
+  input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5.5px; border: 0; border-radius: 50%; background: #8fe9e4; box-shadow: 0 0 10px rgba(143,233,228,.7); }
+  input[type=range]:focus-visible { outline: 2px solid rgba(143,233,228,.6); outline-offset: 3px; border-radius: 4px; }
+
+  select {
+    width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 9px;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06);
+    color: #eef4f6; font: inherit; cursor: pointer;
+  }
+  select:focus-visible { outline: 2px solid rgba(143,233,228,.6); outline-offset: 2px; }
+
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .switch input { width: 16px; height: 16px; margin: 0; accent-color: #8fe9e4; cursor: pointer; }
+  .disabled { opacity: .45; pointer-events: none; }
+
+  .footer { display: flex; gap: 8px; margin-top: 16px; }
+  .reset {
+    flex: 1; padding: 8px 0; border-radius: 9px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06);
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .reset:hover { background: rgba(143,233,228,.12); border-color: rgba(143,233,228,.4); }
+  .note { margin: 12px 0 0; font-size: 10px; line-height: 1.7; color: rgba(255,255,255,.42); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<button class="fab" id="fab" type="button" aria-label="Shader 背景设置" aria-expanded="false" aria-controls="panel">
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="M2 13.5c1.6-3 3.2-3 4.8 0s3.2 3 4.8 0 2.6-2.1 4.4-1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M2 16.5c1.6-2.4 3.2-2.4 4.8 0s3.2 2.4 4.8 0 2.6-1.7 4.4-.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
+    <circle cx="14.5" cy="5.5" r="1.6" fill="currentColor" opacity=".85"/>
+  </svg>
+</button>
+
+<section class="panel" id="panel" role="dialog" aria-modal="false" aria-label="Shader 背景设置">
+  <header>
+    <h1>Shader <b>·</b> 背景</h1>
+    <button class="close" id="close" type="button" aria-label="关闭">×</button>
+  </header>
+
+  <div class="row switch">
+    <label for="enabled">启用背景</label>
+    <input type="checkbox" id="enabled">
+  </div>
+
+  <div class="row">
+    <div class="head"><label for="preset">背景作品</label></div>
+    <select id="preset"></select>
+  </div>
+
+  <div class="row">
+    <div class="head"><label for="glass">玻璃不透明度</label><output id="glass-out" for="glass"></output></div>
+    <input type="range" id="glass" min="40" max="90" step="1">
+    <div class="hint">越高文字越清晰，越低背景越明显（40% 起，保证可读性）</div>
+  </div>
+
+  <div class="row">
+    <div class="head"><label for="blur">模糊</label><output id="blur-out" for="blur"></output></div>
+    <input type="range" id="blur" min="0" max="12" step="0.5">
+  </div>
+
+  <div class="row">
+    <div class="head"><label for="scale">渲染分辨率</label><output id="scale-out" for="scale"></output></div>
+    <select id="scale"></select>
+    <div class="hint" id="scale-hint"></div>
+  </div>
+
+  <div class="row">
+    <div class="head"><label for="fps">帧率上限</label><output id="fps-out" for="fps"></output></div>
+    <select id="fps"></select>
+    <div class="hint">聊天时 30fps 足够；60fps 更顺滑但更耗电</div>
+  </div>
+
+  <div class="row">
+    <div class="head"><label for="speed">播放速度</label><output id="speed-out" for="speed"></output></div>
+    <input type="range" id="speed" min="0" max="2" step="0.05">
+  </div>
+
+  <div class="row disabled" title="音频在 M2 实现">
+    <div class="head"><label for="volume">音量</label><output id="volume-out" for="volume"></output></div>
+    <input type="range" id="volume" min="0" max="100" step="1" disabled>
+    <div class="hint">带音乐的 ShaderToy 作品将在 M2 支持声音</div>
+  </div>
+
+  <div class="footer">
+    <button class="reset" id="reset" type="button">恢复默认</button>
+  </div>
+  <p class="note" id="note">改动即时生效并自动保存。</p>
+</section>
+
+<script>
+(() => {
+  'use strict'
+  const STANDALONE = window.parent === window
+  // `/shader-skin` in production; `?base=` lets the dev server drive the panel
+  // directly (its routes are mounted at the origin root).
+  const BASE = new URLSearchParams(location.search).get('base') ?? '/shader-skin'
+  const $ = id => document.getElementById(id)
+  const panel = $('panel')
+  const fab = $('fab')
+
+  const state = { version: 1, activeId: null, entries: [], params: {} }
+  let defaults = { params: { glass: 72, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: true }, limits: {} }
+  let manifest = []
+  let open = false
+  let saveTimer = 0
+
+  const clamp = (v, lo, hi, fb) => {
+    const n = Number(v)
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fb
+  }
+
+  async function fetchJson(url) {
+    const response = await fetch(url, { cache: 'no-store' })
+    if (!response.ok) throw new Error(`${response.status} ${url}`)
+    return response.json()
+  }
+
+  /** Effective rendering buffer size for the current scale, for the hint text. */
+  function bufferSize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    const w = Math.round(window.innerWidth * dpr * state.params.scale)
+    const h = Math.round(window.innerHeight * dpr * state.params.scale)
+    return `${w} × ${h}`
+  }
+
+  function merged() {
+    return { ...defaults.params, ...state.params }
+  }
+
+  // --- parent bridge -------------------------------------------------------
+  function toParent(message) {
+    if (STANDALONE) return
+    try { parent.postMessage(message, location.origin) } catch { /* parent gone */ }
+  }
+
+  function publish(kind) {
+    const params = merged()
+    toParent({ type: 'params', params })
+    if (kind === 'preset') toParent({ type: 'preset', id: state.activeId })
+    scheduleSave()
+  }
+
+  function scheduleSave() {
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      const body = JSON.stringify({
+        version: 1,
+        activeId: state.activeId,
+        entries: state.entries,
+        params: state.params,
+      })
+      fetch(`${BASE}/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body })
+        .then(response => {
+          $('note').textContent = response.ok ? '改动即时生效并已保存。' : `保存失败（HTTP ${response.status}）`
+        })
+        .catch(() => { $('note').textContent = '保存失败：Host 路由不可用。' })
+    }, 320)
+  }
+
+  // --- layout: the parent sizes the iframe to our content ------------------
+  function reportSize() {
+    const rect = open ? panel.getBoundingClientRect() : fab.getBoundingClientRect()
+    toParent({ type: 'resize', w: Math.ceil(rect.width), h: Math.ceil(rect.height) })
+    // a standalone window has no parent to size it; keep the viewport usable
+    if (STANDALONE) {
+      document.body.style.width = `${Math.ceil(rect.width)}px`
+      document.body.style.height = `${Math.ceil(rect.height)}px`
+    }
+  }
+
+  function setOpen(next) {
+    open = next
+    panel.classList.toggle('open', next)
+    fab.setAttribute('aria-expanded', String(next))
+    fab.style.display = next ? 'none' : 'flex'
+    if (next) panel.querySelector('select')?.focus()
+    requestAnimationFrame(reportSize)
+  }
+
+  // --- render --------------------------------------------------------------
+  function fillSelects() {
+    const scaleValues = defaults.limits.scale?.values ?? [0.5, 0.75, 1, 1.25, 1.5]
+    $('scale').replaceChildren(...scaleValues.map(value => {
+      const option = document.createElement('option')
+      option.value = String(value)
+      option.textContent = value === 1 ? '1×（原生）' : `${value}×`
+      return option
+    }))
+    const fpsValues = defaults.limits.fps?.values ?? [15, 20, 30, 60]
+    $('fps').replaceChildren(...fpsValues.map(value => {
+      const option = document.createElement('option')
+      option.value = String(value)
+      option.textContent = `${value} fps`
+      return option
+    }))
+    $('preset').replaceChildren(...manifest.map(item => {
+      const option = document.createElement('option')
+      option.value = item.id
+      option.textContent = item.name || item.id
+      return option
+    }))
+  }
+
+  function sync() {
+    const p = merged()
+    $('enabled').checked = p.enabled !== false
+    $('glass').value = String(p.glass)
+    $('glass-out').textContent = `${Math.round(p.glass)}%`
+    $('blur').value = String(p.blur)
+    $('blur-out').textContent = p.blur > 0 ? `${p.blur} px` : '关'
+    $('scale').value = String(p.scale)
+    $('scale-out').textContent = `${p.scale}×`
+    $('scale-hint').textContent = `实际渲染缓冲：${bufferSize()}（DPR ≤ 1.5）`
+    $('fps').value = String(p.fps)
+    $('fps-out').textContent = `${p.fps} fps`
+    $('speed').value = String(p.speed)
+    $('speed-out').textContent = `${Number(p.speed).toFixed(2)}×`
+    $('volume').value = String(p.volume)
+    $('volume-out').textContent = p.muted ? '静音' : `${Math.round(p.volume)}%`
+    if (state.activeId) $('preset').value = state.activeId
+  }
+
+  function bind() {
+    const setParam = (key, value) => {
+      state.params = { ...state.params, [key]: value }
+      sync()
+      publish()
+    }
+    $('fab').addEventListener('click', () => setOpen(true))
+    $('close').addEventListener('click', () => setOpen(false))
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false) }
+    })
+    $('enabled').addEventListener('change', event => setParam('enabled', event.target.checked))
+    $('glass').addEventListener('input', event => setParam('glass', clamp(event.target.value, 40, 90, 72)))
+    $('blur').addEventListener('input', event => setParam('blur', clamp(event.target.value, 0, 12, 0)))
+    $('scale').addEventListener('change', event => setParam('scale', Number(event.target.value)))
+    $('fps').addEventListener('change', event => setParam('fps', Number(event.target.value)))
+    $('speed').addEventListener('input', event => setParam('speed', clamp(event.target.value, 0, 2, 1)))
+    $('volume').addEventListener('input', event => setParam('volume', clamp(event.target.value, 0, 100, 60)))
+    $('preset').addEventListener('change', event => {
+      state.activeId = event.target.value
+      publish('preset')
+    })
+    $('reset').addEventListener('click', () => {
+      state.params = {}
+      state.activeId = manifest[0]?.id ?? state.activeId
+      sync()
+      publish('preset')
+    })
+    window.addEventListener('resize', () => { sync(); reportSize() })
+  }
+
+  async function boot() {
+    try {
+      defaults = await fetchJson('defaults.json')
+    } catch { /* keep built-in defaults */ }
+    try {
+      manifest = await fetchJson(`${BASE}/presets/index.json`)
+    } catch { manifest = [] }
+    manifest = Array.isArray(manifest) ? manifest : []
+    if (manifest.length === 0) {
+      // standalone/dev fallback so the panel is still usable
+      manifest = [{ id: 'aurora', name: '极光（自写）' }, { id: 'flow', name: '流体色带（自写）' }]
+    }
+    if (!STANDALONE) {
+      try {
+        const remote = await fetchJson(`${BASE}/state`)
+        state.entries = Array.isArray(remote.entries) ? remote.entries : []
+        state.params = remote.params && typeof remote.params === 'object' ? remote.params : {}
+        state.activeId = typeof remote.activeId === 'string' ? remote.activeId : null
+      } catch { /* first run: defaults */ }
+    }
+    if (!state.activeId) state.activeId = manifest[0]?.id ?? 'aurora'
+    fillSelects()
+    bind()
+    sync()
+    if (STANDALONE) setOpen(true)
+    else {
+      setOpen(false)
+      toParent({ type: 'ready' })
+    }
+  }
+
+  boot()
+})()
+</script>
+</body>
+</html>

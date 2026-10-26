@@ -1,0 +1,6 @@
+# DeepSeek Harness bundle layer.
+# Installing this package adds the shadertoy-skin Host/Client rows without
+# modifying the Harness checkout.
+- insert:
+    - id: shadertoy-skin
+      name: dsh-shadertoy-skin

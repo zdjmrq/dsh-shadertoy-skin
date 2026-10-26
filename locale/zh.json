@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ShaderToy 背景",
+    "description": "在 Web UI 背后实时渲染 ShaderToy 着色器，界面半透明，可调节玻璃不透明度、模糊、缩放、速度与音量。"
+  }
+}

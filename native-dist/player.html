@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ShaderSkin Player</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #c { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
+  #err {
+    position: fixed; inset: 0; margin: 0; padding: 18px 20px; overflow: auto;
+    background: rgba(12, 15, 20, .94); color: #ffb4a8;
+    font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, "Cascadia Mono", monospace;
+    white-space: pre-wrap; display: none;
+  }
+  #err.open { display: block; }
+  #err b { color: #ff7b6b; }
+  #diag { display: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<pre id="err"></pre>
+<pre id="diag"></pre>
+<script>
+/* ShaderSkin player — zero-dependency WebGL2 ShaderToy-compatible runtime (M0).
+ * Runs standalone (dev) or inside the skin iframe (parent = plugin client half).
+ * Protocol (postMessage, same origin only):
+ *   in : {type:'init', preset:{id,name,image}} | {type:'params', params} | {type:'mouse', mouse:[x,y,z,w]}
+ *        {type:'theme', dark:boolean} | {type:'pause', paused:boolean} | {type:'reset'}
+ *   out: {type:'ready', preset, es3} | {type:'error', stage, log} | {type:'stats', fps, ms, w, h}
+ *        {type:'diag', text}
+ */
+(() => {
+  'use strict'
+
+  const canvas = document.getElementById('c')
+  const errBox = document.getElementById('err')
+  const diagBox = document.getElementById('diag')
+  const q = new URLSearchParams(location.search)
+  const DEBUG_BG = q.get('debug') === 'bg'
+  const STANDALONE = window.parent === window
+  const PRESET = q.get('preset') || 'aurora'
+  const EMBEDDED_FALLBACK = `void mainImage(out vec4 o, in vec2 p){
+  vec2 uv = p / iResolution.xy;
+  o = vec4(0.04 + 0.06*sin(uv.x*6.0 + iTime), 0.06 + 0.05*cos(uv.y*5.0 - iTime*0.7), 0.10, 1.0);
+}`
+
+  // ---------- params (client half sends these; standalone defaults are for preview)
+
+  const params = {
+    speed: 1,      // 0..2   time multiplier
+    scale: 1,      // 0.5..2 render resolution multiplier
+    blur: 0,       // 0..12  css blur px (only applied when > 0)
+    fps: 30,       // 15..120 render-loop cap (battery vs smoothness)
+    dim: 0.55,     // 0..1   brightness multiplier (readability)
+    tintMix: 0,    // 0..1   mix toward tint colour
+    tint: '#ececec',
+    paused: false,
+  }
+  const TINT = [0.925, 0.925, 0.925]
+
+  function clamp(v, lo, hi, fallback) {
+    const n = Number(v)
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback
+  }
+
+  function applyParams(next) {
+    if (!next || typeof next !== 'object') return
+    if ('speed' in next) params.speed = clamp(next.speed, 0, 2, 1)
+    if ('scale' in next) params.scale = clamp(next.scale, 0.5, 2, 1)
+    if ('blur' in next) params.blur = clamp(next.blur, 0, 12, 0)
+    if ('fps' in next) params.fps = clamp(next.fps, 1, 120, 30)
+    if ('dim' in next) params.dim = clamp(next.dim, 0, 1, 0.55)
+    if ('tintMix' in next) params.tintMix = clamp(next.tintMix, 0, 1, 0)
+    if (typeof next.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(next.tint)) params.tint = next.tint
+    if (typeof next.paused === 'boolean') params.paused = next.paused
+    frameInterval = 1000 / Math.max(1, params.fps)
+    canvas.style.filter = params.blur > 0 ? `blur(${params.blur.toFixed(2)}px)` : ''
+    if (params.blur > 0) canvas.style.willChange = 'filter'
+    else canvas.style.removeProperty('will-change')
+    for (let i = 0; i < 3; i++) TINT[i] = parseInt(params.tint.slice(1 + i * 2, 3 + i * 2), 16) / 255
+    resize()
+  }
+
+  // ---------- diagnostics
+
+  const diag = { stage: 'boot', note: '', gl: 'none', preset: PRESET, es3: null, w: 0, h: 0, frames: 0, fps: 0 }
+  function line() {
+    const mode = DEBUG_BG ? 'debug-bg' : (program ? 'running' : 'idle')
+    const note = diag.note ? ` · ${diag.note}` : ''
+    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · shader=${diag.preset}${note}`
+  }
+  function refreshDiag() {
+    diagBox.textContent = line()
+    document.title = line().slice(0, 120)
+  }
+  function report(text) {
+    diag.note = text
+    refreshDiag()
+    post({ type: 'diag', text })
+  }
+  const STAGE_TITLES = {
+    context: 'WebGL2 不可用',
+    compile: '着色器编译失败',
+    preset: '背景加载失败',
+    init: '初始化失败',
+  }
+  function fail(stage, log) {
+    diag.stage = stage
+    const text = `[shader-skin] ${stage} failed\n${log}`
+    errBox.innerHTML = ''
+    const head = document.createElement('b')
+    head.textContent = `${STAGE_TITLES[stage] || stage}\n`
+    errBox.append(head, document.createTextNode(log))
+    errBox.classList.add('open')
+    report(text)
+    post({ type: 'error', stage, log })
+  }
+  function post(message) {
+    if (STANDALONE) return
+    try { parent.postMessage(message, location.origin) } catch { /* parent gone */ }
+  }
+
+  // ---------- GL setup
+
+  const gl = canvas.getContext('webgl2', {
+    alpha: false, antialias: false, depth: false, stencil: false,
+    preserveDrawingBuffer: false, powerPreference: 'low-power', failIfMajorPerformanceCaveat: false,
+  })
+  if (!gl) { diag.gl = 'none'; fail('context', 'getContext("webgl2") 返回 null。请确认显卡驱动 / 是否被远程桌面禁用。'); return }
+  diag.gl = 'webgl2'
+
+  const VBO = gl.createBuffer()
+  gl.bindBuffer(gl.ARRAY_BUFFER, VBO)
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
+  const blackTex = gl.createTexture()
+  gl.bindTexture(gl.TEXTURE_2D, blackTex)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]))
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+  // ---------- GLSL preprocessing
+
+  const UNIFORMS = [
+    ['vec3', 'iResolution'], ['float', 'iTime'], ['float', 'iTimeDelta'], ['int', 'iFrame'],
+    ['vec4', 'iMouse'], ['vec4', 'iDate'], ['float', 'iSampleRate'],
+    ['sampler2D', 'iChannel0'], ['sampler2D', 'iChannel1'], ['sampler2D', 'iChannel2'], ['sampler2D', 'iChannel3'],
+    ['float', 'iChannelTime[4]'], ['vec3', 'iChannelResolution[4]'],
+  ]
+  const OWN_UNIFORMS = [['float', 'uDim'], ['vec3', 'uTint'], ['float', 'uTintMix']]
+  const KNOWN_EXTENSIONS = /^(GL_OES_standard_derivatives|GL_EXT_shader_texture_lod|GL_EXT_frag_depth|GL_EXT_shadow_samplers|GL_OES_EGL_image_external_essl3)$/
+
+  function stripComments(src) {
+    return src.replace(/\/\*[\s\S]*?\*\//g, block => block.replace(/[^\n]/g, ' ')).replace(/\/\/[^\n]*/g, '')
+  }
+
+  // Split off directives that must live in the header; keep line count stable for error mapping.
+  function splitDirectives(src) {
+    const kept = []
+    const lines = src.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const t = lines[i].trim()
+      if (/^#\s*version\b/.test(t)) { lines[i] = ''; continue }
+      if (/^#\s*line\b/.test(t)) { lines[i] = ''; continue }
+      const m = /^#\s*extension\s+([A-Za-z0-9_]+)\s*:\s*([A-Za-z0-9_]+)/.exec(t)
+      if (m) {
+        if (!KNOWN_EXTENSIONS.test(m[1])) kept.push(`#extension ${m[1]} : ${m[2]}`)
+        lines[i] = ''
+      }
+    }
+    return { body: lines.join('\n'), extensions: kept }
+  }
+
+  function rewriteLegacyEs3(src) {
+    return src
+      .replace(/\btexture2DProjLodEXT\b/g, 'textureProjLod')
+      .replace(/\btexture2DProjGradEXT\b/g, 'textureProjGrad')
+      .replace(/\btexture2DProj\b/g, 'textureProj')
+      .replace(/\btexture2DLodEXT\b/g, 'textureLod')
+      .replace(/\btexture2DGradEXT\b/g, 'textureGrad')
+      .replace(/\btexture2DLod\b/g, 'textureLod')
+      .replace(/\btexture2DGrad\b/g, 'textureGrad')
+      .replace(/\btexture2D\b/g, 'texture')
+      .replace(/\btextureCubeLodEXT\b/g, 'textureLod')
+      .replace(/\btextureCubeLod\b/g, 'textureLod')
+      .replace(/\btextureCube\b/g, 'texture')
+      .replace(/\bvarying\b/g, 'in')
+      .replace(/\bgl_FragColor\b/g, 'st_out')
+  }
+
+  /** Build a compilable fragment shader from ShaderToy-style source. */
+  function assemble(rawSrc, es3, skip) {
+    const { body, extensions } = splitDirectives(rawSrc)
+    const rewritten = es3 ? rewriteLegacyEs3(body) : body
+    const analysis = stripComments(rewritten)
+
+    const defines = new Set()
+    for (const m of analysis.matchAll(/#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)/g)) defines.add(m[1])
+
+    const has = name => new RegExp(`uniform\\s+[A-Za-z0-9_]+\\s+${name.replace(/\[.*$/, '')}\\b`).test(analysis)
+
+    const header = []
+    if (es3) header.push('#version 300 es')
+    for (const ext of extensions) header.push(ext)
+    header.push('precision highp float;', 'precision highp int;')
+    if (es3) header.push('out vec4 st_out;')
+    for (const [type, name] of UNIFORMS) {
+      const base = name.replace(/\[.*$/, '')
+      if (has(name) || defines.has(base) || skip.has(name)) continue
+      header.push(`uniform ${type} ${name};`)
+    }
+    for (const [type, name] of OWN_UNIFORMS) header.push(`uniform ${type} ${name};`)
+
+    const hasMainImage = /\bmainImage\s*\(/.test(analysis)
+    const tail = []
+    if (hasMainImage) {
+      const target = es3 ? 'st_out' : 'gl_FragColor'
+      tail.push(
+        `void main(){`,
+        `  vec4 c = vec4(0.0, 0.0, 0.0, 1.0);`,
+        `  mainImage(c, gl_FragCoord.xy);`,
+        `  c.rgb = mix(clamp(c.rgb, 0.0, 1.0) * uDim, uTint, uTintMix);`,
+        `  ${target} = c;`,
+        `}`,
+      )
+    }
+    const source = `${header.join('\n')}\n${rewritten}\n${tail.join('\n')}`
+    return { source, headerLineCount: header.length }
+  }
+
+  const VS_ES3 = `#version 300 es\nin vec2 aPos;\nvoid main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`
+  const VS_ES1 = `attribute vec2 aPos;\nvoid main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`
+
+  function compileShader(type, source) {
+    const sh = gl.createShader(type)
+    gl.shaderSource(sh, source)
+    gl.compileShader(sh)
+    if (gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return { shader: sh }
+    const log = gl.getShaderInfoLog(sh) || 'unknown compile error'
+    gl.deleteShader(sh)
+    return { error: log }
+  }
+
+  function tryLink(fragSource, es3) {
+    const fs = compileShader(gl.FRAGMENT_SHADER, fragSource)
+    if (fs.error) return { error: fs.error }
+    const vs = compileShader(gl.VERTEX_SHADER, es3 ? VS_ES3 : VS_ES1)
+    if (vs.error) { gl.deleteShader(fs.shader); return { error: vs.error } }
+    const prog = gl.createProgram()
+    gl.attachShader(prog, vs.shader)
+    gl.attachShader(prog, fs.shader)
+    gl.bindAttribLocation(prog, 0, 'aPos')
+    gl.linkProgram(prog)
+    gl.deleteShader(vs.shader)
+    gl.deleteShader(fs.shader)
+    if (gl.getProgramParameter(prog, gl.LINK_STATUS)) return { program: prog, es3 }
+    const log = gl.getProgramInfoLog(prog) || 'unknown link error'
+    gl.deleteProgram(prog)
+    return { error: log }
+  }
+
+  function remapLog(log, headerLineCount) {
+    return String(log).split('\n').map(line =>
+      line.replace(/(\d+):(\d+)/g, (all, col, lineNo) => {
+        const n = Number(lineNo) - headerLineCount
+        return n >= 1 ? `${col}:${n}` : `${col}:${lineNo}-header`
+      }),
+    ).join('\n').trim()
+  }
+
+  let program = null
+  let es3 = true
+  let locs = Object.create(null)
+
+  function buildProgram(rawSrc) {
+    const skip = new Set()
+    let lastError = ''
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { source, headerLineCount } = assemble(rawSrc, true, skip)
+      const result = tryLink(source, true)
+      if (result.program) return { program: result.program, es3: true, source }
+      lastError = remapLog(result.error, headerLineCount)
+      const redef = /redefinition of '([A-Za-z_][A-Za-z0-9_]*)'/.exec(result.error)
+      if (redef && !skip.has(redef[1])) {
+        const name = UNIFORMS.find(([, n]) => n.replace(/\[.*$/, '') === redef[1])
+        if (name) { skip.add(name[1]); continue }
+      }
+      break
+    }
+    // Fallback: plain GLSL ES 1.00 (WebGL2 accepts both), original syntax untouched.
+    if (q.get('noes1') === '1') return { error: lastError || 'unknown shader error' }
+    const { source, headerLineCount } = assemble(rawSrc, false, new Set())
+    const result = tryLink(source, false)
+    if (result.program) return { program: result.program, es3: false, source, note: 'es1-fallback' }
+    const es1Error = remapLog(result.error, headerLineCount)
+    return { error: lastError ? `[ES3]\n${lastError}\n\n[ES1]\n${es1Error}` : es1Error }
+  }
+
+  function collectLocations() {
+    locs = Object.create(null)
+    if (!program) return
+    for (const [, name] of [...UNIFORMS, ...OWN_UNIFORMS]) {
+      const loc = gl.getUniformLocation(program, /\[/.test(name) ? `${name.replace(/\[.*$/, '')}[0]` : name)
+      if (loc) locs[name] = loc
+    }
+  }
+
+  function set1(name, v) { const l = locs[name]; if (l) gl.uniform1f(l, v) }
+  function set1i(name, v) { const l = locs[name]; if (l) gl.uniform1i(l, v) }
+  function set2(name, a, b) { const l = locs[name]; if (l) gl.uniform2f(l, a, b) }
+  function set3(name, a, b, c) { const l = locs[name]; if (l) gl.uniform3f(l, a, b, c) }
+  function set4(name, a, b, c, d) { const l = locs[name]; if (l) gl.uniform4f(l, a, b, c, d) }
+
+  // ---------- state
+
+  const state = { time: 0, dt: 0, frame: 0, last: 0, drawMs: 0, fps: 0, fpsAcc: 0, fpsFrames: 0, ready: false }
+  const mouse = { x: 0, y: 0, cx: 0, cy: 0, down: false, anchorX: 0, anchorY: 0 }
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+    const w = Math.max(1, Math.round((canvas.clientWidth || window.innerWidth) * dpr * params.scale))
+    const h = Math.max(1, Math.round((canvas.clientHeight || window.innerHeight) * dpr * params.scale))
+    if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h }
+    diag.w = canvas.width
+    diag.h = canvas.height
+  }
+
+  function nowDate() {
+    const d = new Date()
+    return [
+      d.getFullYear(), d.getMonth(), d.getDate(),
+      d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000,
+    ]
+  }
+
+  function draw() {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.viewport(0, 0, canvas.width, canvas.height)
+    if (DEBUG_BG) {
+      gl.clearColor(1, 0, 1, 1)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      return
+    }
+    if (!program) return
+    const t0 = performance.now()
+    gl.useProgram(program)
+    gl.bindBuffer(gl.ARRAY_BUFFER, VBO)
+    gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+    for (let i = 0; i < 4; i++) {
+      gl.activeTexture(gl.TEXTURE0 + i)
+      gl.bindTexture(gl.TEXTURE_2D, blackTex)
+    }
+    set3('iResolution', canvas.width, canvas.height, 1)
+    set1('iTime', state.time)
+    set1('iTimeDelta', state.dt)
+    set1i('iFrame', state.frame)
+    for (let i = 0; i < 4; i++) set1i(`iChannel${i}`, i)
+    const mx = mouse.x, my = mouse.y
+    set4('iMouse',
+      mx, my,
+      mouse.down ? mouse.anchorX : -Math.abs(mouse.anchorX),
+      mouse.down ? mouse.anchorY : -Math.abs(mouse.anchorY))
+    const date = nowDate()
+    set4('iDate', date[0], date[1], date[2], date[3])
+    set1('iSampleRate', 44100)
+    const chRes = new Float32Array(12)
+    const chTime = new Float32Array(4)
+    if (locs['iChannelResolution[4]']) gl.uniform3fv(locs['iChannelResolution[4]'], chRes)
+    if (locs['iChannelTime[4]']) gl.uniform1fv(locs['iChannelTime[4]'], chTime)
+    set1('uDim', params.dim)
+    set3('uTint', TINT[0], TINT[1], TINT[2])
+    set1('uTintMix', params.tintMix)
+    gl.drawArrays(gl.TRIANGLES, 0, 3)
+    state.drawMs = state.drawMs * 0.9 + (performance.now() - t0) * 0.1
+  }
+
+  let frameInterval = 1000 / Math.max(1, params.fps)
+  let lastFrameStamp = 0
+
+  function frame(now) {
+    requestAnimationFrame(frame)
+    if (params.paused || document.hidden) { state.last = now; return }
+    if (now - lastFrameStamp < frameInterval - 1) return
+    const dt = state.last ? Math.min((now - state.last) / 1000, 0.1) : 0
+    lastFrameStamp = now
+    state.last = now
+    state.dt = dt
+    state.time += dt * Math.max(params.speed, 0)
+    draw()
+    state.frame++
+    diag.frames = state.frame
+    state.fpsFrames++
+    state.fpsAcc += dt
+    if (state.fpsAcc >= 0.5) {
+      state.fps = Math.round(state.fpsFrames / state.fpsAcc)
+      state.fpsAcc = 0
+      state.fpsFrames = 0
+      diag.fps = state.fps
+      refreshDiag()
+      if (state.ready) post({ type: 'stats', fps: state.fps, ms: Math.round(state.drawMs * 100) / 100, w: canvas.width, h: canvas.height })
+    }
+    if (!state.ready && program) {
+      state.ready = true
+      post({ type: 'ready', preset: diag.preset, es3 })
+    }
+  }
+
+  // ---------- shader loading
+
+  function setShader(source, presetName) {
+    const built = buildProgram(source)
+    if (!built.program) {
+      program = null
+      fail('compile', built.error)
+      return false
+    }
+    if (program) gl.deleteProgram(program)
+    program = built.program
+    es3 = built.es3
+    diag.es3 = es3
+    diag.preset = presetName || diag.preset
+    diag.stage = 'running'
+    errBox.classList.remove('open')
+    errBox.textContent = ''
+    state.time = 0
+    state.frame = 0
+    state.ready = false
+    collectLocations()
+    report(`running · ${es3 ? 'es3' : 'es1'} · shader=${diag.preset}`)
+    return true
+  }
+
+  async function fetchText(url) {
+    const response = await fetch(url, { cache: 'no-store' })
+    if (!response.ok) throw new Error(`${response.status} ${url}`)
+    return response.text()
+  }
+
+  async function loadPreset(id) {
+    let list = []
+    try { list = await (await fetch('presets/index.json', { cache: 'no-store' })).json() } catch { /* manifest optional */ }
+    const hit = Array.isArray(list) ? list.find(item => item.id === id) : undefined
+    if (hit) return { entry: hit, source: await fetchText(`presets/${hit.file}`) }
+    // unknown id: try presets/<id>.glsl directly (dev fixtures), otherwise the first manifest entry
+    try { return { entry: { id, name: id }, source: await fetchText(`presets/${id}.glsl`) } } catch { /* not a fixture */ }
+    const first = Array.isArray(list) ? list[0] : undefined
+    if (first) throw new Error(`preset "${id}" not found (manifest has ${list.length} entries)`)
+    throw new Error(`preset "${id}" not found and presets/index.json is unavailable`)
+  }
+
+  // ---------- events
+
+  function toPixels(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect()
+    const sx = canvas.width / Math.max(rect.width, 1)
+    const sy = canvas.height / Math.max(rect.height, 1)
+    return [clientX * sx, (rect.height - (clientY - rect.top)) * sy]
+  }
+
+  function bindPointer() {
+    const move = event => {
+      const [x, y] = toPixels(event.clientX, event.clientY)
+      mouse.x = x; mouse.y = y
+      if (mouse.down) { mouse.anchorX = x; mouse.anchorY = y }
+    }
+    window.addEventListener('pointermove', move, { passive: true })
+    window.addEventListener('pointerdown', event => {
+      const [x, y] = toPixels(event.clientX, event.clientY)
+      mouse.x = x; mouse.y = y; mouse.anchorX = x; mouse.anchorY = y; mouse.down = true
+    }, { passive: true })
+    window.addEventListener('pointerup', () => { mouse.down = false }, { passive: true })
+    window.addEventListener('pointercancel', () => { mouse.down = false }, { passive: true })
+    window.addEventListener('blur', () => { mouse.down = false })
+  }
+
+  window.addEventListener('resize', resize)
+  if (typeof ResizeObserver === 'function') new ResizeObserver(resize).observe(document.body)
+  document.addEventListener('visibilitychange', () => { state.last = 0 })
+
+  if (!STANDALONE) {
+    window.addEventListener('message', event => {
+      if (event.origin !== location.origin) return
+      const message = event.data
+      if (!message || typeof message !== 'object') return
+      switch (message.type) {
+        case 'init':
+          if (message.preset) {
+            const image = message.preset.image ?? message.preset.code?.image
+            if (typeof image === 'string' && image.trim()) setShader(image, message.preset.name || message.preset.id)
+            else fail('init', 'init 消息里没有 image 代码')
+          }
+          if (message.params) applyParams(message.params)
+          break
+        case 'params': applyParams(message.params); break
+        case 'mouse':
+          if (Array.isArray(message.mouse) && message.mouse.length === 4) {
+            // parent sends CSS-pixel viewport coords (origin bottom-left); scale to the drawing buffer
+            const sx = canvas.width / Math.max(window.innerWidth, 1)
+            const sy = canvas.height / Math.max(window.innerHeight, 1)
+            mouse.x = (Number(message.mouse[0]) || 0) * sx
+            mouse.y = (Number(message.mouse[1]) || 0) * sy
+            mouse.down = Number(message.mouse[2]) > 0
+            mouse.anchorX = Math.abs(Number(message.mouse[2])) * sx || 0
+            mouse.anchorY = Math.abs(Number(message.mouse[3])) * sy || 0
+          }
+          break
+        case 'theme':
+          if (message.dark === false) { params.dim = 0.72; params.tintMix = 0.62 }
+          else { params.dim = 0.55; params.tintMix = 0 }
+          break
+        case 'pause': params.paused = Boolean(message.paused); break
+        case 'reset': state.time = 0; state.frame = 0; break
+        default: break
+      }
+    })
+  } else {
+    bindPointer()
+  }
+
+  // ---------- boot
+
+  // dev conveniences: ?dim= .9 &scale= .75 &speed= .5 &blur= 4 &fps= 60 &tintMix= .3
+  const overrides = {}
+  for (const key of ['dim', 'scale', 'speed', 'blur', 'fps', 'tintMix']) {
+    if (q.has(key)) overrides[key] = Number(q.get(key))
+  }
+  applyParams(params)
+  applyParams(overrides)
+  resize()
+  report('boot · gl=webgl2')
+
+  if (DEBUG_BG) {
+    requestAnimationFrame(frame)
+    return
+  }
+
+  if (STANDALONE) {
+    loadPreset(PRESET)
+      .then(({ entry, source }) => setShader(source, entry.name || entry.id))
+      .catch(error => {
+        const message = error && error.message ? error.message : String(error)
+        setShader(EMBEDDED_FALLBACK, 'embedded-fallback')
+        fail('preset', `${message}\n\n已回退到内置占位 shader。`)
+      })
+  } else {
+    report('boot · waiting for parent init')
+  }
+
+  requestAnimationFrame(frame)
+})()
+</script>
+</body>
+</html>

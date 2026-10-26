@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ShaderToy Background",
+    "description": "Renders a realtime ShaderToy shader behind the Web UI with a translucent glass shell and adjustable opacity, blur, scale, speed and volume."
+  }
+}

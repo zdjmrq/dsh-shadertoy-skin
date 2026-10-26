@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+
+# user-imported assets (never committed, never published)
+native-dist/presets/local/
+*.tmp
+
+# local state / scratch
+.env
+.env.*
+.DS_Store
+Thumbs.db
+*.log
+
+# tooling output
+coverage/
+test-results/
+playwright-report/

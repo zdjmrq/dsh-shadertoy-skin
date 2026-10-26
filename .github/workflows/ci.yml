@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: bundle checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Syntax check
+        run: |
+          node --check index.js
+          node --check client.js
+          node --check tools/check-bundle.mjs
+          node --check tools/host-route-test.mjs
+          node --check tools/renderer-smoke.mjs
+          node --check tools/dev-server.mjs
+      - name: Bundle checks (manifest, files, licence hygiene, npm pack content)
+        run: npm run check
+      - name: Host half route tests
+        run: npm run test:host
+
+  renderer:
+    name: renderer smoke (real WebGL2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install dev dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Renderer smoke test
+        run: npm run test:renderer
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-smoke-artifacts
+          path: |
+            test-results/
+          if-no-files-found: ignore

@@ -1,0 +1,61 @@
+name: Publish
+
+# Publishes to npm via OIDC trusted publishing (no long-lived token).
+# Before the first run, configure the trusted publisher on npmjs.com:
+#   Packages -> dsh-shadertoy-skin -> Settings -> Trusted publishing
+#     Provider:            GitHub Actions
+#     Organization or user: <owner>
+#     Repository:          <repo>
+#     Workflow filename:   publish.yml
+#     Allowed actions:     allow "npm publish"
+# See docs/PUBLISHING.md for the full runbook and the caveats.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for npm trusted publishing / provenance
+
+jobs:
+  publish:
+    name: npm publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Verify toolchain supports trusted publishing
+        run: |
+          node --version
+          npm --version
+          node -e "const [a,b]=require('child_process').execSync('npm --version').toString().trim().split('.').map(Number); if (a<11||(a===11&&b<5)) { console.error('npm >= 11.5.1 required'); process.exit(1) }"
+
+      - name: Verify release tag matches package version
+        if: github.event_name == 'release'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="${{ github.event.release.tag_name }}"
+          if [ "v$VERSION" != "$TAG" ]; then
+            echo "package.json version $VERSION does not match release tag $TAG"
+            exit 1
+          fi
+          echo "publishing $VERSION"
+
+      - name: Install dev dependencies
+        run: npm ci
+
+      - name: Bundle checks
+        run: npm run check
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          # Deliberately no NODE_AUTH_TOKEN: OIDC is the only credential.
+          NPM_CONFIG_PROVENANCE: 'true'
