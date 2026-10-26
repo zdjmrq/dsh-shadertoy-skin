@@ -31,6 +31,65 @@ npm 包名**没有 scope、也不带作者用户名**：不是 `@zdjmrq/dsh-shad
 npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 ```
 
+## 从 ShaderToy 装一个作品
+
+插件自带三个 MIT 自写着色器，但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
+
+> **推荐一试**：[`shadertoy.com/view/4dfXWj`](https://www.shadertoy.com/view/4dfXWj) —— 装进来效果挺带感，导入方式见下面任意一种。
+> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0），装在本机自己玩没问题，但别把作品代码提交进仓库或随包再分发。
+
+### 1. 粘贴代码（最稳，不用抓网页）
+
+1. 打开作品页 `https://www.shadertoy.com/view/xxxxxxxx`，右上角 **Shader** 页签；
+2. 全选 `Image` 页签里的代码（如果作品用了 `Common`，把 Common 里的函数一起复制到开头；用了 Buffer 的作品暂不支持）；
+3. 回到插件设置页 → **背景库** → 「粘贴 ShaderToy 代码」→ 填名字 → 粘进 `Image 代码` → **加入背景库**；
+4. 列表里点 **使用** 即可，参数会即时生效。
+
+带声音的作品（代码里有 `mainSound`）把声音代码粘进 `Sound 代码`，切到它时会出声。声音签名支持这四种：
+
+```glsl
+vec2  mainSound(float time)            // 立体声
+float mainSound(float time)            // 单声道（自动复制到左右）
+vec2  mainSound(int samp, float time)  // 带采样序号
+float mainSound(int samp, float time)  // 单声道 + 采样序号
+```
+
+如果出声被浏览器拦住，点一下界面任意位置即可解锁（面板音量那一行也会提示）。
+
+### 2. 让 AI 帮你装（一条指令，把网址填进去就行）
+
+复制下面这段，把第一行的网址换成你要的作品链接，发给 DeepSeek Harness（或任何能操作文件的 AI）：
+
+```text
+帮我给 DeepSeek Harness 装一个 ShaderToy 背景皮肤。
+
+插件：dsh-shadertoy-skin（npm 包名就是 dsh-shadertoy-skin，GitHub: https://github.com/zdjmrq/dsh-shadertoy-skin）
+如果还没装：桌面版走「插件 → 添加插件 → 填 dsh-shadertoy-skin → 装完完全退出并重启客户端」；命令行用 dsh plugin --profile desktop add dsh-shadertoy-skin。
+
+要装的作品链接：<把你复制的 https://www.shadertoy.com/view/xxxxxxxx 粘在这里>
+
+做法：
+1. 打开上面的链接，拿到 Image pass 的 GLSL（若用了 Common，把 Common 的函数一起带上），以及可选的 mainSound。
+2. 打开插件设置页（左栏「Shader 背景」）→ 背景库 → 「粘贴 ShaderToy 代码」：名字用作品名，Image 粘主代码，Sound 可空。
+3. 导入后把它设为当前背景，确认背景真的渲染出来（不是黑屏、不是编译报错）；若报编译错误，按错误行号修好再试。
+4. 如果页面抓不到代码（反爬/需要登录/只给 WebGL 不给源码），直接让我手动复制粘贴，不要猜代码。
+5. 该作品的许可由原作者决定（ShaderToy 默认 CC BY-NC-SA 3.0）：只装在本机，不要提交进 git、不要随包发布。
+
+装好后告诉我：装的是哪个作品、是否带声音、需不需要我调亮度/玻璃。
+```
+
+> AI 抓不到 ShaderToy 页面时（它经常挡爬虫），就走上面第 1 种的「手动粘贴」——一样能装好，而且不会有许可证问题。
+
+### 3. 从本地目录导入（批量最方便）
+
+把 `ShaderToy 导出的 JSON`、或直接是 `.glsl` / `.txt` 的代码文件放进：
+
+```
+$DSH_HOME/shader-skin/presets/        （Windows 默认 C:\Users\<你>\.dsh\shader-skin\presets\）
+```
+
+设置页 → 背景库 → 「从本地目录导入」→ 点 **导入**。这个目录不进包、不进 git。
+
 ## 参数与默认值
 
 默认值集中在 [`native-dist/defaults.json`](native-dist/defaults.json)，面板读它来渲染选项与「恢复默认」，Host 用它做兜底——**改一个文件就能改默认值**。
@@ -148,65 +207,6 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 ### 只改了前端资源？
 
 `player.html` / `panel.html` / `defaults.json` 由 Host 半**按请求读盘（no-cache）**，手动改这些文件后刷新页面即可；但 `index.js` / `client.js`（Host 半 / Client 半）的改动必须重启对应进程：桌面 = 退出重开客户端，Web = 重启 `dsh web` 并刷新页面。
-
-## 从 ShaderToy 装一个作品
-
-插件自带三个 MIT 自写着色器，但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
-
-> **推荐一试**：[`shadertoy.com/view/4dfXWj`](https://www.shadertoy.com/view/4dfXWj) —— 装进来效果挺带感，导入方式见下面任意一种。
-> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0），装在本机自己玩没问题，但别把作品代码提交进仓库或随包再分发。
-
-### 1. 粘贴代码（最稳，不用抓网页）
-
-1. 打开作品页 `https://www.shadertoy.com/view/xxxxxxxx`，右上角 **Shader** 页签；
-2. 全选 `Image` 页签里的代码（如果作品用了 `Common`，把 Common 里的函数一起复制到开头；用了 Buffer 的作品暂不支持）；
-3. 回到插件设置页 → **背景库** → 「粘贴 ShaderToy 代码」→ 填名字 → 粘进 `Image 代码` → **加入背景库**；
-4. 列表里点 **使用** 即可，参数会即时生效。
-
-带声音的作品（代码里有 `mainSound`）把声音代码粘进 `Sound 代码`，切到它时会出声。声音签名支持这四种：
-
-```glsl
-vec2  mainSound(float time)            // 立体声
-float mainSound(float time)            // 单声道（自动复制到左右）
-vec2  mainSound(int samp, float time)  // 带采样序号
-float mainSound(int samp, float time)  // 单声道 + 采样序号
-```
-
-如果出声被浏览器拦住，点一下界面任意位置即可解锁（面板音量那一行也会提示）。
-
-### 2. 让 AI 帮你装（一条指令，把网址填进去就行）
-
-复制下面这段，把第一行的网址换成你要的作品链接，发给 DeepSeek Harness（或任何能操作文件的 AI）：
-
-```text
-帮我给 DeepSeek Harness 装一个 ShaderToy 背景皮肤。
-
-插件：dsh-shadertoy-skin（npm 包名就是 dsh-shadertoy-skin，GitHub: https://github.com/zdjmrq/dsh-shadertoy-skin）
-如果还没装：桌面版走「插件 → 添加插件 → 填 dsh-shadertoy-skin → 装完完全退出并重启客户端」；命令行用 dsh plugin --profile desktop add dsh-shadertoy-skin。
-
-要装的作品链接：<把你复制的 https://www.shadertoy.com/view/xxxxxxxx 粘在这里>
-
-做法：
-1. 打开上面的链接，拿到 Image pass 的 GLSL（若用了 Common，把 Common 的函数一起带上），以及可选的 mainSound。
-2. 打开插件设置页（左栏「Shader 背景」）→ 背景库 → 「粘贴 ShaderToy 代码」：名字用作品名，Image 粘主代码，Sound 可空。
-3. 导入后把它设为当前背景，确认背景真的渲染出来（不是黑屏、不是编译报错）；若报编译错误，按错误行号修好再试。
-4. 如果页面抓不到代码（反爬/需要登录/只给 WebGL 不给源码），直接让我手动复制粘贴，不要猜代码。
-5. 该作品的许可由原作者决定（ShaderToy 默认 CC BY-NC-SA 3.0）：只装在本机，不要提交进 git、不要随包发布。
-
-装好后告诉我：装的是哪个作品、是否带声音、需不需要我调亮度/玻璃。
-```
-
-> AI 抓不到 ShaderToy 页面时（它经常挡爬虫），就走上面第 1 种的「手动粘贴」——一样能装好，而且不会有许可证问题。
-
-### 3. 从本地目录导入（批量最方便）
-
-把 `ShaderToy 导出的 JSON`、或直接是 `.glsl` / `.txt` 的代码文件放进：
-
-```
-$DSH_HOME/shader-skin/presets/        （Windows 默认 C:\Users\<你>\.dsh\shader-skin\presets\）
-```
-
-设置页 → 背景库 → 「从本地目录导入」→ 点 **导入**。这个目录不进包、不进 git。
 
 ## 改代码 / 微调作品
 
