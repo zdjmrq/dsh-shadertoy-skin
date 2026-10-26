@@ -1,0 +1,18 @@
+[
+  {
+    "id": "aurora",
+    "name": "极光（自写）",
+    "file": "aurora.glsl",
+    "license": "MIT",
+    "author": "dsh-shadertoy-skin",
+    "note": "纯程序化单 pass，低负载，适合默认背景"
+  },
+  {
+    "id": "flow",
+    "name": "流体色带（自写）",
+    "file": "flow.glsl",
+    "license": "MIT",
+    "author": "dsh-shadertoy-skin",
+    "note": "纯程序化单 pass，中低负载"
+  }
+]

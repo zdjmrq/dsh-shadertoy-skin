@@ -1,0 +1,76 @@
+{
+  "name": "dsh-shadertoy-skin",
+  "version": "0.1.0",
+  "description": "Realtime ShaderToy background skin for DeepSeek Harness — a zero-runtime-dependency WebGL2 player, background library and glass UI integration.",
+  "type": "module",
+  "license": "MIT",
+  "author": "zdjmrq",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zdjmrq/dsh-shadertoy-skin.git"
+  },
+  "homepage": "https://github.com/zdjmrq/dsh-shadertoy-skin#readme",
+  "bugs": {
+    "url": "https://github.com/zdjmrq/dsh-shadertoy-skin/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "theme",
+    "skin",
+    "wallpaper",
+    "shadertoy",
+    "webgl2"
+  ],
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "native-dist/player.html",
+    "native-dist/panel.html",
+    "native-dist/defaults.json",
+    "native-dist/presets/index.json",
+    "native-dist/presets/aurora.glsl",
+    "native-dist/presets/flow.glsl",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "scripts": {
+    "dev": "node tools/dev-server.mjs 8730",
+    "check": "node tools/check-bundle.mjs",
+    "test": "node tools/check-bundle.mjs && node tools/host-route-test.mjs",
+    "test:host": "node tools/host-route-test.mjs",
+    "test:renderer": "node tools/renderer-smoke.mjs",
+    "pack:check": "npm pack --dry-run --json"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.0"
+  }
+}
