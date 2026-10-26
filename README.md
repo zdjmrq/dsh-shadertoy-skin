@@ -144,6 +144,9 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 
 插件自带三个 MIT 自写着色器，但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
 
+> **推荐一试**：[`shadertoy.com/view/4dfXWj`](https://www.shadertoy.com/view/4dfXWj) —— 装进来效果挺带感，导入方式见下面任意一种。
+> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0），装在本机自己玩没问题，但别把作品代码提交进仓库或随包再分发。
+
 ### 1. 粘贴代码（最稳，不用抓网页）
 
 1. 打开作品页 `https://www.shadertoy.com/view/xxxxxxxx`，右上角 **Shader** 页签；
