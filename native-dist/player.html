@@ -62,6 +62,10 @@
     tintMix: 0,    // 0..1   mix toward tint colour (this is the "glass" veil)
     tint: '#ececec',
     paused: false,
+    loop: false,        // wrap iTime every `loopSeconds` (shaders that only play once)
+    loopSeconds: 20,    // 5..120 loop period
+    audioMode: 'loop',  // 'loop' = music keeps playing | 'once' = stop after `audioSeconds`
+    audioSeconds: 60,   // 10..600 duration used by audioMode 'once'
     volume: 60,    // 0..100 mainSound output level
     muted: true,   // default muted; parent UI unmutes
   }
@@ -86,6 +90,11 @@
     if ('fps' in next) params.fps = clamp(next.fps, 1, 120, 30)
     if ('dim' in next) { params.dim = clamp(next.dim, 0, 2, 1); lookExplicit = true }
     if ('tintMix' in next) { params.tintMix = clamp(next.tintMix, 0, 1, 0); lookExplicit = true }
+    if ('loop' in next) params.loop = Boolean(next.loop)
+    if ('loopSeconds' in next) params.loopSeconds = clamp(next.loopSeconds, 5, 120, 20)
+    const audioModeChanged = 'audioMode' in next || 'audioSeconds' in next
+    if (next.audioMode === 'loop' || next.audioMode === 'once') params.audioMode = next.audioMode
+    if ('audioSeconds' in next) params.audioSeconds = clamp(next.audioSeconds, 1, 600, 60)
     if ('volume' in next) params.volume = clamp(next.volume, 0, 100, 60)
     if ('muted' in next) params.muted = Boolean(next.muted)
     if (typeof next.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(next.tint)) {
@@ -103,6 +112,16 @@
       if (params.paused) stopAudioScheduler('paused')
       else if (audio.program && audio.ctx && audio.ctx.state === 'running') startAudioScheduler()
     }
+    // Switching between "music loops" and "music plays once" while running:
+    // re-evaluate immediately instead of waiting for the next preset switch.
+    if (audioModeChanged && audio.program && audio.ctx && audio.ctx.state === 'running' && !params.paused) {
+      if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
+        stopAudioScheduler('once')
+        setAudioState('ended', 'music played once')
+      } else if (!audio.running) {
+        startAudioScheduler()
+      }
+    }
     resize()
   }
 
@@ -113,7 +132,7 @@
   function line() {
     const mode = DEBUG_BG ? 'debug-bg' : (program ? 'running' : 'idle')
     const note = diag.note ? ` · ${diag.note}` : ''
-    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · audio=${audioStateLabel} · look=${params.dim.toFixed(2)}/${params.tintMix.toFixed(2)} · shader=${diag.preset}${note}`
+    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · audio=${audioStateLabel} · look=${params.dim.toFixed(2)}/${params.tintMix.toFixed(2)} · loop=${params.loop ? `${params.loopSeconds.toFixed(0)}s` : 'off'} · shader=${diag.preset}${note}`
   }
   function refreshDiag() {
     diagBox.textContent = line()
@@ -616,6 +635,11 @@
 
   function startAudioScheduler() {
     if (!audio.program || !audio.ctx || audio.ctx.state !== 'running' || audio.running) return
+    // "music plays once": never resurrect the scheduler after the duration ran out
+    if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
+      setAudioState('ended', 'music played once')
+      return
+    }
     audio.running = true
     const startAt = audio.ctx.currentTime + AUDIO_PREBUFFER
     audio.scheduledUntil = startAt
@@ -637,7 +661,7 @@
     }
     audio.sources.clear()
     audio.scheduledUntil = 0
-    if (audio.program && reason !== 'switch' && reason !== 'reset') {
+    if (audio.program && reason !== 'switch' && reason !== 'reset' && reason !== 'once') {
       setAudioState('suspended', reason)
     }
   }
@@ -647,6 +671,12 @@
     if (!ctx || !audio.program || audio.running !== true) return
     if (params.paused || document.hidden) { stopAudioScheduler('paused'); return }
     if (ctx.state !== 'running') { stopAudioScheduler('context'); return }
+    // music-once: the timeline passed the configured duration → stop for good
+    if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
+      stopAudioScheduler('once')
+      setAudioState('ended', 'music played once')
+      return
+    }
     if (audio.scheduledUntil < ctx.currentTime - 0.05) audio.scheduledUntil = ctx.currentTime + 0.15 // underrun: skip ahead
     for (let i = 0; i < 16 && audio.scheduledUntil < ctx.currentTime + AUDIO_LOOKAHEAD; i++) {
       if (!scheduleAudioChunk(audio.scheduledUntil)) return
@@ -799,6 +829,11 @@
     state.last = now
     state.dt = dt
     state.time += dt * Math.max(params.speed, 0)
+    // Loop mode: shaders that animate once (and then sit still) replay from 0.
+    // Audio keeps its own realtime timeline, so looping is image-only.
+    if (params.loop && params.loopSeconds > 0 && state.time >= params.loopSeconds) {
+      state.time = state.time % params.loopSeconds
+    }
     draw()
     state.frame++
     diag.frames = state.frame
@@ -979,11 +1014,14 @@
   // ---------- boot
 
   // dev conveniences: ?dim= .9 &scale= .75 &speed= .5 &blur= 4 &fps= 60 &tintMix= .3
-  //                   &tint= 090c10 &volume= 70 &muted= 0
+  //                   &tint= 090c10 &volume= 70 &muted= 0 &loop= 1 &loopSeconds= 12
+  //                   &audioMode= once &audioSeconds= 2
   const overrides = {}
-  for (const key of ['dim', 'scale', 'speed', 'blur', 'fps', 'tintMix', 'volume']) {
+  for (const key of ['dim', 'scale', 'speed', 'blur', 'fps', 'tintMix', 'volume', 'loopSeconds', 'audioSeconds']) {
     if (q.has(key)) overrides[key] = Number(q.get(key))
   }
+  if (q.has('loop')) overrides.loop = q.get('loop') !== '0'
+  if (q.get('audioMode') === 'once' || q.get('audioMode') === 'loop') overrides.audioMode = q.get('audioMode')
   if (q.has('tint')) {
     const tint = q.get('tint').trim().replace(/^#/, '')
     if (/^[0-9a-fA-F]{6}$/.test(tint)) overrides.tint = `#${tint}`

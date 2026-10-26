@@ -157,6 +157,13 @@ async function main() {
     await waitForFrames(8)
     const brightDiag = await diag()
     check('brightness above 1.0 is no longer clamped away', /look=1\.60\/0\.00/.test(brightDiag), brightDiag)
+    await open('preset=flow&fps=60&dim=1&loop=1&loopSeconds=12')
+    await waitForFrames(8)
+    const loopDiag = await diag()
+    check('loop mode is reported by the player', /loop=12s/.test(loopDiag), loopDiag)
+    await open('preset=flow&fps=60&dim=1&loop=0')
+    await waitForFrames(4)
+    check('loop off by default', /loop=off/.test(await diag()), await diag())
 
     // --- settings panel (standalone mode, dev base)
     await page.goto(`${BASE}/panel.html?base=`, { waitUntil: 'load' })
@@ -171,6 +178,14 @@ async function main() {
       glass: document.getElementById('glass-out')?.textContent,
       brightness: document.getElementById('brightness-out')?.textContent,
       panels: document.getElementById('panels-out')?.textContent,
+      loopChecked: document.getElementById('loop')?.checked,
+      loopRowHidden: document.getElementById('loop-seconds-row')?.hidden,
+      audioMode: document.getElementById('audio-mode-out')?.textContent,
+      audioSecondsRowHidden: document.getElementById('audio-seconds-row')?.hidden,
+      codeResize: (() => {
+        const area = document.getElementById('code-image')
+        return area ? getComputedStyle(area).resize : null
+      })(),
       fps: document.querySelector('#fps-dd .dd-trigger')?.textContent,
       scale: document.querySelector('#scale-dd .dd-trigger')?.textContent,
       preset: document.querySelector('#preset-dd .dd-trigger')?.textContent,
@@ -183,6 +198,10 @@ async function main() {
     check('panel defaults to 60% glass', initial.glass === '60%', String(initial.glass))
     check('panel defaults to 100% brightness', initial.brightness === '100%', String(initial.brightness))
     check('panel defaults to opaque cards', initial.panels === '不透明', String(initial.panels))
+    check('panel defaults to loop off', initial.loopChecked === false && initial.loopRowHidden === true)
+    check('panel defaults to looping music', initial.audioMode === '循环播放', String(initial.audioMode))
+    check('music duration row hidden unless playing once', initial.audioSecondsRowHidden === true)
+    check('code boxes are vertically resizable', initial.codeResize === 'vertical', String(initial.codeResize))
     check('panel selects a built-in preset', /极光/.test(initial.preset ?? ''), String(initial.preset))
 
     // card/overlay transparency picker
@@ -194,6 +213,23 @@ async function main() {
     check('choosing 半透明 applies it', (await panelState()).panels === '半透明', String((await panelState()).panels))
     await page.click('#panels-dd .dd-trigger')
     await page.locator('#panels-dd .dd-item', { hasText: '不透明' }).click()
+
+    // loop playback: toggle reveals the period slider
+    await page.click('#loop')
+    let loopState = await panelState()
+    check('loop toggle turns on', loopState.loopChecked === true && loopState.loopRowHidden === false)
+    await page.click('#loop')
+
+    // music "play once": picking it reveals the duration slider
+    // music "play once": picking it reveals the duration slider. The row is dimmed
+    // while the preset has no sound (aurora), so lift that veil for the click.
+    await page.evaluate(() => document.getElementById('audio-mode-row').classList.remove('dim'))
+    await page.click('#audio-mode-dd .dd-trigger')
+    await page.waitForSelector('#audio-mode-dd .dd.open .dd-menu', { timeout: 5_000 })
+    await page.locator('#audio-mode-dd .dd-item', { hasText: '只播一次' }).click()
+    const onceState = await panelState()
+    check('music can play once', onceState.audioMode === '只播一次', String(onceState.audioMode))
+    check('duration row appears for play-once', onceState.audioSecondsRowHidden === false)
 
     // custom dropdown: no native (light) popup — a themed list we control
     await page.click('#fps-dd .dd-trigger')

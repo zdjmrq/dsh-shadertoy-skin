@@ -212,20 +212,25 @@ async function readJsonBody(req, limit = MAX_STATE_BYTES) {
 }
 
 /** Accept only the shape the client half writes; unknown keys are dropped. */
-const PARAM_KEYS = new Set(['enabled', 'glass', 'brightness', 'panels', 'blur', 'scale', 'fps', 'speed', 'volume', 'muted'])
+const PARAM_KEYS = new Set(['enabled', 'glass', 'brightness', 'panels', 'blur', 'scale', 'fps', 'speed', 'loop', 'loopSeconds', 'audioMode', 'audioSeconds', 'volume', 'muted'])
 const PANEL_LEVELS = new Set(['opaque', 'half', 'clear'])
+const AUDIO_MODES = new Set(['loop', 'once'])
 
 function sanitizeParams(raw) {
   const out = {}
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return out
   for (const [key, value] of Object.entries(raw)) {
     if (!PARAM_KEYS.has(key)) continue
-    if (key === 'enabled' || key === 'muted') {
+    if (key === 'enabled' || key === 'muted' || key === 'loop') {
       if (typeof value === 'boolean') out[key] = value
       continue
     }
     if (key === 'panels') {
       if (PANEL_LEVELS.has(value)) out[key] = value
+      continue
+    }
+    if (key === 'audioMode') {
+      if (AUDIO_MODES.has(value)) out[key] = value
       continue
     }
     if (typeof value === 'number' && Number.isFinite(value)) out[key] = value

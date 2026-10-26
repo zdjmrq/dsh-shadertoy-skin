@@ -164,6 +164,21 @@ async function main() {
     state = await player()
     check('unmuted volume reaches the GainNode', Math.abs(state.audio.gain - 0.7) < 0.01, String(state.audio.gain))
 
+    // ---- audioMode=once: the music stops at the duration, the image keeps going
+    await open('preset=dev/mono-sound&fps=30&dim=1&audioMode=once&audioSeconds=2&muted=0&volume=70')
+    await waitFor(() => window.__player?.ready === true, 20_000, 'play-once ready')
+    await waitFor(() => window.__player?.audio?.state === 'running', 15_000, 'play-once audio running')
+    await waitFor(() => window.__player?.audio?.state === 'ended', 15_000, 'play-once audio ended')
+    const ended = await player()
+    check('music plays once then stops', ended.audio.state === 'ended', JSON.stringify(ended.audio))
+    const chunksAtEnd = ended.audio.chunks
+    const framesOf = async () => Number(/frames=(\d+)/.exec(await diag())?.[1] ?? 0)
+    const framesAtEnd = await framesOf()
+    await sleep(1200)
+    const afterEnd = await player()
+    check('no new audio chunks after the end', afterEnd.audio.chunks === chunksAtEnd, `${chunksAtEnd} -> ${afterEnd.audio.chunks}`)
+    check('the image keeps rendering after the music ends', (await framesOf()) > framesAtEnd, `${framesAtEnd} -> ${await framesOf()}`)
+
     check('no uncaught page errors', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 300))
 
     console.log('')
