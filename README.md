@@ -8,10 +8,10 @@
 
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
-> **先去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的三个作品只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
+> **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的三个作品只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
 > **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库本身只收录 MIT 代码）。
 >
-> **Start at [shadertoy.com](https://www.shadertoy.com/)**: import any piece into the background library, tune it to your taste, and feel free to share screenshots, settings or improvements via Issues / PRs.
+> **Recommended: browse [shadertoy.com](https://www.shadertoy.com/)** — import any piece into the background library, tune it to your taste, and feel free to share screenshots, settings or improvements via Issues / PRs.
 
 <video src="https://github.com/user-attachments/assets/c8801ca1-e96e-4bfe-83bc-6e99b5551cf4" controls muted width="100%"></video>
 
