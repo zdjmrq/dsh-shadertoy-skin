@@ -3,11 +3,12 @@ name: Publish
 # Publishes to npm via OIDC trusted publishing (no long-lived token).
 # Before the first run, configure the trusted publisher on npmjs.com:
 #   Packages -> dsh-shadertoy-skin -> Settings -> Trusted publishing
-#     Provider:            GitHub Actions
+#     Provider:             GitHub Actions
 #     Organization or user: <owner>
-#     Repository:          <repo>
-#     Workflow filename:   publish.yml
-#     Allowed actions:     allow "npm publish"
+#     Repository:           <repo>
+#     Workflow filename:    publish.yml
+#     Allowed actions:      allow "npm publish"
+# The package must already exist on npm (publish 0.1.0 manually once).
 # See docs/PUBLISHING.md for the full runbook and the caveats.
 
 on:
@@ -23,6 +24,7 @@ jobs:
   publish:
     name: npm publish
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -50,6 +52,8 @@ jobs:
 
       - name: Install dev dependencies
         run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
       - name: Bundle checks
         run: npm run check
