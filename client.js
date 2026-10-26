@@ -155,6 +155,9 @@ window.__ModuleLoader__.load({
           let background = null
           let booted = false
           let sidebarRegistered = false
+          // stays false until the safe-mode file check completed, so the self-heal
+          // loop can never bypass `$DSH_HOME/shader-skin.safe`
+          let sidebarAllowed = false
           let playerReady = false
           let playerInitAttempts = 0
 
@@ -614,7 +617,7 @@ window.__ModuleLoader__.load({
               return
             }
             if (frame !== background) background = frame
-            if (!sidebarRegistered && ENABLE_SIDEBAR_ENTRY) {
+            if (sidebarAllowed && !sidebarRegistered) {
               try { sidebarRegistered = registerSidebar() } catch { /* retried later */ }
             }
             applyGlass()
@@ -622,7 +625,7 @@ window.__ModuleLoader__.load({
           }
 
           function scheduleVerify() {
-            for (const delay of [0, 250, 700, 1500, 3000, 6000, 10000]) {
+            for (const delay of [0, 250, 700, 1500, 3000, 6000, 10000, 15000]) {
               timers.push(setTimeout(() => { if (booted) verifySurface() }, delay))
             }
             // the first real interaction is also the moment a slow desktop shell has
@@ -645,6 +648,8 @@ window.__ModuleLoader__.load({
             if (!store.activeId) store.activeId = FALLBACK_PRESET
             booted = true
             syncEnabled()
+            // Start the bounded checks first so a slow service never delays them.
+            scheduleVerify()
             // Services keep activating after us: wait for the theme before publishing
             // the glass, otherwise the overrides are lost for this whole page life.
             await waitForService('theme')
@@ -652,11 +657,13 @@ window.__ModuleLoader__.load({
             const safeMode = await fetchJson(`${BASE}/safe-mode`).catch(() => ({ on: false }))
             if (safeMode?.on === true) {
               console.warn('[shadertoy-skin] safe mode: sidebar entry disabled ($DSH_HOME/shader-skin.safe exists)')
-            } else if (ENABLE_SIDEBAR_ENTRY && booted) {
-              await waitForService('slots')
-              try { sidebarRegistered = registerSidebar() } catch (error) { console.warn('[shadertoy-skin] sidebar registration skipped:', error) }
+            } else {
+              sidebarAllowed = ENABLE_SIDEBAR_ENTRY
+              if (booted && !sidebarRegistered) {
+                await waitForService('slots')
+                try { sidebarRegistered = registerSidebar() } catch (error) { console.warn('[shadertoy-skin] sidebar registration skipped:', error) }
+              }
             }
-            scheduleVerify()
           })()
 
           return () => {
