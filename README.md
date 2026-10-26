@@ -11,6 +11,7 @@ Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Ha
 > **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的 5 个预设只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
 > **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库自写代码是 MIT，两个第三方预设按各自许可证收录）。
 > **欢迎 issue 和 PR**：装不上、画面不对、想要新功能 → 开 [Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)（附截图和 `$DSH_HOME/shader-skin.json` 里对应条目更好排查）；bug 修复、文档修正、自写预设 → 直接提 [PR](https://github.com/zdjmrq/dsh-shadertoy-skin/pulls)。
+> **欢迎分享你发现的 / 自己改过的 ShaderToy 作品**：作品链接、截图、调好的参数都行，开 [Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues) 贴出来大家就能直接用；想让它进内置预设就提 PR（先确认原作者的许可证允许再分发）。
 >
 > **Recommended: browse [shadertoy.com](https://www.shadertoy.com/)** — import any piece into the background library, tune it to your taste, and feel free to share screenshots, settings or improvements via Issues / PRs.
 
@@ -299,7 +300,8 @@ THIRD-PARTY-NOTICES.md  第三方作品的作者 / 来源 / 许可证清单
 
 - **报问题**：直接[开 Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)。附上 DSH 版本、系统/显卡、截图，以及 `$DSH_HOME/shader-skin.json` 里对应预设的条目（贴之前先删掉不想公开的内容）；播放器自己的诊断行也能帮大忙。
 - **提改进**：bug 修复、文档修正、新的自写预设都欢迎 [PR](https://github.com/zdjmrq/dsh-shadertoy-skin/pulls)。自写预设请标 MIT；第三方作品要带作者与许可证（参考 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)）。
-- **分享你的背景**：装了什么作品、参数怎么调的，开 Issue 贴截图就行；想把它做成内置预设，先确认原作者的许可证允许再分发。
+- **分享 ShaderToy 作品**：发现了特别适合当聊天背景的作品，或者自己把它改得更好看、更省电（比如调机位、修 NaN、降负载），都欢迎[开 Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues) 贴作品链接 + 截图 + 参数。想让它变成内置预设就提 PR：自写的标 MIT，第三方作品带作者与许可证（参考 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)）。
+- **分享你的背景**：装了什么作品、参数怎么调的，开 Issue 贴截图就行。
 
 ## License
 
