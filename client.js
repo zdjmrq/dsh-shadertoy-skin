@@ -349,9 +349,17 @@ window.__ModuleLoader__.load({
           }
 
           // ------------------------------------------------------------------ mouse
+          //
+          // iMouse follows an actual DRAG only. Hovering over the UI must not move
+          // the shader (the old build forwarded every pointermove, so any mouse
+          // motion stirred the background). Press -> anchor, move while pressed ->
+          // xy, release -> one last message with a negated click flag, which is how
+          // ShaderToy shaders detect `iMouse.z < 0.0`.
           let pointerDown = false
           let anchorX = 0
           let anchorY = 0
+          let lastX = 0
+          let lastY = 0
           let pending = null
           let scheduled = 0
           const flushPointer = () => {
@@ -360,23 +368,27 @@ window.__ModuleLoader__.load({
             postTo(background, { type: 'mouse', mouse: pending })
             pending = null
           }
-          const queuePointer = (x, y) => {
-            pending = pointerDown ? [x, y, anchorX, anchorY] : [x, y, -Math.abs(anchorX), -Math.abs(anchorY)]
+          const queuePointer = (x, y, down) => {
+            pending = down ? [x, y, anchorX, anchorY] : [x, y, -Math.abs(anchorX), -Math.abs(anchorY)]
             if (scheduled === 0) scheduled = requestAnimationFrame(flushPointer)
           }
           on(window, 'pointermove', event => {
-            if (!document.hasFocus() || !background) return
-            queuePointer(event.clientX, window.innerHeight - event.clientY)
+            if (!document.hasFocus() || !background || !pointerDown) return
+            lastX = event.clientX
+            lastY = window.innerHeight - event.clientY
+            queuePointer(lastX, lastY, true)
           }, { passive: true })
           on(window, 'pointerdown', event => {
+            if (event.button !== 0) return
             pointerDown = true
-            anchorX = event.clientX
-            anchorY = window.innerHeight - event.clientY
-            queuePointer(anchorX, anchorY)
+            anchorX = lastX = event.clientX
+            anchorY = lastY = window.innerHeight - event.clientY
+            queuePointer(lastX, lastY, true)
           }, { passive: true })
           const release = () => {
+            if (!pointerDown) return
             pointerDown = false
-            if (scheduled === 0) scheduled = requestAnimationFrame(flushPointer)
+            queuePointer(lastX, lastY, false)
           }
           on(window, 'pointerup', release, { passive: true })
           on(window, 'pointercancel', release, { passive: true })
