@@ -189,6 +189,9 @@ async function main() {
       codeGrips: document.querySelectorAll('.code-grip').length,
       fps: document.querySelector('#fps-dd .dd-trigger')?.textContent,
       scale: document.querySelector('#scale-dd .dd-trigger')?.textContent,
+      scaleChoices: [...document.querySelectorAll('#scale-dd .dd-item')].map(node => node.textContent),
+      scaleHeader: document.getElementById('scale-out')?.textContent,
+      scaleHint: document.getElementById('scale-hint')?.textContent,
       preset: document.querySelector('#preset-dd .dd-trigger')?.textContent,
       items: [...document.querySelectorAll('#lib-list .item .name')].map(node => node.textContent),
     }))
@@ -196,6 +199,16 @@ async function main() {
     check('panel applies a theme (dark/light)', initial.theme === 'dark' || initial.theme === 'light', String(initial.theme))
     check('panel defaults to 30 fps', initial.fps === '30 fps', String(initial.fps))
     check('panel defaults to 1x render scale', /1×/.test(initial.scale ?? ''), String(initial.scale))
+    // Viewport is 1024x640 at DPR 1 in this test run, so the labels are deterministic.
+    check('scale menu shows concrete resolutions', (initial.scaleChoices ?? []).length === 11
+      && /^1024 × 640（1×）$/.test(initial.scaleChoices[6] ?? ''), (initial.scaleChoices ?? []).join(' | '))
+    check('scale menu covers 0.25x up to 2x',
+      (initial.scaleChoices ?? []).includes('256 × 160（0.25× · 最省电）')
+      && (initial.scaleChoices ?? []).includes('2048 × 1280（2× · 最吃显卡）')
+      && (initial.scaleChoices ?? []).includes('512 × 320（0.5×）'),
+      (initial.scaleChoices ?? []).join(' | '))
+    check('resolution header shows the drawing-buffer size', /^1024 × 640$/.test(initial.scaleHeader ?? ''), String(initial.scaleHeader))
+    check('resolution hint explains the DPR cap', /DPR 上限 1\.5/.test(initial.scaleHint ?? ''), String(initial.scaleHint))
     check('panel defaults to 60% glass', initial.glass === '60%', String(initial.glass))
     check('panel defaults to 100% brightness', initial.brightness === '100%', String(initial.brightness))
     check('panel defaults to opaque cards', initial.panels === '不透明', String(initial.panels))
@@ -215,6 +228,26 @@ async function main() {
     check('choosing 半透明 applies it', (await panelState()).panels === '半透明', String((await panelState()).panels))
     await page.click('#panels-dd .dd-trigger')
     await page.locator('#panels-dd .dd-item', { hasText: '不透明' }).click()
+
+    // resolution picker: concrete sizes, applying one moves the header + hint
+    await page.click('#scale-dd .dd-trigger')
+    await page.waitForSelector('#scale-dd .dd.open .dd-menu', { timeout: 5_000 })
+    await page.locator('#scale-dd .dd-item', { hasText: '（0.25×' }).click()
+    const quarterScale = await panelState()
+    check('choosing 0.25× shows a quarter-size buffer', /^256 × 160$/.test(quarterScale.scaleHeader ?? ''), String(quarterScale.scaleHeader))
+    await page.click('#scale-dd .dd-trigger')
+    await page.locator('#scale-dd .dd-item', { hasText: '（0.5×）' }).click()
+    const halfScale = await panelState()
+    check('choosing 0.5× shows the smaller buffer', /^512 × 320$/.test(halfScale.scaleHeader ?? ''), String(halfScale.scaleHeader))
+    check('scale trigger keeps the pixel size', /^512 × 320（0\.5×）$/.test(halfScale.scale ?? ''), String(halfScale.scale))
+    await page.click('#scale-dd .dd-trigger')
+    await page.locator('#scale-dd .dd-item', { hasText: '（1×）' }).click()
+    await page.setViewportSize({ width: 800, height: 600 })
+    await sleep(200)
+    check('resizing the window rebuilds the scale labels',
+      /^800 × 600（1×）$/.test((await panelState()).scale ?? ''), String((await panelState()).scale))
+    await page.setViewportSize({ width: 1024, height: 640 })
+    await sleep(200)
 
     // loop playback: toggle reveals the period slider
     await page.click('#loop')

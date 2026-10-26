@@ -658,7 +658,7 @@
     $('panels-out').textContent = PANEL_KINDS[p.panels] ?? PANEL_KINDS.opaque
     $('blur').value = String(p.blur)
     $('blur-out').textContent = p.blur > 0 ? `${p.blur} px` : '关'
-    $('scale-out').textContent = `${p.scale}×`
+    $('scale-out').textContent = bufferSizeFor(p.scale)
     $('fps-out').textContent = `${p.fps} fps`
     $('speed').value = String(p.speed)
     $('speed-out').textContent = `${Number(p.speed).toFixed(2)}×`
@@ -692,14 +692,43 @@
     if (fpsDd) fpsDd.setValue(String(p.fps))
     if (panelsDd) panelsDd.setValue(p.panels ?? 'opaque')
     if (audioModeDd) audioModeDd.setValue(p.audioMode === 'once' ? 'once' : 'loop')
-    $('scale-hint').textContent = `实际渲染缓冲：${bufferSize()}（DPR ≤ 1.5）`
+    $('scale-hint').textContent = `实际渲染缓冲：${bufferSizeFor(p.scale)}（窗口 ${viewportBasePixels().cssW} × ${viewportBasePixels().cssH}，DPR 上限 1.5；换窗口大小这里的数字会跟着变）`
     $('preset-kind').textContent = state.activeId ? (entryById(state.activeId) ? '我的' : '内置') : ''
   }
 
-  function bufferSize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
-    const scale = Number(effective().scale) || 1
-    return `${Math.round(window.innerWidth * dpr * scale)} × ${Math.round(window.innerHeight * dpr * scale)}`
+  /**
+   * The player iframe covers the whole app viewport, so the settings iframe has to
+   * ask its parent for the window size — `window.innerWidth` here is only the main
+   * column. DPR is capped at 1.5 by the player, match that.
+   */
+  function viewportBasePixels() {
+    let owner = window
+    try { if (!STANDALONE && parent) owner = parent } catch { /* cross-origin embed */ }
+    const cssW = Math.max(1, Math.round(Number(owner.innerWidth) || Number(window.innerWidth) || 1280))
+    const cssH = Math.max(1, Math.round(Number(owner.innerHeight) || Number(window.innerHeight) || 800))
+    const dpr = Math.min(Number(owner.devicePixelRatio) || Number(window.devicePixelRatio) || 1, 1.5)
+    return { cssW, cssH, dpr, w: Math.round(cssW * dpr), h: Math.round(cssH * dpr) }
+  }
+
+  /** "1280 × 810" — the drawing-buffer size this scale multiplies asks the player for. */
+  function bufferSizeFor(scale) {
+    const base = viewportBasePixels()
+    const factor = Math.min(2, Math.max(0.25, Number(scale) || 1))
+    return `${Math.round(base.w * factor)} × ${Math.round(base.h * factor)}`
+  }
+
+  function scaleOptions() {
+    const values = defaults.limits.scale?.values ?? [0.25, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5, 1.75, 2]
+    return values.map(value => {
+      const note = value === 0.25 ? ' · 最省电' : value === 2 ? ' · 最吃显卡' : ''
+      return { value: String(value), text: `${bufferSizeFor(value)}（${value}×${note}）` }
+    })
+  }
+
+  /** Window size changes move every resolution label, so rebuild the list. */
+  function refreshScaleOptions() {
+    if (!scaleDd) return
+    scaleDd.setOptions(scaleOptions(), String(effective().scale))
   }
 
   function bindParams() {
@@ -708,9 +737,7 @@
       onChange: id => setActive(id),
     })
     scaleDd = makeDropdown($('scale-dd'), {
-      options: (defaults.limits.scale?.values ?? [0.5, 0.75, 1, 1.25, 1.5]).map(value => ({
-        value: String(value), text: value === 1 ? '1×（原生）' : `${value}×`,
-      })),
+      options: scaleOptions(),
       value: String(effective().scale),
       onChange: value => setParam('scale', Number(value)),
     })
@@ -762,7 +789,7 @@
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && MODE === 'popup' && open && !document.querySelector('.dd.open')) setOpen(false)
     })
-    window.addEventListener('resize', () => { sync(); reportSize() })
+    window.addEventListener('resize', () => { refreshScaleOptions(); sync(); reportSize() })
   }
 
   // ------------------------------------------------------------- library UI

@@ -85,7 +85,7 @@
     if (!next || typeof next !== 'object') return
     const wasPaused = params.paused
     if ('speed' in next) params.speed = clamp(next.speed, 0, 2, 1)
-    if ('scale' in next) params.scale = clamp(next.scale, 0.5, 2, 1)
+    if ('scale' in next) params.scale = clamp(next.scale, 0.25, 2, 1)
     if ('blur' in next) params.blur = clamp(next.blur, 0, 12, 0)
     if ('fps' in next) params.fps = clamp(next.fps, 1, 120, 30)
     if ('dim' in next) { params.dim = clamp(next.dim, 0, 2, 1); lookExplicit = true }
@@ -809,8 +809,11 @@
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
-    const w = Math.max(1, Math.round((canvas.clientWidth || window.innerWidth) * dpr * params.scale))
-    const h = Math.max(1, Math.round((canvas.clientHeight || window.innerHeight) * dpr * params.scale))
+    // 2× on a big window can ask for an 8k-wide drawing buffer; clamp each side to
+    // the WebGL texture limit instead of letting the context fail.
+    const MAX_SIDE = 8192
+    const w = Math.min(MAX_SIDE, Math.max(1, Math.round((canvas.clientWidth || window.innerWidth) * dpr * params.scale)))
+    const h = Math.min(MAX_SIDE, Math.max(1, Math.round((canvas.clientHeight || window.innerHeight) * dpr * params.scale)))
     if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h }
     diag.w = canvas.width
     diag.h = canvas.height
