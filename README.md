@@ -8,9 +8,9 @@
 
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
-![马里奥像素画背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-mario.png)
-![Seascape 海面背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-seascape.png)
-![代码页：查看 / 修改 / 保存并运行当前作品的着色器](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-code.png)
+![马里奥像素画背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-mario.jpg)
+![Seascape 海面背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-seascape.jpg)
+![代码页：查看 / 修改 / 保存并运行当前作品的着色器](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-code.jpg)
 
 > 截图里的 ShaderToy 作品版权归原作者：像素马里奥（作者见对应作品页）、Seascape（© TDM，CC BY-NC-SA 3.0）。**截图仅作效果展示**，本仓库代码仍是 MIT，且不收录这些作品代码。
 
@@ -26,6 +26,85 @@ npm 包名**没有 scope、也不带作者用户名**：不是 `@zdjmrq/dsh-shad
 ```sh
 npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 ```
+
+## 从 ShaderToy 装一个作品
+
+插件自带三个 MIT 自写着色器，但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
+
+> **推荐一试**：[`shadertoy.com/view/4dfXWj`](https://www.shadertoy.com/view/4dfXWj) —— 装进来效果挺带感，导入方式见下面任意一种。
+> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0），装在本机自己玩没问题，但别把作品代码提交进仓库或随包再分发。
+
+### 1. 粘贴代码（最稳，不用抓网页）
+
+1. 打开作品页 `https://www.shadertoy.com/view/xxxxxxxx`，右上角 **Shader** 页签；
+2. 全选 `Image` 页签里的代码（如果作品用了 `Common`，把 Common 里的函数一起复制到开头；用了 Buffer 的作品暂不支持）；
+3. 回到插件设置页 → **背景库** → 「粘贴 ShaderToy 代码」→ 填名字 → 粘进 `Image 代码` → **加入背景库**；
+4. 列表里点 **使用** 即可，参数会即时生效。
+
+带声音的作品（代码里有 `mainSound`）把声音代码粘进 `Sound 代码`，切到它时会出声。声音签名支持这四种：
+
+```glsl
+vec2  mainSound(float time)            // 立体声
+float mainSound(float time)            // 单声道（自动复制到左右）
+vec2  mainSound(int samp, float time)  // 带采样序号
+float mainSound(int samp, float time)  // 单声道 + 采样序号
+```
+
+如果出声被浏览器拦住，点一下界面任意位置即可解锁（面板音量那一行也会提示）。
+
+### 2. 让 AI 帮你装（一条指令，把网址填进去就行）
+
+复制下面这段，把第一行的网址换成你要的作品链接，发给 DeepSeek Harness（或任何能操作文件的 AI）：
+
+```text
+帮我给 DeepSeek Harness 装一个 ShaderToy 背景皮肤。
+
+插件：dsh-shadertoy-skin（npm 包名就是 dsh-shadertoy-skin，GitHub: https://github.com/zdjmrq/dsh-shadertoy-skin）
+如果还没装：桌面版走「插件 → 添加插件 → 填 dsh-shadertoy-skin → 装完完全退出并重启客户端」；命令行用 dsh plugin --profile desktop add dsh-shadertoy-skin。
+
+要装的作品链接：<把你复制的 https://www.shadertoy.com/view/xxxxxxxx 粘在这里>
+
+做法：
+1. 打开上面的链接，拿到 Image pass 的 GLSL（若用了 Common，把 Common 的函数一起带上），以及可选的 mainSound。
+2. 打开插件设置页（左栏「Shader 背景」）→ 背景库 → 「粘贴 ShaderToy 代码」：名字用作品名，Image 粘主代码，Sound 可空。
+3. 导入后把它设为当前背景，确认背景真的渲染出来（不是黑屏、不是编译报错）；若报编译错误，按错误行号修好再试。
+4. 如果页面抓不到代码（反爬/需要登录/只给 WebGL 不给源码），直接让我手动复制粘贴，不要猜代码。
+5. 该作品的许可由原作者决定（ShaderToy 默认 CC BY-NC-SA 3.0）：只装在本机，不要提交进 git、不要随包发布。
+
+装好后告诉我：装的是哪个作品、是否带声音、需不需要我调亮度/玻璃。
+```
+
+> AI 抓不到 ShaderToy 页面时（它经常挡爬虫），就走上面第 1 种的「手动粘贴」——一样能装好，而且不会有许可证问题。
+
+### 3. 从本地目录导入（批量最方便）
+
+把 `ShaderToy 导出的 JSON`、或直接是 `.glsl` / `.txt` 的代码文件放进：
+
+```
+$DSH_HOME/shader-skin/presets/        （Windows 默认 C:\Users\<你>\.dsh\shader-skin\presets\）
+```
+
+设置页 → 背景库 → 「从本地目录导入」→ 点 **导入**。这个目录不进包、不进 git。
+
+## 参数与默认值
+
+默认值集中在 [`native-dist/defaults.json`](native-dist/defaults.json)，面板读它来渲染选项与「恢复默认」，Host 用它做兜底——**改一个文件就能改默认值**。
+
+| 参数 | 默认 | 可选 | 说明 |
+|---|---|---|---|
+| `enabled` | `true` | 开/关 | 关掉只移除背景层，设置页仍在 |
+| `glass` | `60` (%) | 20–95 | 玻璃不透明度：界面压住背景的程度。越高文字越清晰、背景越淡；越低背景越透亮 |
+| `brightness` | `100` (%) | 30–180 | 背景亮度（着色器输出乘数）。黄昏、夜景类作品看着太暗就调高 |
+| `panels` | `opaque` | opaque / half / clear | 卡片、代码块、弹层、**聊天输入框**、编辑器表面的底色：不透明 / 半透明 / 透明。想让背景从框里透出来就调它 |
+| `blur` | `0` px | 0–12 | 只在 > 0 时启用 CSS `filter` |
+| `scale` | `1`× | 0.5 / 0.75 / 1 / 1.25 / 1.5 | 渲染分辨率倍率（DPR 上限 1.5） |
+| `fps` | `30` | 15 / 20 / 30 / 60 | 渲染帧率上限；聊天时 30 足够 |
+| `speed` | `1`× | 0–2 | 时间轴倍速 |
+| `loop` / `loopSeconds` | `false` / `20` s | 开/关 · 5–120 s | **画面循环**：有的作品播一次就不动了，打开后每个周期把 `iTime` 归零重播（只重置画面，不影响声音） |
+| `audioMode` / `audioSeconds` | `loop` / `60` s | loop / once · 10–600 s | **音乐播放方式**：`loop` 一直放；`once` = 放完「音乐时长」就停、**画面继续常驻**（马里奥这种静态图 + 一首歌正合适） |
+| `volume` / `muted` | `60` / `false` | 0–100 / 开/关 | 带 `mainSound` 的作品默认出声；浏览器可能拦截自动播放，点一下界面任意位置即可解锁 |
+
+> 两个滑块的分工：**玻璃不透明度**控制「界面压暗多少」，**背景亮度**控制「画面本身多亮」。前者影响可读性，后者只影响画面。背景看着黑，先加亮度；文字看着花，再加玻璃。
 
 ## 状态
 
@@ -53,26 +132,6 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 - [x] 深浅色主题适配（设置页与玻璃都跟随 DSH；亮色主题滤镜走向白色）
 - [x] **启动自愈**：桌面端 client 插件行与服务是并发激活的，首次启动时 `theme`/`slots` 可能还没就绪（旧版因此「重启后要手动关开一次插件」）。现在服务现取 + 启动后 10 秒内多次自检（背景层缺失就重建、token 被重置就重设、播放器没 `ready` 就重发 init、侧栏没注册上就补注册），**装好重启即生效**
 - [ ] 多 pass（Buffer A–D）、音频可视化回馈、兼容性静态体检
-
-## 参数与默认值
-
-默认值集中在 [`native-dist/defaults.json`](native-dist/defaults.json)，面板读它来渲染选项与「恢复默认」，Host 用它做兜底——**改一个文件就能改默认值**。
-
-| 参数 | 默认 | 可选 | 说明 |
-|---|---|---|---|
-| `enabled` | `true` | 开/关 | 关掉只移除背景层，设置页仍在 |
-| `glass` | `60` (%) | 20–95 | 玻璃不透明度：界面压住背景的程度。越高文字越清晰、背景越淡；越低背景越透亮 |
-| `brightness` | `100` (%) | 30–180 | 背景亮度（着色器输出乘数）。黄昏、夜景类作品看着太暗就调高 |
-| `panels` | `opaque` | opaque / half / clear | 卡片、代码块、弹层、**聊天输入框**、编辑器表面的底色：不透明 / 半透明 / 透明。想让背景从框里透出来就调它 |
-| `blur` | `0` px | 0–12 | 只在 > 0 时启用 CSS `filter` |
-| `scale` | `1`× | 0.5 / 0.75 / 1 / 1.25 / 1.5 | 渲染分辨率倍率（DPR 上限 1.5） |
-| `fps` | `30` | 15 / 20 / 30 / 60 | 渲染帧率上限；聊天时 30 足够 |
-| `speed` | `1`× | 0–2 | 时间轴倍速 |
-| `loop` / `loopSeconds` | `false` / `20` s | 开/关 · 5–120 s | **画面循环**：有的作品播一次就不动了，打开后每个周期把 `iTime` 归零重播（只重置画面，不影响声音） |
-| `audioMode` / `audioSeconds` | `loop` / `60` s | loop / once · 10–600 s | **音乐播放方式**：`loop` 一直放；`once` = 放完「音乐时长」就停、**画面继续常驻**（马里奥这种静态图 + 一首歌正合适） |
-| `volume` / `muted` | `60` / `false` | 0–100 / 开/关 | 带 `mainSound` 的作品默认出声；浏览器可能拦截自动播放，点一下界面任意位置即可解锁 |
-
-> 两个滑块的分工：**玻璃不透明度**控制「界面压暗多少」，**背景亮度**控制「画面本身多亮」。前者影响可读性，后者只影响画面。背景看着黑，先加亮度；文字看着花，再加玻璃。
 
 ## 要求
 
@@ -144,65 +203,6 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 ### 只改了前端资源？
 
 `player.html` / `panel.html` / `defaults.json` 由 Host 半**按请求读盘（no-cache）**，手动改这些文件后刷新页面即可；但 `index.js` / `client.js`（Host 半 / Client 半）的改动必须重启对应进程：桌面 = 退出重开客户端，Web = 重启 `dsh web` 并刷新页面。
-
-## 从 ShaderToy 装一个作品
-
-插件自带三个 MIT 自写着色器，但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
-
-> **推荐一试**：[`shadertoy.com/view/4dfXWj`](https://www.shadertoy.com/view/4dfXWj) —— 装进来效果挺带感，导入方式见下面任意一种。
-> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0），装在本机自己玩没问题，但别把作品代码提交进仓库或随包再分发。
-
-### 1. 粘贴代码（最稳，不用抓网页）
-
-1. 打开作品页 `https://www.shadertoy.com/view/xxxxxxxx`，右上角 **Shader** 页签；
-2. 全选 `Image` 页签里的代码（如果作品用了 `Common`，把 Common 里的函数一起复制到开头；用了 Buffer 的作品暂不支持）；
-3. 回到插件设置页 → **背景库** → 「粘贴 ShaderToy 代码」→ 填名字 → 粘进 `Image 代码` → **加入背景库**；
-4. 列表里点 **使用** 即可，参数会即时生效。
-
-带声音的作品（代码里有 `mainSound`）把声音代码粘进 `Sound 代码`，切到它时会出声。声音签名支持这四种：
-
-```glsl
-vec2  mainSound(float time)            // 立体声
-float mainSound(float time)            // 单声道（自动复制到左右）
-vec2  mainSound(int samp, float time)  // 带采样序号
-float mainSound(int samp, float time)  // 单声道 + 采样序号
-```
-
-如果出声被浏览器拦住，点一下界面任意位置即可解锁（面板音量那一行也会提示）。
-
-### 2. 让 AI 帮你装（一条指令，把网址填进去就行）
-
-复制下面这段，把第一行的网址换成你要的作品链接，发给 DeepSeek Harness（或任何能操作文件的 AI）：
-
-```text
-帮我给 DeepSeek Harness 装一个 ShaderToy 背景皮肤。
-
-插件：dsh-shadertoy-skin（npm 包名就是 dsh-shadertoy-skin，GitHub: https://github.com/zdjmrq/dsh-shadertoy-skin）
-如果还没装：桌面版走「插件 → 添加插件 → 填 dsh-shadertoy-skin → 装完完全退出并重启客户端」；命令行用 dsh plugin --profile desktop add dsh-shadertoy-skin。
-
-要装的作品链接：<把你复制的 https://www.shadertoy.com/view/xxxxxxxx 粘在这里>
-
-做法：
-1. 打开上面的链接，拿到 Image pass 的 GLSL（若用了 Common，把 Common 的函数一起带上），以及可选的 mainSound。
-2. 打开插件设置页（左栏「Shader 背景」）→ 背景库 → 「粘贴 ShaderToy 代码」：名字用作品名，Image 粘主代码，Sound 可空。
-3. 导入后把它设为当前背景，确认背景真的渲染出来（不是黑屏、不是编译报错）；若报编译错误，按错误行号修好再试。
-4. 如果页面抓不到代码（反爬/需要登录/只给 WebGL 不给源码），直接让我手动复制粘贴，不要猜代码。
-5. 该作品的许可由原作者决定（ShaderToy 默认 CC BY-NC-SA 3.0）：只装在本机，不要提交进 git、不要随包发布。
-
-装好后告诉我：装的是哪个作品、是否带声音、需不需要我调亮度/玻璃。
-```
-
-> AI 抓不到 ShaderToy 页面时（它经常挡爬虫），就走上面第 1 种的「手动粘贴」——一样能装好，而且不会有许可证问题。
-
-### 3. 从本地目录导入（批量最方便）
-
-把 `ShaderToy 导出的 JSON`、或直接是 `.glsl` / `.txt` 的代码文件放进：
-
-```
-$DSH_HOME/shader-skin/presets/        （Windows 默认 C:\Users\<你>\.dsh\shader-skin\presets\）
-```
-
-设置页 → 背景库 → 「从本地目录导入」→ 点 **导入**。这个目录不进包、不进 git。
 
 ## 改代码 / 微调作品
 
