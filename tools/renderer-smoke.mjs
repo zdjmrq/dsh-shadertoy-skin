@@ -302,6 +302,31 @@ async function main() {
     const afterFork = await page.evaluate(() => [...document.querySelectorAll('#lib-list .item .name')].map(node => node.textContent))
     check('fork appears in the library list', afterFork.some(name => /副本/.test(name)), afterFork.join(','))
 
+    // --- main mode must scroll inside the iframe (content is taller than 720p)
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.goto(`${BASE}/panel.html?mode=main&base=`, { waitUntil: 'load' })
+    await page.waitForFunction(() => document.body.classList.contains('mode-main'))
+    await page.waitForTimeout(400)
+    const scrollable = await page.evaluate(() => {
+      const body = document.body
+      const height = getComputedStyle(body).height
+      const before = body.scrollTop
+      body.scrollTop = 99999
+      const after = body.scrollTop
+      return {
+        height,
+        overflowY: getComputedStyle(body).overflowY,
+        scrollHeight: body.scrollHeight,
+        innerHeight: window.innerHeight,
+        before,
+        after,
+        htmlClass: document.documentElement.className,
+      }
+    })
+    check('main-mode page has a fixed-height scrolling body', scrollable.overflowY === 'auto' && /px$/.test(scrollable.height), JSON.stringify(scrollable))
+    check('main-mode content is taller than the viewport', scrollable.scrollHeight > scrollable.innerHeight, `${scrollable.scrollHeight} vs ${scrollable.innerHeight}`)
+    check('main-mode page actually scrolls', scrollable.after > 0, `${scrollable.before} -> ${scrollable.after}`)
+
     check('no uncaught page errors', consoleErrors.length === 0, consoleErrors.join(' | ').slice(0, 300))
   } finally {
     await browser?.close().catch(() => {})
