@@ -8,8 +8,10 @@
 
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
-![aurora](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/M0/aurora-default.png)
-![flow](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/M0/flow-default.png)
+![马里奥像素画背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-mario.png)
+![Seascape 海面背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-seascape.png)
+
+> 截图里的 ShaderToy 作品版权归原作者：像素马里奥（作者见对应作品页）、Seascape（© TDM，CC BY-NC-SA 3.0）。**截图仅作效果展示**，本仓库代码仍是 MIT，且不收录这些作品代码。
 
 ## 名字 / 包名（认准这两个）
 
