@@ -75,6 +75,12 @@
   /* standalone preview (parent === window): same fixed-height scrolling body */
   html.standalone, body.standalone { height: 100%; }
   body.standalone { overflow-y: auto; overflow-x: hidden; }
+  /* a visible (but unobtrusive) scrollbar so the page reads as scrollable */
+  body.mode-main::-webkit-scrollbar, body.standalone::-webkit-scrollbar { width: 10px; }
+  body.mode-main::-webkit-scrollbar-thumb, body.standalone::-webkit-scrollbar-thumb {
+    background: var(--line); border-radius: 99px; border: 3px solid transparent; background-clip: content-box;
+  }
+  body.mode-main::-webkit-scrollbar-track, body.standalone::-webkit-scrollbar-track { background: transparent; }
   body.mode-main .fab { display: none; }
   body.mode-main .panel {
     display: block; width: 100%; max-width: 960px; margin: 0 auto;
