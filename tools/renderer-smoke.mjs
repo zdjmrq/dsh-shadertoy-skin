@@ -65,12 +65,18 @@ async function main() {
   let browser
   try {
     await waitForServer()
-    const channel = process.env.PLAYWRIGHT_CHANNEL || undefined
-    browser = await playwright.chromium.launch({
-      channel,
-      headless: !process.argv.includes('--headed'),
-      args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
-    })
+    const headless = !process.argv.includes('--headed')
+    const launchArgs = ['--enable-unsafe-swiftshader', '--use-angle=swiftshader']
+    // CI images ship Chrome, so prefer the installed browser there and skip the
+    // Playwright download entirely. Locally, PLAYWRIGHT_CHANNEL=msedge also works.
+    const channel = process.env.PLAYWRIGHT_CHANNEL || (process.env.CI ? 'chrome' : undefined)
+    try {
+      browser = await playwright.chromium.launch({ channel, headless, args: launchArgs })
+    } catch (error) {
+      if (!channel) throw error
+      console.warn(`could not launch "${channel}", falling back to the bundled Chromium: ${error.message}`)
+      browser = await playwright.chromium.launch({ headless, args: launchArgs })
+    }
     const page = await browser.newPage({ viewport: { width: 1024, height: 640 }, deviceScaleFactor: 1 })
 
     const consoleErrors = []
