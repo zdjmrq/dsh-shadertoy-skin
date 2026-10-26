@@ -263,6 +263,16 @@
       }
     } else {
       // 16-bit linear packing: R/G = hi/lo byte of L, B/A = hi/lo byte of R.
+      // ShaderToy sound passes come in several signatures, all of them accepted:
+      //   vec2 mainSound(float time)            stereo
+      //   float mainSound(float time)           mono   (duplicated to both channels)
+      //   vec2 mainSound(int samp, float time)  stereo + sample index (often unused)
+      //   float mainSound(int samp, float time) mono   + sample index
+      const signature = analyzeSoundSignature(analysis)
+      const call = signature.args > 1 ? 'mainSound(st_samp, st_t)' : 'mainSound(st_t)'
+      const sample = signature.ret === 'float'
+        ? [`  float st_m = clamp(${call}, -1.0, 1.0);`, `  vec2 st_s = vec2(st_m, st_m);`]
+        : [`  vec2 st_s = clamp(${call}, -1.0, 1.0);`]
       tail.push(
         `vec2 st_pack16(float v){`,
         `  float u = clamp(v * 0.5 + 0.5, 0.0, 1.0);`,
@@ -271,13 +281,23 @@
         `}`,
         `void main(){`,
         `  float st_t = iTime + gl_FragCoord.x / iSampleRate;`,
-        `  vec2 st_s = clamp(mainSound(st_t), -1.0, 1.0);`,
+        // absolute sample index, wrapped well below int overflow for very long runs
+        `  int st_samp = int(floor(mod(st_t * iSampleRate, 2147483000.0)));`,
+        ...sample,
         `  ${target} = vec4(st_pack16(st_s.x), st_pack16(st_s.y));`,
         `}`,
       )
     }
     const source = `${header.join('\n')}\n${rewritten}\n${tail.join('\n')}`
     return { source, headerLineCount: header.length }
+  }
+
+  /** Detect the return type and arity of a ShaderToy `mainSound` declaration. */
+  function analyzeSoundSignature(code) {
+    const match = /\b(vec2|float)\s+mainSound\s*\(([^)]*)\)/.exec(code)
+    if (match === null) return { ret: 'vec2', args: 1 }
+    const args = match[2].split(',').filter(part => part.trim() !== '').length
+    return { ret: match[1], args }
   }
 
   const VS_ES3 = `#version 300 es\nin vec2 aPos;\nvoid main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`
@@ -653,8 +673,10 @@
     if (typeof source !== 'string' || !source.trim()) { setAudioState('none'); publishAudio(); return false }
     const built = buildSoundProgram(source)
     if (!built.program) {
-      report(`sound disabled · ${String(built.error).split('\n')[0].slice(0, 120)}`)
-      setAudioState('error', 'sound compile failed')
+      const detail = String(built.error).split('\n').filter(line => line.trim() !== '').slice(0, 3).join(' · ')
+      console.warn('[shader-skin] sound compile error', built.error)
+      report(`sound disabled · ${detail.slice(0, 220)}`)
+      setAudioState('error', `sound compile failed · ${detail.split('·').pop()?.trim().slice(0, 120) ?? ''}`)
       publishAudio()
       return false
     }

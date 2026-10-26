@@ -73,15 +73,15 @@ node tools/dev-server.mjs 8730
 - [x] 帧率上限、`document.hidden` 暂停、`prefers-reduced-motion`（后者待接）
 - [x] 可读性：`dim`/`tint`/`tintMix` 在 `main()` 里混合（零额外合成，一层就是整个玻璃滤镜），`blur` 走 CSS 且默认 0
 - [x] 单层滤镜接管「玻璃」：外壳 token 全透明，暗色/亮色滤镜都由播放器画（详见 `docs/00-决策与方案复核.md` §9.4）
-- [x] 无头 Edge 回归脚本跑通：aurora/flow/legacy/es1/broken/missing 六个场景
+- [x] **`mainSound` 音频（M2）**：四种签名全兼容 —— `vec2`/`float` 返回值 × `(float time)`/`(int samp, float time)` 参数；单声道复制到左右，`samp` = 绝对采样序号；4096 采样 → `readPixels` → WebAudio 前瞻调度
+- [x] 无头 Edge 回归脚本跑通：aurora/flow/legacy/es1/broken/missing 六个场景 + pulse/mono-sound 音频场景
 
 ## 还没做（后续里程碑）
 
 - [ ] 多 pass（Buffer A–D + ping-pong）—— 数据模型与通道绑定要先定
-- [ ] `mainSound` 音频（M2）
 - [ ] 自适应分辨率 / 电池降档 / 软渲染检测（M3）
 - [ ] 兼容性静态体检（外部纹理、cubemap、键盘通道、`mainVR`）
-- [ ] `iMouse` 的父页面转发（client 半接上后联调）
+- [ ] `iMouse` 的父页面转发（client 半已接上，做「只在空白处拖拽」的过滤）
 - [ ] `dim`/`tint` 对 legacy `void main()` 作品不生效（这些作品没有 wrapper 注入点）
 
 ## 眼下的已知取舍

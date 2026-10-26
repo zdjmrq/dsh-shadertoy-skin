@@ -116,7 +116,7 @@ try {
     version: 2,
     activeId: 'user-1',
     entries: [{ id: 'user-1', name: '我的背景', source: 'paste', code: { image: entryCode } }],
-    overrides: { 'user-1': { glass: 62, fps: 60 }, flow: { blur: 2 } },
+    overrides: { 'user-1': { glass: 62, fps: 60, brightness: 135, panels: 'half' }, flow: { blur: 2 } },
   }
   const put = await putState(next)
   check('state PUT returns 200', put.status === 200)
@@ -124,11 +124,14 @@ try {
   check('state round-trips activeId', stored.activeId === 'user-1')
   check('state round-trips entries', stored.entries?.[0]?.id === 'user-1' && stored.entries?.[0]?.code?.image === entryCode)
   check('state round-trips overrides', stored.overrides?.['user-1']?.glass === 62 && stored.overrides?.flow?.blur === 2)
+  check('state persists brightness and card transparency', stored.overrides?.['user-1']?.brightness === 135 && stored.overrides?.['user-1']?.panels === 'half', JSON.stringify(stored.overrides?.['user-1']))
   check('state stamps updatedAt', typeof stored.updatedAt === 'number')
   check('state drops unknown override keys', stored.overrides?.['user-1']?.nonsense === undefined)
   const onDisk = JSON.parse(await readFile(join(home, 'shader-skin.json'), 'utf8'))
   check('state is written to $DSH_HOME/shader-skin.json', onDisk.version === 2 && onDisk.activeId === 'user-1')
   check('state file is not left behind as .tmp', !(await readFile(join(home, 'shader-skin.json.tmp'), 'utf8').then(() => true).catch(() => false)))
+  const bogusLevel = await putState({ version: 2, entries: [], overrides: { x: { panels: 'nope', brightness: 'bright' } } })
+  check('unknown card transparency / non-numeric brightness are dropped', bogusLevel.status === 200 && (await json('/shader-skin/state')).overrides?.x === undefined)
 
   const legacy = await putState({ version: 1, activeId: 'aurora', params: { glass: 50 }, entries: [] })
   check('legacy v1 state is accepted', legacy.status === 200)

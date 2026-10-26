@@ -147,6 +147,16 @@ async function main() {
     check('aurora reports sound:false', state.sound === false, String(state.sound))
     check('aurora audio state is none', state.audio.state === 'none', state.audio.state)
 
+    // ---- ShaderToy's mono + sample-index signature: float mainSound(in int, float)
+    await open('preset=dev/mono-sound&fps=30&dim=1&audioprobe=1&muted=0&volume=70')
+    await waitFor(() => window.__player?.ready === true, 20_000, 'mono-sound ready')
+    await waitFor(() => window.__player?.audio?.state === 'running', 15_000, 'mono-sound audio running')
+    state = await player()
+    check('mono int-samp sound compiles and runs', state.sound === true && state.audio.state === 'running', JSON.stringify(state.audio))
+    await waitFor(() => (window.__audioProbe?.peak ?? 0) > 0.05, 10_000, 'mono-sound non-silent')
+    const monoProbe = await page.evaluate(() => window.__audioProbe)
+    check('mono sound reaches both channels (non-silent)', monoProbe.peak > 0.05, String(monoProbe.peak))
+
     // ---- muted=0&volume=70 must reach the GainNode
     await open('preset=pulse&fps=30&dim=1&audioprobe=1&muted=0&volume=70')
     await waitFor(() => window.__player?.ready === true, 20_000, 'pulse unmuted ready')

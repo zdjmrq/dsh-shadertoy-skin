@@ -41,6 +41,9 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 - [x] **卡片透明度三档**（不透明 / 半透明 / 透明）：控制卡片、代码块、弹层、输入框的底色，让背景能透进这些「框」里
 - [x] **每背景独立参数**（`overrides`）
 - [x] **`mainSound` 音频**：4096 采样块 → `readPixels` → WebAudio 前瞻调度 + Gain/限幅，音量与静音实时生效
+- [x] **音频签名全兼容**：ShaderToy 音频 pass 的四种写法都接受 —— `vec2`/`float` 返回值 × `(float time)`/`(int samp, float time)` 参数（单声道自动复制到左右；`samp` 传绝对采样序号）
+- [x] **参数真正落盘**：`brightness` / `panels` 之前被 Host 的状态白名单漏掉（PUT 成功但字段被丢，重启就回默认），已修好并加了回归测试
+- [x] **自动解锁音频**：被浏览器 autoplay 策略拦下时，点一下界面任意位置就恢复出声（面板里也有「开声音」按钮）
 - [x] 深浅色主题适配（设置页与玻璃都跟随 DSH；亮色主题滤镜走向白色）
 - [x] **启动自愈**：桌面端 client 插件行与服务是并发激活的，首次启动时 `theme`/`slots` 可能还没就绪（旧版因此「重启后要手动关开一次插件」）。现在服务现取 + 启动后 10 秒内多次自检（背景层缺失就重建、token 被重置就重设、播放器没 `ready` 就重发 init、侧栏没注册上就补注册），**装好重启即生效**
 - [ ] 多 pass（Buffer A–D）、音频可视化回馈、兼容性静态体检
@@ -95,7 +98,16 @@ dsh plugin --profile desktop add github:zdjmrq/dsh-shadertoy-skin#main
 3. 回到插件设置页 → **背景库** → 「粘贴 ShaderToy 代码」→ 填名字 → 粘进 `Image 代码` → **加入背景库**；
 4. 列表里点 **使用** 即可，参数会即时生效。
 
-带声音的作品（代码里有 `mainSound`）把声音代码粘进 `Sound 代码`，切到它时会出声。
+带声音的作品（代码里有 `mainSound`）把声音代码粘进 `Sound 代码`，切到它时会出声。声音签名支持这四种：
+
+```glsl
+vec2  mainSound(float time)            // 立体声
+float mainSound(float time)            // 单声道（自动复制到左右）
+vec2  mainSound(int samp, float time)  // 带采样序号
+float mainSound(int samp, float time)  // 单声道 + 采样序号
+```
+
+如果出声被浏览器拦住，点一下界面任意位置即可解锁（面板音量那一行也会提示）。
 
 ### 2. 让 AI 帮你装（一条指令，把网址填进去就行）
 

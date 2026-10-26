@@ -212,7 +212,8 @@ async function readJsonBody(req, limit = MAX_STATE_BYTES) {
 }
 
 /** Accept only the shape the client half writes; unknown keys are dropped. */
-const PARAM_KEYS = new Set(['enabled', 'glass', 'blur', 'scale', 'fps', 'speed', 'volume', 'muted'])
+const PARAM_KEYS = new Set(['enabled', 'glass', 'brightness', 'panels', 'blur', 'scale', 'fps', 'speed', 'volume', 'muted'])
+const PANEL_LEVELS = new Set(['opaque', 'half', 'clear'])
 
 function sanitizeParams(raw) {
   const out = {}
@@ -221,6 +222,10 @@ function sanitizeParams(raw) {
     if (!PARAM_KEYS.has(key)) continue
     if (key === 'enabled' || key === 'muted') {
       if (typeof value === 'boolean') out[key] = value
+      continue
+    }
+    if (key === 'panels') {
+      if (PANEL_LEVELS.has(value)) out[key] = value
       continue
     }
     if (typeof value === 'number' && Number.isFinite(value)) out[key] = value
@@ -236,7 +241,7 @@ function sanitizeEntry(raw, index) {
   const entry = {
     id: raw.id,
     name: typeof raw.name === 'string' && raw.name.trim() !== '' ? raw.name.slice(0, 120) : raw.id,
-    source: ['paste', 'file', 'local'].includes(raw.source) ? raw.source : 'paste',
+    source: ['paste', 'file', 'local', 'edit'].includes(raw.source) ? raw.source : 'paste',
     code: { image: code.image },
   }
   if (typeof code.sound === 'string' && code.sound.trim() !== '') entry.code.sound = code.sound

@@ -160,6 +160,9 @@ window.__ModuleLoader__.load({
           let sidebarAllowed = false
           let playerReady = false
           let playerInitAttempts = 0
+          // WebAudio inside an iframe may start suspended until a real user gesture
+          // (autoplay policy); the first click / keypress in the app is that gesture.
+          let audioSuspended = false
 
           // ---------------------------------------------------------------- glass
           //
@@ -520,6 +523,19 @@ window.__ModuleLoader__.load({
           on(window, 'pointercancel', release, { passive: true })
           on(window, 'blur', release)
 
+          // Autoplay policy: an iframe's AudioContext may stay suspended until the
+          // page gets a real gesture. Any click / keypress in the app unlocks it, so
+          // a background with `mainSound` starts playing without hunting for the
+          // panel's 「开声音」 button.
+          const unlockAudio = () => {
+            if (!audioSuspended) return
+            audioSuspended = false
+            postTo(background, { type: 'audio-resume' })
+          }
+          on(window, 'pointerdown', unlockAudio, { passive: true })
+          on(window, 'keydown', unlockAudio)
+          on(window, 'focus', unlockAudio)
+
           // ------------------------------------------------------- message routing
           on(window, 'message', event => {
             if (event.origin !== location.origin) return
@@ -529,8 +545,10 @@ window.__ModuleLoader__.load({
               if (message.type === 'ready') {
                 playerReady = true
                 playerInitAttempts = 0
-              } else if (message.type === 'audio') broadcastPanel({ type: 'audio', ...message })
-              else if (message.type === 'error') {
+              } else if (message.type === 'audio') {
+                audioSuspended = message.state === 'suspended'
+                broadcastPanel({ type: 'audio', ...message })
+              } else if (message.type === 'error') {
                 console.warn('[shadertoy-skin] renderer reported an error:', message.stage, message.log)
                 broadcastPanel({ type: 'error', stage: message.stage, log: String(message.log ?? '').slice(0, 400) })
               }
