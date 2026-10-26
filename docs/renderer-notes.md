@@ -90,3 +90,5 @@ node tools/dev-server.mjs 8730
 - 时间轴：`iTime` 累加 `dt × speed`，切作品归零；`iTimeDelta` 用真实帧间隔（不乘 speed）。
 - GLSL ES 3.00 保留字（`patch`、`sample`、`input`、`output` 等）会让 ES3 编译失败、静默掉到 ES1 —— 这是已知坑，写 shader 时避免。
 - **`precise` 限定符在 WebGL2 里不存在**（GLSL 4.0 / ESSL 3.20 才有）：`precise float x = …` 会直接 `undeclared identifier`，ES3/ES1 都编译不过。ShaderToy 上防「驱动 FMA 收缩导致共享晶格点哈希不一致」的写法要换成**整数哈希**（`uint` 位混合），见 `docs/00-决策与方案复核.md` §9.6。
+- **`pow(负底数)` 是第三方作品的常见炸点**：GLSL 未定义，不同驱动分别表现为黑点 / 洋红块 / 纯红（Intel Arc + ANGLE-D3D11 上是 R=255、G/B 有效的 hot pink）；而且 `mix(a, b, 0)` 里若 `b` 是 NaN，天空也会被污染。导入的作品若在输出前对颜色做 `pow`，建议先 `max(color, 0.0)`（播放器自身不做这一步，保持 ShaderToy 原语义）。排查手法：把 RGBA32F FBO 的原始输出读回来，比对「NaN 像素集合」与「负值像素集合」是否逐像素相等。见 `§9.11`。
+- **壁纸场景别让 `iMouse` 驱动时间轴**：`iTime + iMouse.x*k` 在播放器里只会在拖拽时被送值，等于「拖一下画面瞬移」；`§9.11` 里实测一次拖拽可跳 13 shader 秒。

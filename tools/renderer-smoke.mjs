@@ -186,6 +186,7 @@ async function main() {
         const area = document.getElementById('code-image')
         return area ? getComputedStyle(area).resize : null
       })(),
+      codeGrips: document.querySelectorAll('.code-grip').length,
       fps: document.querySelector('#fps-dd .dd-trigger')?.textContent,
       scale: document.querySelector('#scale-dd .dd-trigger')?.textContent,
       preset: document.querySelector('#preset-dd .dd-trigger')?.textContent,
@@ -199,9 +200,10 @@ async function main() {
     check('panel defaults to 100% brightness', initial.brightness === '100%', String(initial.brightness))
     check('panel defaults to opaque cards', initial.panels === '不透明', String(initial.panels))
     check('panel defaults to loop off', initial.loopChecked === false && initial.loopRowHidden === true)
-    check('panel defaults to looping music', initial.audioMode === '循环播放', String(initial.audioMode))
-    check('music duration row hidden unless playing once', initial.audioSecondsRowHidden === true)
-    check('code boxes are vertically resizable', initial.codeResize === 'vertical', String(initial.codeResize))
+    check('panel defaults to looping music', /循环重放/.test(initial.audioMode ?? ''), String(initial.audioMode))
+    check('music duration row is hidden without a sound pass', initial.audioSecondsRowHidden === true)
+    check('code boxes have a visible drag grip instead of the native resizer',
+      initial.codeGrips === 2 && initial.codeResize === 'none', `${initial.codeGrips} grips / resize=${initial.codeResize}`)
     check('panel selects a built-in preset', /极光/.test(initial.preset ?? ''), String(initial.preset))
 
     // card/overlay transparency picker
@@ -229,7 +231,7 @@ async function main() {
     await page.locator('#audio-mode-dd .dd-item', { hasText: '只播一次' }).click()
     const onceState = await panelState()
     check('music can play once', onceState.audioMode === '只播一次', String(onceState.audioMode))
-    check('duration row appears for play-once', onceState.audioSecondsRowHidden === false)
+    check('duration row stays hidden without a sound pass', onceState.audioSecondsRowHidden === true)
 
     // custom dropdown: no native (light) popup — a themed list we control
     await page.click('#fps-dd .dd-trigger')
@@ -275,6 +277,30 @@ async function main() {
     const codeInitial = await codeState()
     check('code tab shows the running built-in shader', /极光/.test(codeInitial.title ?? '') && codeInitial.image.includes('mainImage'), codeInitial.title)
     check('code tab marks a built-in as read-only', /只读/.test(await page.textContent('#code-hint')))
+
+    // --- code boxes: the visible grip drags the height, and it is remembered
+    const codeHeight = () => page.evaluate(() => Math.round(document.getElementById('code-image').getBoundingClientRect().height))
+    const beforeDrag = await codeHeight()
+    const gripBox = await page.locator('.code-grip').first().boundingBox()
+    await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2 + 140, { steps: 12 })
+    await page.mouse.up()
+    await sleep(150)
+    const afterDrag = await codeHeight()
+    check('dragging the code grip resizes the box', afterDrag >= beforeDrag + 100, `${beforeDrag} -> ${afterDrag}`)
+    check('code box height is persisted in localStorage', await page.evaluate(() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem('shadertoy-skin.codeHeights') ?? 'null')
+        return Number.isFinite(saved?.image) && saved.image > 300
+      } catch { return false }
+    }))
+    await page.locator('.code-grip').first().focus()
+    const beforeKey = await codeHeight()
+    await page.keyboard.press('ArrowDown')
+    await sleep(100)
+    const afterKey = await codeHeight()
+    check('the code grip supports keyboard resizing', afterKey >= beforeKey + 10, `${beforeKey} -> ${afterKey}`)
 
     // invalid source is rejected without creating a fork
     await page.locator('#code-image').fill('not glsl at all')
