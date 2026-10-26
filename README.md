@@ -10,6 +10,7 @@ Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Ha
 
 ![马里奥像素画背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-mario.png)
 ![Seascape 海面背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-seascape.png)
+![代码页：查看 / 修改 / 保存并运行当前作品的着色器](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-code.png)
 
 > 截图里的 ShaderToy 作品版权归原作者：像素马里奥（作者见对应作品页）、Seascape（© TDM，CC BY-NC-SA 3.0）。**截图仅作效果展示**，本仓库代码仍是 MIT，且不收录这些作品代码。
 
