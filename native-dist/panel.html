@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh" data-theme="dark">
+<html lang="zh" data-theme="dark" data-panels="opaque">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,6 +20,13 @@
     --pop: #fff;
     --shadow: 0 12px 36px #00000014;
     --danger: #c0362c;
+    --page-fill: var(--canvas);
+    --card-fill: var(--surface);
+    --editor-fill: var(--field);
+    --focus-fill: var(--pop);
+    --control-fill: var(--field);
+    --control-hover-fill: var(--field-hover);
+    --action-fill: var(--pop);
   }
   html[data-theme="dark"] {
     --bg: #232324;
@@ -36,6 +43,23 @@
     --pop: #2c2c2e;
     --shadow: 0 12px 36px #00000040;
     --danger: #ff8d7e;
+  }
+  /* Only one strong surface per card: nested fields must not stack back to
+     opaque. Keep the palette's solid ink colors for primary buttons/switches. */
+  html[data-panels="half"], html[data-panels="clear"] {
+    --page-fill: transparent;
+    --card-fill: rgba(255, 255, 255, var(--panel-alpha));
+    --editor-fill: transparent;
+    --focus-fill: var(--card-fill);
+    --control-fill: rgba(0, 0, 0, .035);
+    --control-hover-fill: rgba(0, 0, 0, .075);
+    --action-fill: rgba(255, 255, 255, var(--action-alpha));
+  }
+  html[data-theme="dark"][data-panels="half"], html[data-theme="dark"][data-panels="clear"] {
+    --card-fill: rgba(35, 35, 36, var(--panel-alpha));
+    --control-fill: rgba(0, 0, 0, .12);
+    --control-hover-fill: rgba(255, 255, 255, .08);
+    --action-fill: rgba(35, 35, 36, var(--action-alpha));
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
@@ -61,7 +85,7 @@
   .panel {
     width: 392px; padding: 14px 16px 12px;
     border-radius: 16px; border: 1px solid var(--line);
-    background: var(--bg);
+    background: var(--card-fill);
     box-shadow: var(--shadow);
     display: none;
   }
@@ -105,15 +129,15 @@
   h1 { margin: 0; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
   h1 b { color: var(--accent); font-weight: 600; }
   .close { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 3px 6px; border-radius: 6px; }
-  .close:hover { color: var(--fg); background: var(--field-hover); }
+  .close:hover { color: var(--fg); background: var(--control-hover-fill); }
 
-  .tabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 3px; border-radius: 10px; background: var(--field); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 3px; border-radius: 10px; background: var(--control-fill); }
   .tabs button {
     flex: 1; padding: 6px 0; border: 0; border-radius: 8px; background: transparent;
     color: var(--muted); cursor: pointer; font-size: 11px; letter-spacing: .06em;
   }
   .tabs button.active { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-  body.mode-main .tabs button.active { background: var(--field-hover); box-shadow: none; }
+  body.mode-main .tabs button.active { background: var(--control-hover-fill); box-shadow: none; }
 
   .row { margin-top: 12px; }
   .row:first-of-type { margin-top: 0; }
@@ -124,13 +148,13 @@
   .hint.error { color: var(--danger); }
 
   input[type=range] { appearance: none; display: block; width: 100%; height: 16px; margin: 0; padding: 0; background: transparent; cursor: pointer; }
-  input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: var(--field-hover); }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: var(--control-hover-fill); }
   input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5.5px; border: 0; border-radius: 50%; background: var(--accent); }
   input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
   input[type=text], textarea, input[type=file] {
     width: 100%; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line);
-    background: var(--field); color: var(--fg); font: inherit;
+    background: var(--control-fill); color: var(--fg); font: inherit;
   }
   input[type=text]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   textarea { resize: vertical; min-height: 92px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.5; }
@@ -145,13 +169,13 @@
     min-height: 240px; max-height: none; white-space: pre; overflow: auto;
     tab-size: 2; font-size: 11.5px; line-height: 1.6; resize: none;
   }
-  .code-area.sound { min-height: 90px; }
+  .code-area.sound { min-height: 160px; }
   .code-grip {
     display: flex; align-items: center; justify-content: center; gap: 4px;
     height: 16px; margin: 2px 0 8px; border-radius: 6px; cursor: ns-resize;
     touch-action: none; user-select: none; outline-offset: 2px;
   }
-  .code-grip:hover { background: var(--field-hover); }
+  .code-grip:hover { background: var(--control-hover-fill); }
   .code-grip:focus-visible { outline: 2px solid var(--accent); }
   .code-grip::before, .code-grip::after {
     content: ""; width: 14px; height: 2px; border-radius: 1px; background: var(--faint);
@@ -162,18 +186,18 @@
   .editor-toolbar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 12px 0; margin: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
   .editor-wrap { display: flex; gap: 7px; align-items: center; }
   .editor-wrap input { accent-color: var(--accent); }
-  .editor-toolbar select { padding: 4px 8px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+  .editor-toolbar select { padding: 4px 8px; font: inherit; color: var(--fg); background: var(--control-fill); border: 1px solid var(--line); border-radius: 6px; }
   .editor-shortcut { margin-left: auto; color: var(--faint); }
-  .code-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+  .code-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-fill); }
   .code-card > .head { align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .code-card > .head label { font-size: 13px; letter-spacing: 0; color: var(--fg); }
   .code-card > .head output { margin-left: auto; }
   .editor-controls { display: flex; gap: 6px; }
   .editor-controls .btn { margin: 0; padding: 5px 10px; min-height: 30px; font-size: 12px; }
-  .code-frame { position: relative; padding-left: 48px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--field); }
+  .code-frame { position: relative; padding-left: 48px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--editor-fill); }
   .code-frame:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .code-frame .code-area { display: block; width: 100%; min-height: 160px; border: 0; border-radius: 0; padding: 12px; background: transparent; font: 14px/1.7 ui-monospace, Consolas, monospace; outline: none; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
-  .code-frame .code-area.sound { min-height: 90px; }
+  .code-frame .code-area.sound { min-height: 160px; }
   .code-lines { position: absolute; inset: 0 auto 0 0; width: 48px; margin: 0; padding: 12px 10px 12px 0; overflow: hidden; text-align: right; color: var(--muted); border-right: 1px solid var(--line); font: 14px/1.7 ui-monospace, Consolas, monospace; user-select: none; pointer-events: none; }
   .wrap-code .code-lines { display: none; }
   .wrap-code .code-frame { padding-left: 0; }
@@ -185,13 +209,18 @@
   .code-card.collapsed .code-frame, .code-card.collapsed .code-grip { display: none; }
   .code-card.collapsed > .head { margin-bottom: 0; }
   body.editor-focus { overflow: hidden !important; }
-  .code-card.focused { position: fixed; inset: 12px; z-index: 100; margin: 0; display: flex; flex-direction: column; background: var(--pop); box-shadow: var(--shadow); }
+  /* A translucent focus surface must reveal the shader, not the old editor's
+     text underneath. Visibility preserves layout/scroll position on exit. */
+  body.editor-focus #panel > :not(#view-code),
+  body.editor-focus #view-code > :not(.focused),
+  body.editor-focus #note { visibility: hidden; }
+  .code-card.focused { position: fixed; inset: 12px; z-index: 100; margin: 0; display: flex; flex-direction: column; background: var(--focus-fill); box-shadow: var(--shadow); }
   .code-card.focused .code-frame { flex: 1; min-height: 0; }
   .code-card.focused .code-area { height: 100% !important; min-height: 0; }
   .code-card.focused .code-grip, .code-card.focused .editor-controls button:first-child { display: none; }
   .editor-focus-save { display: none; }
   .code-card.focused .editor-focus-save { display: block; }
-  #view-code > .actions { position: sticky; bottom: 0; z-index: 5; padding: 12px 0; background: var(--pop); border-top: 1px solid var(--line); }
+  #view-code > .actions { position: sticky; bottom: 0; z-index: 5; padding: 12px 0; background: var(--action-fill); border-top: 1px solid var(--line); }
   @media (max-width: 540px) { .editor-shortcut { display: none; } .editor-toolbar { gap: 12px; } .code-card { padding: 10px; } .code-card > .head output { font-size: 10px; } .editor-controls { width: 100%; justify-content: flex-end; } .code-card.focused { inset: 4px; } }
 
   /* custom dropdown: the native <select> popup ignores our palette */
@@ -199,9 +228,9 @@
   .dd-trigger {
     width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line);
-    background: var(--field); color: var(--fg); cursor: pointer; text-align: left;
+    background: var(--control-fill); color: var(--fg); cursor: pointer; text-align: left;
   }
-  .dd-trigger:hover { background: var(--field-hover); }
+  .dd-trigger:hover { background: var(--control-hover-fill); }
   .dd-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .dd-trigger::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg) translateY(-2px); }
   .dd-menu {
@@ -227,9 +256,9 @@
   .actions { display: flex; gap: 8px; margin-top: 14px; }
   .btn {
     flex: 1; padding: 7px 0; border-radius: 9px; cursor: pointer; font-size: 11px;
-    border: 1px solid var(--line); background: var(--field); color: var(--fg);
+    border: 1px solid var(--line); background: var(--control-fill); color: var(--fg);
   }
-  .btn:hover { background: var(--field-hover); border-color: var(--muted); }
+  .btn:hover { background: var(--control-hover-fill); border-color: var(--muted); }
   .btn.primary { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .btn.tiny { flex: 0 0 auto; padding: 4px 8px; font-size: 10px; }
   .btn.danger:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
@@ -241,8 +270,8 @@
   .lib-head span { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
   .list { max-height: 300px; overflow: auto; margin: 0 -4px; padding: 0 4px; }
   .item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px; border: 1px solid transparent; }
-  .item:hover { background: var(--field); }
-  .item.active { border-color: var(--accent); background: var(--accent-soft); }
+  .item:hover { border-color: var(--muted); }
+  .item.active { border-color: var(--accent); }
   .item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .item .badge { flex: 0 0 auto; font-size: 9px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; line-height: 16px; }
   .item .badge.sound { color: var(--accent); border-color: var(--accent); }
@@ -257,24 +286,24 @@
 
   /* Settings are a reading surface even when the wallpaper is bright or busy. */
   body { font-size: 13px; line-height: 1.6; }
-  body.mode-main { background: var(--canvas); }
+  body.mode-main { background: var(--page-fill); }
   body.mode-main .panel, body.mode-main .panel.wide { max-width: 1080px; padding: 40px clamp(20px, 4vw, 48px) 48px; }
   body.mode-main .page-head { margin-bottom: 24px; }
   body.mode-main .page-head h2 { font-size: 23px; letter-spacing: -.025em; font-weight: 600; margin: 0; }
   body.mode-main .page-head p { color: var(--muted); font-size: 13px; }
   .page-head { position: relative; }
-  .wallpaper-preview { position: absolute; top: 0; right: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); font-size: 12px; cursor: pointer; }
+  .wallpaper-preview { position: absolute; top: 0; right: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card-fill); color: var(--fg); font-size: 12px; cursor: pointer; }
   body.mode-main.previewing { background: transparent; overflow: hidden; }
   .previewing .panel { visibility: hidden; }
   .previewing .wallpaper-preview { visibility: visible; position: fixed; top: 24px; right: 24px; box-shadow: var(--shadow); }
-  body.mode-main .tabs { max-width: none; width: fit-content; min-width: min(100%, 288px); margin: 0 0 28px; padding: 3px; border: 1px solid var(--line); background: var(--field); }
+  body.mode-main .tabs { max-width: none; width: fit-content; min-width: min(100%, 288px); margin: 0 0 28px; padding: 3px; border: 1px solid var(--line); background: var(--control-fill); }
   .tabs button { padding: 9px 22px; font-size: 13px; letter-spacing: 0; white-space: nowrap; }
-  body.mode-main .tabs button.active { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px #00000012; font-weight: 600; }
+  body.mode-main .tabs button.active { background: var(--card-fill); color: var(--fg); box-shadow: 0 1px 3px #00000012; font-weight: 600; }
   button, input, textarea { transition: border-color .15s; }
   button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .settings-grid { display: grid; gap: 18px; align-items: start; }
   body.mode-main .sub { max-width: none; }
-  .settings-card { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 1px 2px #00000003; }
+  .settings-card { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-fill); box-shadow: 0 1px 2px #00000003; }
   .settings-card h3 { margin: 0 0 24px; font-size: 14px; font-weight: 600; }
   .settings-card .row { margin-top: 24px; }
   .settings-card .row.switch { padding: 0 0 14px; border-bottom: 1px solid var(--line); }
@@ -291,7 +320,7 @@
   input[type=range] { height: 28px; }
   input[type=range]::-webkit-slider-runnable-track { height: 3px; background: linear-gradient(to right, var(--accent) var(--range-fill, 0%), var(--line) var(--range-fill, 0%)); }
   input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -6.5px; border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); }
-  .switch input { appearance: none; position: relative; width: 36px; height: 22px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--field-hover); }
+  .switch input { appearance: none; position: relative; width: 36px; height: 22px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--control-hover-fill); }
   .switch input::after { content: ''; position: absolute; width: 16px; height: 16px; top: 2px; left: 2px; border-radius: 50%; background: var(--muted); transition: transform .15s; }
   .switch input:checked { background: var(--accent); border-color: var(--accent); }
   .switch input:checked::after { transform: translateX(14px); background: var(--canvas); }
@@ -306,11 +335,11 @@
   #note { position: fixed; right: 24px; bottom: 18px; z-index: 60; max-width: min(480px, calc(100vw - 40px)); margin: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface); box-shadow: var(--shadow); }
   #note:empty { display: none; }
   #note.error { color: var(--danger); }
-  .item { padding: 14px 12px; margin-bottom: 8px; border: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+  .item { padding: 14px 12px; margin-bottom: 8px; border: 1px solid var(--line); background: var(--card-fill); flex-wrap: wrap; }
   .item .name { flex-basis: 160px; font-weight: 600; }
   .item .badge { font-size: 10px; padding: 2px 7px; }
   .btn.tiny { min-height: 30px; font-size: 12px; padding: 4px 10px; }
-  .import-box { background: var(--surface); border-style: solid; border-radius: 14px; padding: 20px; margin-top: 18px; }
+  .import-box { background: var(--card-fill); border-style: solid; border-radius: 14px; padding: 20px; margin-top: 18px; }
   .import-box h2 { font-size: 14px; letter-spacing: 0; color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
   .local-item { padding: 8px 0; }
   .note.error, .hint.error { color: var(--danger); }
@@ -532,11 +561,12 @@
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
     let scheme = dark ? 'dark' : 'light'
     // Chromium paints an opaque iframe canvas when parent/child color schemes
-    // differ. Match the parent while the settings surface is being previewed.
-    if (document.body.classList.contains('previewing')) {
+    // differ. Match the embedding canvas whenever the shader should show through.
+    if (document.body.classList.contains('previewing') || document.documentElement.dataset.panels !== 'opaque') {
       try { scheme = parent.getComputedStyle(parent.document.documentElement).colorScheme } catch { /* same-origin in DSH */ }
     }
     document.documentElement.style.colorScheme = scheme
+    document.body.style.colorScheme = dark ? 'dark' : 'light'
   }
   function watchParentTheme() {
     try {
@@ -876,8 +906,26 @@
   const PANEL_KINDS = { opaque: '不透明', half: '半透明', clear: '透明' }
   const AUDIO_MODES = { loop: '循环重放', once: '只播一次' }
 
+  function syncPanelSurfaces(p) {
+    const root = document.documentElement
+    root.dataset.panels = p.enabled !== false && ['half', 'clear'].includes(p.panels) ? p.panels : 'opaque'
+    // Match client.js glassTokens(): a minimum fill protects text on extreme
+    // shaders when the global veil is low, in both DSH themes.
+    const selected = p.panels === 'half' ? 0.72 : 0.38
+    const glass = clamp(p.glass, 20, 95, 60) / 100
+    const darkestLight = 255 * glass * 0.92
+    const brightestDark = 255 * (1 - glass) + 21 * glass
+    const darkFloor = Math.max(0, (brightestDark - 110) / Math.max(1, brightestDark - 35))
+    const lightFloor = Math.max(0, (140 - darkestLight) / Math.max(1, 255 - darkestLight))
+    const alpha = Math.min(0.96, Math.max(selected, darkFloor, lightFloor))
+    root.style.setProperty('--panel-alpha', String(alpha))
+    root.style.setProperty('--action-alpha', String(Math.max(0.85, alpha)))
+    applyTheme()
+  }
+
   function sync() {
     const p = effective()
+    syncPanelSurfaces(p)
     $('enabled').checked = p.enabled !== false
     $('glass').value = String(p.glass)
     $('glass-out').textContent = `${Math.round(p.glass)}%`
@@ -1244,6 +1292,7 @@
   let codeSaving = false
   const codeDrafts = new Map()
   const CODE_HEIGHTS_KEY = 'shadertoy-skin.codeHeights'
+  const DEFAULT_CODE_HEIGHT = 360
   const CODE_DRAFTS_KEY = 'shadertoy-skin.codeDrafts'
   function rememberDrafts() {
     if (codeLoadedId) {
@@ -1254,20 +1303,25 @@
     try { sessionStorage.setItem(CODE_DRAFTS_KEY, JSON.stringify([...codeDrafts])) } catch { /* storage full: current editor still holds the draft */ }
   }
 
-  /** Restore the user's own code-box heights (drag the bottom-right corner to change). */
+  /** Version 2 gives Sound the same initial height, then remembers each grip. */
   function restoreCodeHeights() {
     try {
       const saved = JSON.parse(localStorage.getItem(CODE_HEIGHTS_KEY) ?? 'null')
       if (!saved || typeof saved !== 'object') return
-      if (Number.isFinite(saved.image)) $('code-image').style.height = `${clamp(saved.image, 160, 4000, 360)}px`
-      if (Number.isFinite(saved.sound)) $('code-sound').style.height = `${clamp(saved.sound, 90, 4000, 180)}px`
+      const image = clamp(saved.image, 160, 4000, DEFAULT_CODE_HEIGHT)
+      const sound = saved.version === 2 ? clamp(saved.sound, 160, 4000, DEFAULT_CODE_HEIGHT) : image
+      $('code-image').style.height = `${image}px`
+      $('code-sound').style.height = `${sound}px`
+      if (saved.version !== 2) localStorage.setItem(CODE_HEIGHTS_KEY, JSON.stringify({ version: 2, image, sound }))
     } catch { /* storage may be blocked */ }
   }
 
   function saveCodeHeights() {
     if (document.querySelector('.code-card.focused')) return
     try {
-      const heights = { image: $('code-image').offsetHeight, sound: $('code-sound').offsetHeight }
+      // Collapsed boxes have offsetHeight 0; retain their explicit normal size.
+      const height = id => clamp(parseInt($(id).style.height), 160, 4000, DEFAULT_CODE_HEIGHT)
+      const heights = { version: 2, image: height('code-image'), sound: height('code-sound') }
       localStorage.setItem(CODE_HEIGHTS_KEY, JSON.stringify(heights))
     } catch { /* storage may be blocked */ }
   }
@@ -1416,8 +1470,7 @@
     for (const grip of document.querySelectorAll('.code-grip')) {
       const area = $(grip.dataset.code)
       if (!area) continue
-      const isSound = area.classList.contains('sound')
-      const minHeight = isSound ? 90 : 160
+      const minHeight = 160
       const maxHeight = () => 4000
       const setHeight = (height) => {
         const clamped = Math.min(maxHeight(), Math.max(minHeight, Math.round(height)))
@@ -1460,7 +1513,7 @@
       grip.setAttribute('aria-controls', area.id)
       grip.setAttribute('aria-valuemin', String(minHeight))
       grip.setAttribute('aria-valuemax', '4000')
-      grip.setAttribute('aria-valuenow', String(parseInt(area.style.height) || (isSound ? 180 : 360)))
+      grip.setAttribute('aria-valuenow', String(parseInt(area.style.height) || DEFAULT_CODE_HEIGHT))
       grip.textContent = ''
       grip.title = '拖动调整高度，双击还原'
       grip.addEventListener('pointerdown', (event) => {
@@ -1479,7 +1532,7 @@
         animation = requestAnimationFrame(autoScroll)
       })
       grip.addEventListener('lostpointercapture', () => { if (pointerId !== null) stop() })
-      grip.addEventListener('dblclick', () => { setHeight(isSound ? 180 : 360); saveCodeHeights() })
+      grip.addEventListener('dblclick', () => { setHeight(DEFAULT_CODE_HEIGHT); saveCodeHeights() })
       grip.addEventListener('keydown', (event) => {
         if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
         event.preventDefault()
@@ -1560,7 +1613,7 @@
       gutter.setAttribute('aria-hidden', 'true')
       area.before(frame)
       frame.append(gutter, area)
-      area.style.height = id === 'code-image' ? '360px' : '180px'
+      area.style.height = `${DEFAULT_CODE_HEIGHT}px`
       area.addEventListener('scroll', () => { gutter.scrollTop = area.scrollTop })
       collapse.addEventListener('click', () => {
         const collapsed = card.classList.toggle('collapsed')
