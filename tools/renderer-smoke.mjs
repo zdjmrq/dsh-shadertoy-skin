@@ -323,6 +323,7 @@ async function main() {
     // --- code boxes: the visible grip drags the height, and it is remembered
     const codeHeight = () => page.evaluate(() => Math.round(document.getElementById('code-image').getBoundingClientRect().height))
     const beforeDrag = await codeHeight()
+    await page.locator('.code-grip').first().scrollIntoViewIfNeeded()
     const gripBox = await page.locator('.code-grip').first().boundingBox()
     await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2)
     await page.mouse.down()
