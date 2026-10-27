@@ -302,6 +302,8 @@
   .settings-footer { margin-top: 20px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .settings-footer .actions { margin: 0; }
   .settings-footer .note { margin: 0; }
+  #note { margin: -10px 0 20px; min-height: 20px; color: var(--muted); }
+  #note.error { color: var(--danger); }
   .item { padding: 14px 12px; margin-bottom: 8px; border: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
   .item .name { flex-basis: 160px; font-weight: 600; }
   .item .badge { font-size: 10px; padding: 2px 7px; }
@@ -806,7 +808,9 @@
     const performance = grid.querySelector('.performance')
     performance.before(side)
     side.append(performance, grid.querySelector('.playback'))
-    const footer = el('div', { className: 'settings-footer' }, $('note'), $('reset').closest('.actions'))
+    const note = $('note')
+    document.querySelector('.tabs').after(note)
+    const footer = el('div', { className: 'settings-footer' }, $('reset').closest('.actions'))
     view.replaceChildren(grid, footer)
     if (!STANDALONE && MODE === 'main') {
       const preview = el('button', { type: 'button', className: 'wallpaper-preview', textContent: '预览背景 ↗' })
