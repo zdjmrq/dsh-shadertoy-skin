@@ -732,7 +732,11 @@
     note.classList.toggle('error', isError)
     if (isError) {
       const retry = el('button', { type: 'button', className: 'btn tiny', textContent: !stateLoaded || stateConflict ? '重新加载' : '重试' })
-      retry.addEventListener('click', () => { if (!stateLoaded || stateConflict) location.reload(); else void saveNow() })
+      retry.addEventListener('click', () => {
+        if (!stateLoaded || stateConflict) location.reload()
+        else if (!$('view-code').hidden) void saveCode()
+        else void saveNow()
+      })
       note.append(' ', retry)
     }
   }
