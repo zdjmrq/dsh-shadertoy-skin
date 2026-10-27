@@ -37,6 +37,7 @@ jobs:
           node --check tools/panel-regression.mjs
           node --check tools/ui-regression.mjs
           node --check tools/audit-regression.mjs
+          node --check tools/core-regression.mjs
           node --check tools/panel-surfaces-regression.mjs
           node --check tools/unified-transparency-regression.mjs
       - name: Bundle checks (manifest, files, licence hygiene, npm pack content)
@@ -78,5 +79,10 @@ jobs:
           PLAYWRIGHT_CHANNEL: chrome
       - name: Extended plugin audit regressions
         run: npm run test:audit
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+
+      - name: Playback, persistence and pointer regressions
+        run: npm run test:core
         env:
           PLAYWRIGHT_CHANNEL: chrome

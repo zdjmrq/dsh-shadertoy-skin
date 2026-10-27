@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh" data-theme="dark" data-panels="opaque">
+<html lang="zh" data-theme="dark" data-panels="half">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -186,6 +186,9 @@
   .editor-wrap { display: flex; gap: 7px; align-items: center; }
   .editor-wrap input { accent-color: var(--accent); }
   .editor-toolbar select { padding: 4px 8px; font: inherit; color: var(--fg); background: var(--control-fill); border: 1px solid var(--line); border-radius: 6px; }
+  /* Native option popups do not inherit an iframe's transparent canvas palette. */
+  #code-font, #code-font option { color: var(--fg); background-color: var(--field); color-scheme: light; }
+  html[data-theme="dark"] #code-font, html[data-theme="dark"] #code-font option { color-scheme: dark; }
   .editor-shortcut { margin-left: auto; color: var(--faint); }
   .code-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-fill); }
   .code-card > .head { align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
@@ -436,6 +439,7 @@
       <label for="loop">画面循环</label>
       <input type="checkbox" id="loop">
     </div>
+    <div class="row"><div class="head"><label>循环方式</label></div><div id="loop-mode-dd"></div><div class="hint">自动识别结束淡出，或在动画停止后重播；持续动画保持播放。</div></div>
     <div class="row" id="loop-seconds-row">
       <div class="head"><label for="loop-seconds">循环周期</label><output id="loop-seconds-out"></output></div>
       <input type="range" id="loop-seconds" min="5" max="120" step="1">
@@ -449,6 +453,7 @@
       <div class="head"><label for="audio-seconds">音乐时长</label><output id="audio-seconds-out"></output></div>
       <input type="range" id="audio-seconds" min="10" max="600" step="5">
     </div>
+    <div class="row" id="audio-duration-row"><div class="head"><label>音乐时长</label></div><div id="audio-duration-dd"></div><div class="hint">自动识别结束淡出，或在有声之后持续静音时结束。</div></div>
 
     <div class="row" id="volume-row">
       <div class="head"><label for="volume">音量</label><output id="volume-out"></output></div>
@@ -532,8 +537,9 @@
   const $ = id => document.getElementById(id)
   const panel = $('panel')
 
-  const state = { activeId: null, entries: [], overrides: {} }
-  let defaults = { params: { enabled: true, glass: 60, brightness: 100, panels: 'opaque', blur: 0, scale: 1, fps: 30, speed: 1, loop: false, loopSeconds: 20, audioMode: 'loop', audioSeconds: 60, volume: 60, muted: true }, limits: {} }
+  const GLOBAL_KEYS = ['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted']
+  const state = { activeId: null, entries: [], overrides: {}, settings: {} }
+  let defaults = { params: { enabled: true, glass: 60, brightness: 100, panels: 'half', blur: 0, scale: 1, fps: 30, speed: 1, loop: true, loopMode: 'auto', loopSeconds: 20, audioMode: 'loop', audioDurationMode: 'auto', audioSeconds: 60, volume: 60, muted: false }, limits: {} }
   let manifest = []
   let localPresets = null
   let open = MODE === 'main'
@@ -547,6 +553,14 @@
   let stateEtag = null
   let stateConflict = false
   let pendingWrites = 0
+  let recoveredState = false
+  const JOURNAL_KEY = 'shadertoy-skin.pending-state'
+  const journalOwner = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
+  const snapshot = () => ({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides, settings: state.settings })
+  const rememberPending = () => {
+    if (!stateLoaded || stateConflict) return
+    try { localStorage.setItem(JOURNAL_KEY, JSON.stringify({ owner: journalOwner, etag: stateEtag, state: snapshot() })) } catch { /* optional recovery */ }
+  }
 
   const clamp = (v, lo, hi, fb) => {
     const n = Number(v)
@@ -680,7 +694,7 @@
   }
 
   // ---------------------------------------------------------------- helpers
-  const effective = () => ({ ...defaults.params, ...(state.overrides[state.activeId] ?? {}) })
+  const effective = () => ({ ...defaults.params, ...(state.overrides[state.activeId] ?? {}), ...state.settings })
   const builtinById = id => manifest.find(item => item.id === id)
   const entryById = id => state.entries.find(item => item.id === id)
   const activePreset = () => entryById(state.activeId) ?? builtinById(state.activeId) ?? manifest[0] ?? null
@@ -723,18 +737,28 @@
       return Promise.resolve(false)
     }
     const activeId = state.activeId
-    const body = JSON.stringify({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides })
+    const body = JSON.stringify(snapshot())
+    rememberPending()
     const revision = ++saveRevision
+    let requestEtag
     pendingWrites++
     const result = saveQueue.then(() => {
       const headers = { 'content-type': 'application/json' }
+      requestEtag = stateEtag
       if (stateEtag) headers['if-match'] = stateEtag
-      return fetch(`${BASE}/state`, { method: 'PUT', headers, body })
+      return fetch(`${BASE}/state`, { method: 'PUT', headers, body, keepalive: new TextEncoder().encode(body).length < 60000 })
     })
       .then(response => {
         if (response.status === 409) stateConflict = true
         if (response.ok) stateEtag = response.headers.get('etag')
         if (response.ok) persistedActiveId = activeId
+        if (response.ok) {
+          try {
+            const pending = JSON.parse(localStorage.getItem(JOURNAL_KEY) || 'null')
+            if (JSON.stringify(pending?.state) === body) localStorage.removeItem(JOURNAL_KEY)
+            else if (pending?.owner === journalOwner && pending.etag === requestEtag) { pending.etag = stateEtag; localStorage.setItem(JOURNAL_KEY, JSON.stringify(pending)) }
+          } catch { /* recovery is best effort */ }
+        }
         if (revision === saveRevision) setNote(response.ok ? '已保存' : stateConflict ? '配置已在其他页面更新，请重新加载。' : `保存失败（HTTP ${response.status}），请重试。`, !response.ok)
         return response.ok
       }).finally(() => { pendingWrites-- })
@@ -776,6 +800,7 @@
   function publishParams() {
     if (!stateLoaded || stateConflict) { void saveState(); return }
     toParent({ type: 'params', params: effective() })
+    rememberPending()
     scheduleSave()
   }
 
@@ -806,13 +831,16 @@
   }
 
   function setParam(key, value) {
-    const current = { ...(state.overrides[state.activeId] ?? {}) }
+    const global = GLOBAL_KEYS.includes(key)
+    const current = { ...(global ? state.settings : state.overrides[state.activeId] ?? {}) }
     if (value === undefined) delete current[key]
     else current[key] = value
-    if (Object.keys(current).length === 0) delete state.overrides[state.activeId]
+    if (global) state.settings = current
+    else if (Object.keys(current).length === 0) delete state.overrides[state.activeId]
     else state.overrides[state.activeId] = current
     sync()
     publishParams()
+    if (typeof value === 'boolean' || typeof value === 'string') void saveNow()
   }
 
   // ---------------------------------------------------------------- sizing
@@ -860,8 +888,8 @@
     const groups = [
       ['appearance', '背景与外观', ['enabled', 'preset-dd', 'glass', 'brightness', 'panels-dd', 'blur']],
       ['performance', '渲染与性能', ['scale-dd', 'fps-dd']],
-      ['playback', '画面播放', ['speed', 'loop', 'loop-seconds']],
-      ['sound', '声音', ['volume', 'muted', 'audio-mode-dd', 'audio-seconds']],
+      ['playback', '画面播放', ['speed', 'loop', 'loop-mode-dd', 'loop-seconds']],
+      ['sound', '声音', ['volume', 'muted', 'audio-mode-dd', 'audio-duration-dd', 'audio-seconds']],
     ]
     for (const [kind, title, ids] of groups) {
       const card = el('section', { className: `settings-card ${kind}` }, el('h3', { textContent: title }))
@@ -911,6 +939,8 @@
   let fpsDd
   let panelsDd
   let audioModeDd
+  let loopModeDd
+  let audioDurationDd
 
   const PANEL_KINDS = { opaque: '不透明', half: '半透明', clear: '透明' }
   const AUDIO_MODES = { loop: '循环重放', once: '只播一次' }
@@ -942,7 +972,9 @@
     $('loop').checked = p.loop === true
     $('loop-seconds').value = String(p.loopSeconds ?? 20)
     $('loop-seconds-out').textContent = `${Math.round(p.loopSeconds ?? 20)} s`
-    $('loop-seconds-row').hidden = p.loop !== true
+    $('loop-seconds-row').hidden = p.loop !== true || p.loopMode !== 'manual'
+    $('loop-mode-dd').closest('.row').hidden = p.loop !== true
+    loopModeDd?.setValue(p.loopMode === 'manual' ? 'manual' : 'auto')
     $('volume').value = String(p.volume)
     $('volume-out').textContent = `${Math.round(p.volume)}%`
     const sound = hasSound()
@@ -952,7 +984,9 @@
     $('audio-mode-out').textContent = AUDIO_MODES[p.audioMode] ?? AUDIO_MODES.loop
     $('audio-seconds').value = String(p.audioSeconds ?? 60)
     $('audio-seconds-out').textContent = `${Math.round(p.audioSeconds ?? 60)} s`
-    $('audio-seconds-row').hidden = !sound
+    $('audio-seconds-row').hidden = !sound || p.audioDurationMode !== 'manual'
+    $('audio-duration-row').hidden = !sound
+    audioDurationDd?.setValue(p.audioDurationMode === 'manual' ? 'manual' : 'auto')
     $('volume').disabled = !sound
     $('muted').disabled = !sound
     $('muted').checked = p.muted === true
@@ -1045,6 +1079,12 @@
       value: effective().audioMode === 'once' ? 'once' : 'loop',
       onChange: value => setParam('audioMode', value),
     })
+    loopModeDd = makeDropdown($('loop-mode-dd'), {
+      options: [{ value: 'auto', text: '自动识别结束' }, { value: 'manual', text: '指定循环周期' }], value: effective().loopMode ?? 'auto', onChange: value => setParam('loopMode', value),
+    })
+    audioDurationDd = makeDropdown($('audio-duration-dd'), {
+      options: [{ value: 'auto', text: '自动识别结束' }, { value: 'manual', text: '指定音乐时长' }], value: effective().audioDurationMode ?? 'auto', onChange: value => setParam('audioDurationMode', value),
+    })
 
     $('enabled').addEventListener('change', event => setParam('enabled', event.target.checked))
     $('glass').addEventListener('input', event => setParam('glass', clamp(event.target.value, 20, 95, 60)))
@@ -1070,6 +1110,7 @@
     $('fab').addEventListener('click', () => setOpen(true))
     for (const range of document.querySelectorAll('input[type=range]')) range.addEventListener('change', () => { if (saveTimer) void saveNow() })
     document.addEventListener('visibilitychange', () => { if (document.hidden && saveTimer) void saveNow() })
+    window.addEventListener('pagehide', () => { if (saveTimer) void saveNow() })
     window.addEventListener('beforeunload', event => {
       if (saveTimer || pendingWrites) { event.preventDefault(); event.returnValue = '' }
     })
@@ -1691,12 +1732,8 @@
       } else if (message.type === 'theme') {
         applyTheme()
       } else if (message.type === 'preset') {
-        if (typeof message.id === 'string' && message.id !== state.activeId) {
-          state.activeId = message.id
-          sync()
-          renderLibrary()
-          if (!$('view-code').hidden) void loadCode()
-        }
+        // Renderer acknowledgements can arrive after a newer user selection.
+        // This panel owns the saved activeId; an old init must never roll it back.
       }
     })
   }
@@ -1709,7 +1746,7 @@
       document.documentElement.classList.add('standalone')
       document.body.classList.add('standalone')
     }
-    try { defaults = await fetchJson('defaults.json') } catch { /* built-in defaults */ }
+    try { defaults = await fetchJson(`${BASE}/defaults.json`) } catch { /* built-in defaults */ }
     try { manifest = await fetchJson(`${BASE}/presets/index.json`) } catch { manifest = [] }
     manifest = Array.isArray(manifest) ? manifest : []
     if (manifest.length === 0) manifest = [{ id: 'aurora', name: '极光（自写）' }, { id: 'flow', name: '流体色带（自写）' }]
@@ -1725,9 +1762,20 @@
           state.entries = Array.isArray(remote.entries) ? remote.entries : []
           if (remote.overrides && typeof remote.overrides === 'object') state.overrides = remote.overrides
           else if (remote.params && typeof remote.params === 'object' && state.activeId) state.overrides[state.activeId] = remote.params
+          const legacy = state.overrides[state.activeId] ?? {}
+          state.settings = Object.fromEntries(GLOBAL_KEYS.filter(key => key in (remote.settings ?? legacy)).map(key => [key, (remote.settings ?? legacy)[key]]))
         }
         stateEtag = response.headers.get('etag')
         stateLoaded = true
+        try {
+          const pending = JSON.parse(localStorage.getItem(JOURNAL_KEY) || 'null')
+          if (pending?.state) {
+            const same = JSON.stringify(snapshot()) === JSON.stringify(pending.state)
+            if (same) localStorage.removeItem(JOURNAL_KEY)
+            else if (pending.etag === stateEtag) { Object.assign(state, pending.state); recoveredState = true }
+            // Never overwrite a newer disk revision with an old recovery record.
+          }
+        } catch { /* invalid recovery record */ }
       } catch { stateLoaded = false }
     }
     if (!state.activeId) state.activeId = manifest[0]?.id ?? 'aurora'
@@ -1738,6 +1786,9 @@
     bindCode()
     sync()
     renderLibrary()
+    if (recoveredState && await saveNow()) {
+      toParent({ type: 'preset', id: state.activeId })
+    }
     // Push the stored params once: the player/glass always mirror what this page
     // shows, and a page refresh is enough to re-sync after an edit elsewhere.
     if (!STANDALONE && stateLoaded) toParent({ type: 'params', params: effective() })
