@@ -14,10 +14,20 @@ try {
   const getPanel = p => p.frames().find(f => f.url().includes('panel.html'))
   const getPlayer = () => page.frames().find(f => f.url().includes('player.html'))
   const stored = async () => JSON.parse(await readFile(join(h.home, 'shader-skin.json'), 'utf8'))
+  // The iframe exists before its document is parsed, so poll for the panel frame
+  // instead of assuming it is already in page.frames().
+  const waitPanel = async p => {
+    for (let i = 0; i < 120; i++) {
+      const frame = getPanel(p)
+      if (frame) return frame
+      await p.waitForTimeout(100)
+    }
+    throw new Error('panel iframe never loaded')
+  }
   const load = async p => {
     await p.goto(h.url)
     await p.waitForSelector('iframe[title="ShaderToy 背景设置"]')
-    const frame = getPanel(p)
+    const frame = await waitPanel(p)
     await frame.waitForSelector('#preset-dd .dd-trigger')
     return frame
   }
@@ -84,7 +94,7 @@ try {
   await panel.fill('#code-image', source + '\n// draft survives refresh')
   await page.reload()
   await page.waitForSelector('iframe[title="ShaderToy 背景设置"]')
-  panel = getPanel(page)
+  panel = await waitPanel(page)
   await panel.waitForSelector('#preset-dd .dd-trigger')
   await panel.click('#tab-code')
   await panel.waitForFunction(() => document.querySelector('#code-image').value.includes('draft survives refresh'))

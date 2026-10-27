@@ -33,6 +33,12 @@ jobs:
           node --check tools/audio-smoke.mjs
           node --check tools/dev-server.mjs
           node --check tools/push-via-api.mjs
+          node --check tools/browser-harness.mjs
+          node --check tools/panel-regression.mjs
+          node --check tools/ui-regression.mjs
+          node --check tools/audit-regression.mjs
+          node --check tools/panel-surfaces-regression.mjs
+          node --check tools/unified-transparency-regression.mjs
       - name: Bundle checks (manifest, files, licence hygiene, npm pack content)
         run: npm run check
       - name: Host half route tests
