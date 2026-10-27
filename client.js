@@ -154,12 +154,16 @@ window.__ModuleLoader__.load({
           let glassDispose = null
           let background = null
           let booted = false
+          let disposed = false
           let sidebarRegistered = false
           // stays false until the safe-mode file check completed, so the self-heal
           // loop can never bypass `$DSH_HOME/shader-skin.safe`
           let sidebarAllowed = false
           let playerReady = false
           let playerInitAttempts = 0
+          let initRequest = 0
+          let presetRequest = 0
+          let stateRequest = 0
           // WebAudio inside an iframe may start suspended until a real user gesture
           // (autoplay policy); the first click / keypress in the app is that gesture.
           let audioSuspended = false
@@ -178,58 +182,81 @@ window.__ModuleLoader__.load({
           // So: the shell tokens go FULLY transparent (the shader is the only
           // background), and the single darkening/whitening veil is painted by the
           // player's own tint mix (`tint` + `tintMix`, see `playerLook()`), one
-          // composition layer, whatever the DOM depth. Sliding the glass slider then
-          // only sends a `params` message — it never touches the theme tokens, so it
-          // cannot emit `theme/change` or trigger a restyle storm.
+          // composition layer, whatever the DOM depth. In half mode the same
+          // slider also updates semantic surface fills; the shell stays clear.
           //
           // Deliberately NO `:has()` selectors here. Anchoring the whole `#root` with
           // `:has()` makes Chromium re-evaluate the entire tree on every panel switch;
           // that is exactly what froze the app when the sidebar entry was clicked, and
           // dsh-better-sidebar documents the same pitfall (`#root [data-dsh-center-col]`
           // single-node marker instead of `:has()`).
-          const DARK_VEIL = '#090c10'
+          const DARK_VEIL = '#151517'
           const LIGHT_VEIL = '#ffffff'
           const STYLE_ID = 'shadertoy-skin-glass-style'
-          const GLASS_CSS = 'html, body { background: transparent !important; }'
+          const GLASS_CSS = `html, body { background: transparent !important; }
+            [role="dialog"], [role="alertdialog"], [data-shortcut-modal="settings"] {
+              background-color: var(--shader-skin-dialog-surface) !important;
+            }
+            /* These component-local fills shadow inherited theme tokens. Keep
+               the outer card's fill, but never stack a second fill in its head. */
+            html[data-shader-skin-panels] [class*="_card"] {
+              --changes-fill: transparent !important;
+              --changes-hover: transparent !important;
+              --plan-card-fill: var(--shader-skin-surface) !important;
+              --plan-card-hover: var(--shader-skin-surface) !important;
+            }
+            html[data-shader-skin-panels] [class*="_root"] {
+              --deliverable-fill: var(--shader-skin-surface) !important;
+              --deliverable-hover: var(--shader-skin-surface) !important;
+            }
+            /* Stable DSH Markdown attributes cover plain, highlighted and card
+               code blocks. Only the wrapper paints, including its sticky head. */
+            html[data-shader-skin-panels] .md-code-block {
+              background: var(--shader-skin-surface) !important;
+              --dsl-code-block-background: transparent !important;
+              --dsl-code-block-banner-background-color: transparent !important;
+            }
+            html[data-shader-skin-panels] .md-code-block [data-code-block-banner],
+            html[data-shader-skin-panels] .md-code-block [data-code-block-content],
+            html[data-shader-skin-panels] .md-code-block pre {
+              background: transparent !important;
+            }
+            /* macOS hardcodes this button's fill instead of using the token. */
+            html[data-shader-skin-panels] button[class*="_newSession"] {
+              background: var(--shader-skin-surface) !important;
+            }`
           const CLEAR_TOKENS = {
-            '--dsw-alias-bg-base': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
-            '--dsw-specific-sidebar-fill': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
+            '--dsw-alias-bg-base': { light: 'transparent', dark: 'transparent' },
+            '--dsw-specific-sidebar-fill': { light: 'transparent', dark: 'transparent' },
+            '--shader-skin-dialog-surface': { light: '#fff', dark: '#232324' },
           }
           // The boxes that follow the `panels` level: cards, nested panels, code
-          // blocks, the composer/editor surface (`bg-module-platform`) and the
-          // message input (`specific-input-major`). Popovers/menus get a higher
-          // alpha below so they stay readable.
+          // blocks and the composer/editor surface (`bg-module-platform`).
           const LAYER_TOKENS = [
             '--dsw-alias-bg-layer-1', '--dsw-alias-bg-layer-2',
             '--dsw-alias-bg-layer-3', '--dsw-alias-bg-layer-4',
-            '--dsw-alias-bg-module-platform', '--dsw-specific-input-major',
+            '--dsw-alias-bg-module-platform',
           ]
           const RAISED_TOKENS = [
-            '--dsw-alias-bg-overlay', '--dsw-specific-menu',
+            '--dsw-alias-bg-overlay', '--dsw-specific-menu', '--dsw-menu-surface-fill',
+            '--dsw-alias-menu-group-header-fill', '--dsw-specific-selector',
+            '--dsw-specific-input-major',
+            '--dsw-alias-button-elevated-fill', '--dsw-alias-button-elevated-hover',
+            '--dsw-alias-button-floating-fill', '--dsw-alias-button-floating-hover',
           ]
           /**
-           * Content fills that never go through the `bg-layer-*` tokens: the
-           * changed-files header strip, deliverable/plan cards, markdown code
-           * blocks + inline code, and the user-message bubble. In the light theme
-           * those default to opaque near-white (the static neutral-50/100 scale),
-           * which is what made some assistant replies look like solid white
-           * patches while every other card was translucent. Each entry is
-           * [token, weight]: the weight scales the current `panels` alpha.
+           * Semantic content surfaces only. Never override a static palette:
+           * the same neutral value may also be used for foreground text/icons.
+           * Every surface shares the selected opacity, without hidden floors.
            */
           const CONTENT_TOKENS = [
-            ['--dsw-static-neutral-50', 0.62],
-            ['--dsw-static-neutral-100', 0.62],
-            ['--dsw-static-neutral-800', 0.62],
-            ['--dsw-static-neutral-850', 0.62],
-            ['--dsw-alias-markdown-code-block', 0.9],
-            ['--dsw-alias-markdown-code-block-banner', 1],
-            ['--dsw-alias-markdown-inline-code', 0.7],
-            ['--dsw-specific-bubble', 1],
+            '--dsw-alias-markdown-code-block',
+            '--dsw-alias-markdown-code-block-banner',
+            '--dsw-alias-markdown-inline-code',
+            '--dsw-specific-bubble',
           ]
 
           /** `panels` = opaque (leave theme fills) | half | clear. */
-          const PANEL_ALPHA = { half: 0.62, clear: 0.22 }
-
           function ensureGlassStyle() {
             if (document.getElementById(STYLE_ID)) return
             const style = document.createElement('style')
@@ -244,14 +271,11 @@ window.__ModuleLoader__.load({
 
           function glassTokens() {
             const tokens = { ...CLEAR_TOKENS }
-            const alpha = PANEL_ALPHA[effective().panels] ?? null
-            if (alpha === null) return tokens
-            const raised = Math.min(0.96, alpha + 0.32)
-            for (const token of LAYER_TOKENS) tokens[token] = rgba('9, 12, 16', alpha)
-            for (const token of RAISED_TOKENS) tokens[token] = rgba('9, 12, 16', raised)
-            for (const [token, weight] of CONTENT_TOKENS) {
-              tokens[token] = rgba('9, 12, 16', Math.min(0.96, alpha * weight))
-            }
+            const params = effective()
+            if (!['half', 'clear'].includes(params.panels)) return tokens
+            const alpha = params.panels === 'clear' ? 0 : clamp(params.glass, 20, 95, 60) / 100
+            for (const token of [...LAYER_TOKENS, ...RAISED_TOKENS, ...CONTENT_TOKENS,
+              '--shader-skin-surface', '--shader-skin-dialog-surface']) tokens[token] = rgba('35, 35, 36', alpha)
             return tokens
           }
 
@@ -270,6 +294,10 @@ window.__ModuleLoader__.load({
            */
           function applyGlass(force = false) {
             if (!booted) return false
+            if (effective().enabled === false) { clearGlass(); return false }
+            const mode = effective().panels
+            if (['half', 'clear'].includes(mode)) document.documentElement.dataset.shaderSkinPanels = mode
+            else delete document.documentElement.dataset.shaderSkinPanels
             const theme = service('theme')
             if (theme === undefined) return false
             const tokens = glassTokens()
@@ -289,6 +317,7 @@ window.__ModuleLoader__.load({
             glassDispose = null
             glassSignature = null
             document.getElementById(STYLE_ID)?.remove()
+            delete document.documentElement.dataset.shaderSkinPanels
           }
 
           // ------------------------------------------------------------ parameters
@@ -328,7 +357,9 @@ window.__ModuleLoader__.load({
           }
 
           async function reloadState() {
+            const request = ++stateRequest
             const raw = await fetchJson(`${BASE}/state`).catch(() => null)
+            if (request !== stateRequest) return store
             const next = normalizeState(raw)
             store.activeId = next.activeId
             store.entries = next.entries
@@ -371,15 +402,18 @@ window.__ModuleLoader__.load({
 
           async function sendInit(frame) {
             if (frame === null || playerInitAttempts >= 4) return
+            const request = ++initRequest
+            const id = store.activeId
             playerInitAttempts += 1
             const retry = (delay) => {
               if (playerInitAttempts >= 4) return
               timers.push(setTimeout(() => {
-                if (booted && !playerReady && background === frame) void sendInit(frame)
+                if (request === initRequest && booted && !playerReady && background === frame) void sendInit(frame)
               }, delay))
             }
             try {
               const preset = await resolvePreset(store.activeId ?? FALLBACK_PRESET)
+              if (!booted || request !== initRequest || frame !== background || id !== store.activeId) return
               store.activeId = preset.id
               // theme first: the player keeps per-theme preview defaults only until
               // it receives an explicit look, and init carries that explicit look
@@ -408,11 +442,16 @@ window.__ModuleLoader__.load({
             host.insertBefore(frame, host.firstChild)
             playerReady = false
             playerInitAttempts = 0
-            frame.addEventListener('load', () => { void sendInit(frame) })
+            frame.addEventListener('load', () => {
+              playerInitAttempts = 0
+              playerReady = false
+              void sendInit(frame)
+            })
             return frame
           }
 
           function removeBackground() {
+            initRequest++
             document.getElementById(BG_ID)?.remove()
             background = null
           }
@@ -425,7 +464,9 @@ window.__ModuleLoader__.load({
             if (!message || typeof message !== 'object') return
             switch (message.type) {
               case 'params': {
-                store.overrides[store.activeId] = { ...(message.params ?? {}) }
+                const id = typeof message.id === 'string' ? message.id : store.activeId
+                store.overrides[id] = { ...(message.params ?? {}) }
+                if (id !== store.activeId) return
                 applyGlass()
                 syncEnabled()
                 postTo(background, { type: 'params', params: { ...effective(), ...playerLook() } })
@@ -433,8 +474,13 @@ window.__ModuleLoader__.load({
               }
               case 'preset': {
                 if (typeof message.id === 'string' && message.id !== '') {
+                  const request = ++presetRequest
+                  initRequest++
                   await reloadState()
+                  if (!booted || request !== presetRequest) return
                   store.activeId = message.id
+                  playerInitAttempts = 0
+                  playerReady = false
                   if (background) await sendInit(background)
                   applyGlass()
                   syncEnabled()
@@ -459,7 +505,7 @@ window.__ModuleLoader__.load({
             if (enabled && !document.getElementById(BG_ID)) {
               background = createBackground()
               applyGlass()
-            } else if (!enabled && document.getElementById(BG_ID)) {
+            } else if (!enabled) {
               removeBackground()
               clearGlass()
             }
@@ -595,7 +641,10 @@ window.__ModuleLoader__.load({
             const dark = isDark()
             if (dark === lastDark) return
             lastDark = dark
-            if (background) postTo(background, { type: 'theme', dark })
+            if (background) {
+              postTo(background, { type: 'theme', dark })
+              postTo(background, { type: 'params', params: playerLook() })
+            }
             broadcastPanel({ type: 'theme', dark })
           })
           if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
@@ -686,8 +735,10 @@ window.__ModuleLoader__.load({
             }
             store.defaults = { ...FALLBACK_DEFAULTS }
             const defaults = await fetchJson(`${BASE}/defaults.json`).catch(() => null)
+            if (disposed) return
             if (defaults?.params && typeof defaults.params === 'object') store.defaults = { ...FALLBACK_DEFAULTS, ...defaults.params }
             await reloadState()
+            if (disposed) return
             if (!store.activeId) store.activeId = FALLBACK_PRESET
             booted = true
             syncEnabled()
@@ -710,6 +761,7 @@ window.__ModuleLoader__.load({
           })()
 
           return () => {
+            disposed = true
             booted = false
             if (scheduled !== 0) cancelAnimationFrame(scheduled)
             for (const id of timers) clearTimeout(id)

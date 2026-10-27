@@ -14,10 +14,11 @@
  *
  * @module dsh-shadertoy-skin
  */
-import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { extname, join, normalize, resolve, sep } from 'node:path'
+import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'shadertoy-skin'
@@ -26,6 +27,9 @@ export const inject = ['webServer']
 const ROUTE = '/shader-skin'
 const DIST = resolve(fileURLToPath(new URL('./native-dist/', import.meta.url)))
 const MAX_STATE_BYTES = 2 * 1024 * 1024
+let stateWrites = Promise.resolve()
+const stateTag = body => `"${createHash('sha256').update(body).digest('hex')}"`
+const DEFAULT_LIMITS = JSON.parse(readFileSync(new URL('./native-dist/defaults.json', import.meta.url), 'utf8')).limits
 
 const MIME = Object.freeze({
   '.html': 'text/html; charset=utf-8',
@@ -66,21 +70,26 @@ function parseShaderDocument(text) {
   const passes = shader?.renderpass ?? shader?.passes
   let image = ''
   let sound = ''
+  let common = ''
   if (Array.isArray(passes)) {
+    if (passes.some(pass => /^(buffer|cubemap)$/i.test(pass?.type) || pass?.inputs?.length)) return undefined
     for (const pass of passes) {
       const type = String(pass?.type ?? 'image').toLowerCase()
       const source = typeof pass?.code === 'string' ? pass.code : ''
       if (source === '') continue
-      if (type === 'sound') sound = source
-      else if (image === '') image = source
+      if (type === 'common') common += `${source}\n`
+      else if (type === 'sound') sound = source
+      else if (type === 'image') image = source
     }
   }
   if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
   if (image === '' && typeof shader?.image === 'string') image = shader.image
   if (image === '' && typeof raw?.image === 'string') image = raw.image
+  if (sound === '' && typeof shader?.code?.sound === 'string') sound = shader.code.sound
+  if (sound === '' && typeof shader?.sound === 'string') sound = shader.sound
   if (image === '') return undefined
   const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
-  return { image, sound: sound || undefined, name: name || undefined }
+  return { image: common + image, sound: sound ? common + sound : undefined, name: name || undefined }
 }
 
 /** List the user-imported presets directory ($DSH_HOME/shader-skin/presets). */
@@ -99,6 +108,7 @@ async function listLocalPresets() {
     if (!isJson && !isSource) continue
     const file = join(localDir(), name)
     try {
+      if (!await realInside(localDir(), file)) continue
       const info = await stat(file)
       if (!info.isFile() || info.size > 1_500_000) continue
       const text = await readFile(file, 'utf8')
@@ -115,7 +125,7 @@ async function listLocalPresets() {
         continue
       }
       // a .glsl/.txt file only counts when it actually looks like a shader
-      if (!/\b(?:mainImage|mainSound|void\s+main)\s*\(/.test(text)) continue
+      if (!/\b(?:mainImage|void\s+main)\s*\(/.test(text)) continue
       out.push({
         file: name,
         name: name.replace(/\.[^.]+$/, ''),
@@ -171,6 +181,12 @@ function resolveInside(root, requestPath) {
   return target
 }
 
+async function realInside(root, target) {
+  const [base, file] = await Promise.all([realpath(root), realpath(target)])
+  const normalizeCase = value => process.platform === 'win32' ? value.toLowerCase() : value
+  return normalizeCase(file).startsWith(`${normalizeCase(base)}${sep}`)
+}
+
 async function serveFile(root, requestPath, req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     finish(res, 405, { allow: 'GET, HEAD' })
@@ -183,6 +199,7 @@ async function serveFile(root, requestPath, req, res) {
   }
   let body
   try {
+    if (!await realInside(root, target)) return fail(res, 403, 'symlink leaves the preset directory')
     body = await readFile(target)
   } catch (error) {
     if (error && (error.code === 'ENOENT' || error.code === 'EISDIR' || error.code === 'ENOTDIR')) {
@@ -233,7 +250,11 @@ function sanitizeParams(raw) {
       if (AUDIO_MODES.has(value)) out[key] = value
       continue
     }
-    if (typeof value === 'number' && Number.isFinite(value)) out[key] = value
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const limit = DEFAULT_LIMITS[key]
+      if (limit?.values) { if (limit.values.includes(value)) out[key] = value }
+      else out[key] = limit ? Math.min(limit.max, Math.max(limit.min, value)) : value
+    }
   }
   return out
 }
@@ -257,12 +278,14 @@ function sanitizeEntry(raw, index) {
 
 function sanitizeState(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('state must be an object')
+  if (raw.entries !== undefined && !Array.isArray(raw.entries)) throw new Error('entries must be an array')
   const entries = (Array.isArray(raw.entries) ? raw.entries : []).map(sanitizeEntry)
+  if (new Set(entries.map(entry => entry.id)).size !== entries.length) throw new Error('duplicate entry ids')
   if (entries.length > 200) throw new Error('too many entries (max 200)')
-  const codeBytes = entries.reduce((total, entry) => total + entry.code.image.length + (entry.code.sound?.length ?? 0), 0)
+  const codeBytes = entries.reduce((total, entry) => total + Buffer.byteLength(entry.code.image) + Buffer.byteLength(entry.code.sound ?? ''), 0)
   if (codeBytes > 1_500_000) throw new Error('shader code too large (max 1.5 MB in total)')
 
-  const overrides = {}
+  const overrides = Object.create(null)
   if (raw.overrides !== null && typeof raw.overrides === 'object' && !Array.isArray(raw.overrides)) {
     for (const [id, value] of Object.entries(raw.overrides)) {
       const params = sanitizeParams(value)
@@ -287,13 +310,19 @@ async function handleState(req, res) {
       body = await readFile(statePath(), 'utf8')
     } catch (error) {
       if (error && error.code === 'ENOENT') {
-        finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify(EMPTY_STATE))
+        const empty = JSON.stringify(EMPTY_STATE)
+        finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag: stateTag(empty) }, req.method === 'HEAD' ? undefined : empty)
         return
       }
       fail(res, 500, 'state read failed')
       return
     }
-    finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, req.method === 'HEAD' ? undefined : body)
+    try {
+      const parsed = JSON.parse(body)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad shape')
+      sanitizeState(parsed)
+    } catch { return fail(res, 500, 'state is corrupted; original file preserved') }
+    finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag: stateTag(body) }, req.method === 'HEAD' ? undefined : body)
     return
   }
   if (req.method !== 'PUT') {
@@ -313,16 +342,35 @@ async function handleState(req, res) {
     return fail(res, 400, `invalid state: ${error instanceof Error ? error.message : String(error)}`)
   }
   const target = statePath()
-  const temp = `${target}.tmp`
+  const temp = `${target}.${randomUUID()}.tmp`
+  const body = `${JSON.stringify(state, null, 2)}\n`
+  // A shared .tmp file lets concurrent PUTs rename or overwrite each other's
+  // data. Queue complete atomic replacements, and recover the queue on errors.
+  const write = stateWrites.then(async () => {
+    try {
+      if (req.headers['if-match']) {
+        const current = await readFile(target, 'utf8').catch(error => {
+          if (error.code === 'ENOENT') return JSON.stringify(EMPTY_STATE)
+          throw error
+        })
+        if (req.headers['if-match'] !== stateTag(current)) throw Object.assign(new Error('state conflict'), { code: 'E_CONFLICT' })
+      }
+      await mkdir(join(dirname(target), 'shader-skin'), { recursive: true })
+      await writeFile(temp, body, 'utf8')
+      await rename(temp, target)
+    } finally {
+      await rm(temp, { force: true }).catch(() => {})
+    }
+  })
+  stateWrites = write.catch(() => {})
   try {
-    await mkdir(join(dshHome(), 'shader-skin'), { recursive: true })
-    await writeFile(temp, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
-    await rename(temp, target)
-  } catch {
+    await write
+  } catch (error) {
+    if (error.code === 'E_CONFLICT') return fail(res, 409, 'state changed in another window; reload before saving')
     fail(res, 500, 'state write failed')
     return
   }
-  finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify({ ok: true }))
+  finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag: stateTag(body) }, JSON.stringify({ ok: true }))
 }
 
 export async function handler(req, res) {

@@ -15,6 +15,7 @@ import { readFile, readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { handler } from '../index.js'
 
 const ROOT = resolve(fileURLToPath(new URL('../native-dist/', import.meta.url)))
 const LOCAL_ROOT = resolve(process.env.DSH_HOME?.trim() || join(homedir(), '.dsh'), 'shader-skin', 'presets')
@@ -102,6 +103,12 @@ const server = createServer(async (req, res) => {
     pathname = decodeURIComponent(url.pathname)
   } catch {
     return send(res, 400, { 'content-type': 'text/plain' }, 'bad request')
+  }
+  // Tests opt into the real Host persistence route with a throwaway DSH_HOME.
+  // Normal previews remain read-only and never write to the user's profile.
+  if (pathname === '/state' && process.env.DSH_DEV_STATE === '1' && process.env.DSH_HOME) {
+    req.url = '/shader-skin/state'
+    return handler(req, res).catch(() => send(res, 500, {}, 'state failed'))
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { allow: 'GET, HEAD' })
 

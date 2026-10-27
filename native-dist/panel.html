@@ -1,39 +1,64 @@
 <!doctype html>
-<html lang="zh" data-theme="dark">
+<html lang="zh" data-theme="dark" data-panels="opaque">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ShaderToy 背景设置</title>
 <style>
   :root {
-    --bg: rgba(255, 255, 255, .96);
-    --fg: #1a2330;
-    --muted: rgba(26, 35, 48, .58);
-    --faint: rgba(26, 35, 48, .40);
-    --line: rgba(15, 23, 42, .12);
-    --field: rgba(15, 23, 42, .045);
-    --field-hover: rgba(15, 23, 42, .09);
-    /* DSH native brand blue (one step darker than #4176e6 so 11px values stay readable) */
-    --accent: #3568dc;
-    --accent-soft: rgba(53, 104, 220, .12);
-    --pop: rgba(255, 255, 255, .99);
-    --shadow: 0 18px 44px rgba(15, 23, 42, .18);
+    --bg: #fff;
+    --fg: #0f1115;
+    --muted: #61666b;
+    --faint: #737373;
+    --surface: #fff;
+    --canvas: #fff;
+    --line: #e8e8e8;
+    --field: #f7f7f8;
+    --field-hover: #ededee;
+    --accent: #202020;
+    --accent-soft: #00000007;
+    --pop: #fff;
+    --shadow: 0 12px 36px #00000014;
     --danger: #c0362c;
+    --page-fill: var(--canvas);
+    --card-fill: var(--surface);
+    --editor-fill: var(--field);
+    --focus-fill: var(--pop);
+    --control-fill: var(--field);
+    --control-hover-fill: var(--field-hover);
+    --action-fill: var(--pop);
   }
   html[data-theme="dark"] {
-    --bg: rgba(10, 14, 20, .92);
-    --fg: #eef4f6;
-    --muted: rgba(238, 244, 246, .58);
-    --faint: rgba(238, 244, 246, .38);
-    --line: rgba(255, 255, 255, .13);
-    --field: rgba(255, 255, 255, .06);
-    --field-hover: rgba(255, 255, 255, .11);
-    /* DSH deepseek-400: the same blue the native dark UI uses */
-    --accent: #7aaaff;
-    --accent-soft: rgba(122, 170, 255, .16);
-    --pop: rgba(18, 24, 32, .99);
-    --shadow: 0 18px 50px rgba(0, 0, 0, .45);
+    --bg: #232324;
+    --fg: #f9fafb;
+    --muted: #b5b5b5;
+    --faint: #a0a0a0;
+    --surface: #232324;
+    --canvas: #151517;
+    --line: #ffffff14;
+    --field: #1b1b1c;
+    --field-hover: #303032;
+    --accent: #eeeeef;
+    --accent-soft: #ffffff08;
+    --pop: #2c2c2e;
+    --shadow: 0 12px 36px #00000040;
     --danger: #ff8d7e;
+  }
+  /* Only one strong surface per card: nested fields must not stack back to
+     opaque. Keep the palette's solid ink colors for primary buttons/switches. */
+  html[data-panels="half"], html[data-panels="clear"] {
+    --page-fill: transparent;
+    --card-fill: rgba(255, 255, 255, var(--panel-alpha));
+    --editor-fill: transparent;
+    --focus-fill: var(--card-fill);
+    --control-fill: transparent;
+    --control-hover-fill: transparent;
+    --action-fill: var(--card-fill);
+    --pop: rgba(255, 255, 255, var(--panel-alpha));
+  }
+  html[data-theme="dark"][data-panels="half"], html[data-theme="dark"][data-panels="clear"] {
+    --card-fill: rgba(35, 35, 36, var(--panel-alpha));
+    --pop: rgba(35, 35, 36, var(--panel-alpha));
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
@@ -59,7 +84,7 @@
   .panel {
     width: 392px; padding: 14px 16px 12px;
     border-radius: 16px; border: 1px solid var(--line);
-    background: var(--bg);
+    background: var(--card-fill);
     box-shadow: var(--shadow);
     display: none;
   }
@@ -103,15 +128,15 @@
   h1 { margin: 0; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
   h1 b { color: var(--accent); font-weight: 600; }
   .close { background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 3px 6px; border-radius: 6px; }
-  .close:hover { color: var(--fg); background: var(--field-hover); }
+  .close:hover { color: var(--fg); background: var(--control-hover-fill); }
 
-  .tabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 3px; border-radius: 10px; background: var(--field); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 3px; border-radius: 10px; background: var(--control-fill); }
   .tabs button {
     flex: 1; padding: 6px 0; border: 0; border-radius: 8px; background: transparent;
     color: var(--muted); cursor: pointer; font-size: 11px; letter-spacing: .06em;
   }
   .tabs button.active { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-  body.mode-main .tabs button.active { background: var(--field-hover); box-shadow: none; }
+  body.mode-main .tabs button.active { background: var(--control-hover-fill); box-shadow: none; }
 
   .row { margin-top: 12px; }
   .row:first-of-type { margin-top: 0; }
@@ -122,13 +147,13 @@
   .hint.error { color: var(--danger); }
 
   input[type=range] { appearance: none; display: block; width: 100%; height: 16px; margin: 0; padding: 0; background: transparent; cursor: pointer; }
-  input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: var(--field-hover); }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: var(--control-hover-fill); }
   input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5.5px; border: 0; border-radius: 50%; background: var(--accent); }
   input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
   input[type=text], textarea, input[type=file] {
     width: 100%; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line);
-    background: var(--field); color: var(--fg); font: inherit;
+    background: var(--control-fill); color: var(--fg); font: inherit;
   }
   input[type=text]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   textarea { resize: vertical; min-height: 92px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.5; }
@@ -143,13 +168,13 @@
     min-height: 240px; max-height: none; white-space: pre; overflow: auto;
     tab-size: 2; font-size: 11.5px; line-height: 1.6; resize: none;
   }
-  .code-area.sound { min-height: 90px; }
+  .code-area.sound { min-height: 160px; }
   .code-grip {
     display: flex; align-items: center; justify-content: center; gap: 4px;
     height: 16px; margin: 2px 0 8px; border-radius: 6px; cursor: ns-resize;
     touch-action: none; user-select: none; outline-offset: 2px;
   }
-  .code-grip:hover { background: var(--field-hover); }
+  .code-grip:hover { background: var(--control-hover-fill); }
   .code-grip:focus-visible { outline: 2px solid var(--accent); }
   .code-grip::before, .code-grip::after {
     content: ""; width: 14px; height: 2px; border-radius: 1px; background: var(--faint);
@@ -157,25 +182,72 @@
   body.dragging-code { cursor: ns-resize; }
   #code-title { color: var(--accent); font-size: 11px; }
   #code-hint { margin: -2px 0 4px; }
+  .editor-toolbar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 12px 0; margin: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .editor-wrap { display: flex; gap: 7px; align-items: center; }
+  .editor-wrap input { accent-color: var(--accent); }
+  .editor-toolbar select { padding: 4px 8px; font: inherit; color: var(--fg); background: var(--control-fill); border: 1px solid var(--line); border-radius: 6px; }
+  .editor-shortcut { margin-left: auto; color: var(--faint); }
+  .code-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-fill); }
+  .code-card > .head { align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .code-card > .head label { font-size: 13px; letter-spacing: 0; color: var(--fg); }
+  .code-card > .head output { margin-left: auto; }
+  .editor-controls { display: flex; gap: 6px; }
+  .editor-controls .btn { margin: 0; padding: 5px 10px; min-height: 30px; font-size: 12px; }
+  .code-frame { position: relative; padding-left: 48px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--editor-fill); }
+  .code-frame:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .code-frame .code-area { display: block; width: 100%; min-height: 160px; border: 0; border-radius: 0; padding: 12px; background: transparent; font: 14px/1.7 ui-monospace, Consolas, monospace; outline: none; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+  .code-frame .code-area.sound { min-height: 160px; }
+  .code-lines { position: absolute; inset: 0 auto 0 0; width: 48px; margin: 0; padding: 12px 10px 12px 0; overflow: hidden; text-align: right; color: var(--muted); border-right: 1px solid var(--line); font: 14px/1.7 ui-monospace, Consolas, monospace; user-select: none; pointer-events: none; }
+  .wrap-code .code-lines { display: none; }
+  .wrap-code .code-frame { padding-left: 0; }
+  .wrap-code .code-area { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .code-grip { height: 30px; margin: 4px 0 -8px; font-size: 11px; color: var(--muted); border: 1px dashed transparent; }
+  .code-grip::before { content: ''; display: block; width: 30px; height: 3px; background: var(--line); border-radius: 2px; }
+  .code-grip::after { display: none; }
+  .code-grip:hover, body.dragging-code .code-grip { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .code-card.collapsed .code-frame, .code-card.collapsed .code-grip { display: none; }
+  .code-card.collapsed > .head { margin-bottom: 0; }
+  body.editor-focus { overflow: hidden !important; }
+  /* A translucent focus surface must reveal the shader, not the old editor's
+     text underneath. Visibility preserves layout/scroll position on exit. */
+  body.editor-focus #panel > :not(#view-code),
+  body.editor-focus #view-code > :not(.focused),
+  body.editor-focus #note { visibility: hidden; }
+  body.editor-focus .panel { background: transparent; border-color: transparent; box-shadow: none; }
+  .code-card.focused { position: fixed; inset: 12px; z-index: 100; margin: 0; display: flex; flex-direction: column; background: var(--focus-fill); box-shadow: var(--shadow); }
+  .code-card.focused .code-frame { flex: 1; min-height: 0; }
+  .code-card.focused .code-area { height: 100% !important; min-height: 0; }
+  .code-card.focused .code-grip, .code-card.focused .editor-controls button:first-child { display: none; }
+  .editor-focus-save { display: none; }
+  .code-card.focused .editor-focus-save { display: block; }
+  #view-code > .actions { position: sticky; bottom: 0; z-index: 5; padding: 12px 0; background: var(--action-fill); border-top: 1px solid var(--line); }
+  @media (max-width: 540px) { .editor-shortcut { display: none; } .editor-toolbar { gap: 12px; } .code-card { padding: 10px; } .code-card > .head output { font-size: 10px; } .editor-controls { width: 100%; justify-content: flex-end; } .code-card.focused { inset: 4px; } }
 
   /* custom dropdown: the native <select> popup ignores our palette */
   .dd { position: relative; }
   .dd-trigger {
     width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line);
-    background: var(--field); color: var(--fg); cursor: pointer; text-align: left;
+    background: var(--control-fill); color: var(--fg); cursor: pointer; text-align: left;
   }
-  .dd-trigger:hover { background: var(--field-hover); }
+  .dd-trigger:hover { background: var(--control-hover-fill); }
   .dd-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .dd-trigger::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg) translateY(-2px); }
   .dd-menu {
     position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
     max-height: 280px; overflow: auto; padding: 4px;
     border-radius: 10px; border: 1px solid var(--line); background: var(--pop);
-    box-shadow: 0 12px 32px rgba(0,0,0,.28);
+    box-shadow: 0 12px 32px rgba(0,0,0,.12);
     display: none;
   }
   .dd.open .dd-menu { display: block; }
+  .dd.menu-above .dd-menu { top: auto; bottom: calc(100% + 4px); }
+  /* Transparent choices cannot cover the text underneath. In glass modes
+     expand in flow; the card supplies the single surface behind the options. */
+  html[data-panels="half"] .dd-menu, html[data-panels="clear"] .dd-menu,
+  html[data-panels="half"] .dd.menu-above .dd-menu, html[data-panels="clear"] .dd.menu-above .dd-menu {
+    position: relative; inset: auto; margin-top: 6px; background: transparent; box-shadow: none;
+  }
   .dd-item {
     display: block; width: 100%; padding: 6px 8px; border: 0; border-radius: 7px;
     background: transparent; color: var(--fg); cursor: pointer; text-align: left;
@@ -190,9 +262,9 @@
   .actions { display: flex; gap: 8px; margin-top: 14px; }
   .btn {
     flex: 1; padding: 7px 0; border-radius: 9px; cursor: pointer; font-size: 11px;
-    border: 1px solid var(--line); background: var(--field); color: var(--fg);
+    border: 1px solid var(--line); background: var(--control-fill); color: var(--fg);
   }
-  .btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .btn:hover { background: var(--control-hover-fill); border-color: var(--muted); }
   .btn.primary { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .btn.tiny { flex: 0 0 auto; padding: 4px 8px; font-size: 10px; }
   .btn.danger:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
@@ -204,12 +276,12 @@
   .lib-head span { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
   .list { max-height: 300px; overflow: auto; margin: 0 -4px; padding: 0 4px; }
   .item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px; border: 1px solid transparent; }
-  .item:hover { background: var(--field); }
-  .item.active { border-color: var(--accent); background: var(--accent-soft); }
+  .item:hover { border-color: var(--muted); }
+  .item.active { border-color: var(--accent); }
   .item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .item .badge { flex: 0 0 auto; font-size: 9px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; line-height: 16px; }
   .item .badge.sound { color: var(--accent); border-color: var(--accent); }
-  .item .badge.nc { color: var(--danger); border-color: var(--danger); }
+  .item .badge.nc { color: var(--muted); border-color: var(--line); }
   .item .tools { display: flex; gap: 4px; flex: 0 0 auto; }
   .import-box { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; margin-top: 10px; }
   .import-box h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
@@ -217,6 +289,75 @@
   .form-row label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
   .local-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
   .local-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Settings are a reading surface even when the wallpaper is bright or busy. */
+  body { font-size: 13px; line-height: 1.6; }
+  body.mode-main { background: var(--page-fill); }
+  body.mode-main .panel, body.mode-main .panel.wide { max-width: 1080px; padding: 40px clamp(20px, 4vw, 48px) 48px; }
+  body.mode-main .page-head { margin-bottom: 24px; }
+  body.mode-main .page-head h2 { font-size: 23px; letter-spacing: -.025em; font-weight: 600; margin: 0; }
+  body.mode-main .page-head p { color: var(--muted); font-size: 13px; }
+  .page-head { position: relative; }
+  .wallpaper-preview { position: absolute; top: 0; right: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card-fill); color: var(--fg); font-size: 12px; cursor: pointer; }
+  body.mode-main.previewing { background: transparent; overflow: hidden; }
+  .previewing .panel { visibility: hidden; }
+  .previewing .wallpaper-preview { visibility: visible; position: fixed; top: 24px; right: 24px; box-shadow: var(--shadow); }
+  body.mode-main .tabs { max-width: none; width: fit-content; min-width: min(100%, 288px); margin: 0 0 28px; padding: 3px; border: 1px solid var(--line); background: var(--control-fill); }
+  .tabs button { padding: 9px 22px; font-size: 13px; letter-spacing: 0; white-space: nowrap; }
+  body.mode-main .tabs button.active { background: var(--card-fill); color: var(--fg); box-shadow: 0 1px 3px #00000012; font-weight: 600; }
+  button, input, textarea { transition: border-color .15s; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .settings-grid { display: grid; gap: 18px; align-items: start; }
+  body.mode-main .sub { max-width: none; }
+  .settings-card { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-fill); box-shadow: 0 1px 2px #00000003; }
+  .settings-card h3 { margin: 0 0 24px; font-size: 14px; font-weight: 600; }
+  .settings-card .row { margin-top: 24px; }
+  .settings-card .row.switch { padding: 0 0 14px; border-bottom: 1px solid var(--line); }
+  .head label, .form-row label, .lib-head span { font-size: 13px; letter-spacing: 0; color: var(--fg); }
+  .head output { font-size: 12px; font-weight: 400; white-space: nowrap; color: var(--muted); }
+  #preset-kind, #scale-out, #fps-out, #panels-out, #audio-mode-out { display: none; }
+  .hint, .note { font-size: 12px; color: var(--faint); line-height: 1.7; }
+  .hint { margin-top: 8px; }
+  .dd-trigger, input[type=text], input[type=file] { min-height: 40px; padding: 9px 12px; font-size: 13px; }
+  .dd-trigger { gap: 16px; }
+  .dd-trigger::after { flex: 0 0 6px; }
+  .dd-item { padding: 9px 10px; font-size: 13px; }
+  .dd-menu { max-height: min(280px, 45vh); }
+  input[type=range] { height: 28px; }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; background: linear-gradient(to right, var(--accent) var(--range-fill, 0%), var(--line) var(--range-fill, 0%)); }
+  input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -6.5px; border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); }
+  .switch input { appearance: none; position: relative; width: 36px; height: 22px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--control-hover-fill); }
+  .switch input::after { content: ''; position: absolute; width: 16px; height: 16px; top: 2px; left: 2px; border-radius: 50%; background: var(--muted); transition: transform .15s; }
+  .switch input:checked { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked::after { transform: translateX(14px); background: var(--canvas); }
+  .dim { opacity: .6; }
+  .btn { min-height: 38px; padding: 8px 14px; font-size: 13px; }
+  .btn.primary { background: var(--accent); color: var(--canvas); border-color: var(--accent); font-weight: 600; }
+  html[data-panels="half"] .btn.primary, html[data-panels="clear"] .btn.primary {
+    background: transparent; color: var(--fg);
+  }
+  .btn.primary:hover { filter: brightness(.94); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .settings-footer { margin-top: 20px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .settings-footer .actions { margin: 0; }
+  .settings-footer .note { margin: 0; }
+  #note { position: fixed; right: 24px; bottom: 18px; z-index: 60; max-width: min(480px, calc(100vw - 40px)); margin: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--card-fill); box-shadow: var(--shadow); }
+  #note:empty { display: none; }
+  #note.error { color: var(--danger); }
+  .item { padding: 14px 12px; margin-bottom: 8px; border: 1px solid var(--line); background: var(--card-fill); flex-wrap: wrap; }
+  .item .name { flex-basis: 160px; font-weight: 600; }
+  .item .badge { font-size: 10px; padding: 2px 7px; }
+  .btn.tiny { min-height: 30px; font-size: 12px; padding: 4px 10px; }
+  .import-box { background: var(--card-fill); border-style: solid; border-radius: 14px; padding: 20px; margin-top: 18px; }
+  .import-box h2 { font-size: 14px; letter-spacing: 0; color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
+  .local-item { padding: 8px 0; }
+  .note.error, .hint.error { color: var(--danger); }
+  [hidden] { display: none !important; }
+  .settings-side { display: contents; }
+  @media (min-width: 860px) { body.mode-main .settings-grid { grid-template-columns: 1.15fr 1fr; } .settings-side { display: grid; gap: 18px; } .settings-card.sound { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; column-gap: 32px; } .settings-card.sound > h3, .settings-card.sound > p { grid-column: 1 / -1; } }
+  @media (max-width: 740px) { .wallpaper-preview { position: static; margin-top: 14px; } }
+  @media (max-width: 540px) { body.mode-main .panel { padding-top: 22px; } .settings-card { padding: 18px; } .item .tools { width: 100%; justify-content: flex-end; } .settings-footer { align-items: stretch; flex-direction: column; } }
+  @media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; } }
 </style>
 </head>
 <body>
@@ -231,7 +372,6 @@
 <section class="panel" id="panel" role="dialog" aria-modal="false" aria-label="Shader 背景设置">
   <div class="page-head">
     <h2>ShaderToy 背景</h2>
-    <p>用实时着色器当聊天背景。改动即时生效，并自动保存到本机（<code>$DSH_HOME/shader-skin.json</code>）。</p>
   </div>
 
   <header>
@@ -257,21 +397,18 @@
     </div>
 
     <div class="row">
-      <div class="head"><label for="glass">玻璃不透明度</label><output id="glass-out"></output></div>
+      <div class="head"><label for="glass">界面不透明度</label><output id="glass-out"></output></div>
       <input type="range" id="glass" min="20" max="95" step="1">
-      <div class="hint">界面压住背景的程度：越高文字越清晰、背景越淡；越低背景越透亮。它只影响这一层暗色滤镜，不会叠出第二层。</div>
     </div>
 
     <div class="row">
       <div class="head"><label for="brightness">背景亮度</label><output id="brightness-out"></output></div>
       <input type="range" id="brightness" min="30" max="180" step="5">
-      <div class="hint">画面本身太暗（尤其是黄昏、夜景类着色器）就调高；过高会发白、过曝。</div>
     </div>
 
     <div class="row">
       <div class="head"><label>卡片 / 弹层</label><output id="panels-out"></output></div>
       <div id="panels-dd"></div>
-      <div class="hint">卡片、代码块、弹层、输入框的底色：不透明最清楚；半透明 / 透明让背景透出来（文字可读性会下降）。</div>
     </div>
 
     <div class="row">
@@ -282,17 +419,16 @@
     <div class="row">
       <div class="head"><label>渲染分辨率</label><output id="scale-out"></output></div>
       <div id="scale-dd"></div>
-      <div class="hint" id="scale-hint"></div>
+      <div class="hint" id="scale-hint" hidden></div>
     </div>
 
     <div class="row">
       <div class="head"><label>帧率上限</label><output id="fps-out"></output></div>
       <div id="fps-dd"></div>
-      <div class="hint">聊天时 30fps 足够；60fps 更顺滑但更耗电</div>
     </div>
 
     <div class="row">
-      <div class="head"><label for="speed">播放速度</label><output id="speed-out"></output></div>
+      <div class="head"><label for="speed">画面速度</label><output id="speed-out"></output></div>
       <input type="range" id="speed" min="0" max="2" step="0.05">
     </div>
 
@@ -303,18 +439,15 @@
     <div class="row" id="loop-seconds-row">
       <div class="head"><label for="loop-seconds">循环周期</label><output id="loop-seconds-out"></output></div>
       <input type="range" id="loop-seconds" min="5" max="120" step="1">
-      <div class="hint">有的作品播一次就停住了：打开后每到「循环周期」就把画面时间轴（iTime）归零重播，适合一次性的开场动画。带淡入淡出的作品（比如马里奥）每轮会看到它重新淡入，这是着色器本身的效果，不是没循环。只重置画面，不影响声音。</div>
     </div>
 
     <div class="row" id="audio-mode-row">
       <div class="head"><label>音乐播放</label><output id="audio-mode-out"></output></div>
       <div id="audio-mode-dd"></div>
-      <div class="hint">ShaderToy 的音乐通常是一段有长度的曲子（放完就静音），所以「循环重放」要配合下面的「音乐时长」：每到这个时长就把音乐时间轴归零再来一遍，接缝处做了 40ms 淡入淡出。「只播一次」= 放完就停，画面继续常驻。</div>
     </div>
     <div class="row" id="audio-seconds-row">
       <div class="head"><label for="audio-seconds">音乐时长</label><output id="audio-seconds-out"></output></div>
       <input type="range" id="audio-seconds" min="10" max="600" step="5">
-      <div class="hint">这首曲子有多长：循环重放时按它从头再来，只播一次时按它停止。从切到这个背景开始计时；开「画面循环」也建议把它设成和循环周期一致的时长。</div>
     </div>
 
     <div class="row" id="volume-row">
@@ -332,7 +465,7 @@
       <button class="btn" id="reset" type="button">本背景恢复默认</button>
       <button class="btn" id="audio" type="button" hidden>开声音</button>
     </div>
-    <p class="note" id="note">改动即时生效并自动保存。</p>
+    <p class="note" id="note"></p>
   </div>
 
   <div id="view-library" hidden>
@@ -354,11 +487,11 @@
     <div class="import-box">
       <h2>导入文件（ShaderToy 导出的 JSON / 一段 GLSL）</h2>
       <input type="file" id="file-input" accept=".json,.glsl,.txt" multiple>
-      <p class="note">JSON 会解析 image / sound pass；GLSL 当作 image pass。作品许可证由原作者决定，仅供个人使用。</p>
+      <p class="note">支持 ShaderToy JSON、GLSL、TXT。</p>
     </div>
 
     <div class="import-box">
-      <h2>从本地目录导入（$DSH_HOME/shader-skin/presets/）</h2>
+      <h2>从本地目录导入</h2>
       <div id="local-list"><p class="note">正在读取…</p></div>
     </div>
 
@@ -406,6 +539,14 @@
   let open = MODE === 'main'
   let saveTimer = 0
   let audioState = 'none'
+  let saveQueue = Promise.resolve(true)
+  let saveRevision = 0
+  let activeRevision = 0
+  let persistedActiveId = null
+  let stateLoaded = false
+  let stateEtag = null
+  let stateConflict = false
+  let pendingWrites = 0
 
   const clamp = (v, lo, hi, fb) => {
     const n = Number(v)
@@ -420,14 +561,21 @@
   // ---------------------------------------------------------------- theme
   function detectDark() {
     try {
-      if (parent.document?.body) return parent.document.body.hasAttribute('data-ds-dark-theme')
+      if (!STANDALONE && parent.document?.body) return parent.document.body.hasAttribute('data-ds-dark-theme')
     } catch { /* cross-origin fallback */ }
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true
   }
   function applyTheme() {
     const dark = detectDark()
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-    document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+    let scheme = dark ? 'dark' : 'light'
+    // Chromium paints an opaque iframe canvas when parent/child color schemes
+    // differ. Match the embedding canvas whenever the shader should show through.
+    if (document.body.classList.contains('previewing') || document.documentElement.dataset.panels !== 'opaque') {
+      try { scheme = parent.getComputedStyle(parent.document.documentElement).colorScheme } catch { /* same-origin in DSH */ }
+    }
+    document.documentElement.style.colorScheme = scheme
+    document.body.style.colorScheme = dark ? 'dark' : 'light'
   }
   function watchParentTheme() {
     try {
@@ -442,6 +590,12 @@
     const root = el('div', { className: 'dd' })
     const trigger = el('button', { type: 'button', className: 'dd-trigger' })
     const menu = el('div', { className: 'dd-menu', role: 'listbox' })
+    menu.id = `${host.id}-options`
+    const label = host.closest('.row')?.querySelector('label')?.textContent || '选择选项'
+    menu.setAttribute('aria-label', label)
+    trigger.setAttribute('aria-label', label)
+    trigger.setAttribute('aria-controls', menu.id)
+    trigger.setAttribute('role', 'combobox')
     root.append(trigger, menu)
     host.replaceChildren(root)
     let list = options
@@ -456,9 +610,17 @@
     }
     const paintFocus = () => {
       for (const [index, item] of [...menu.children].entries()) item.classList.toggle('focus', index === focusIndex)
+      const focused = menu.children[focusIndex]
+      if (focused) { trigger.setAttribute('aria-activedescendant', focused.id); focused.scrollIntoView({ block: 'nearest' }) }
     }
-    const close = () => { root.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false') }
+    const close = () => { root.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); trigger.removeAttribute('aria-activedescendant') }
     const openMenu = () => {
+      const rect = root.getBoundingClientRect()
+      const below = innerHeight - rect.bottom - 8
+      const above = rect.top - 8
+      const flip = below < 180 && above > below
+      root.classList.toggle('menu-above', flip)
+      menu.style.maxHeight = `${Math.max(80, Math.min(280, flip ? above : below))}px`
       root.classList.add('open')
       trigger.setAttribute('aria-expanded', 'true')
       focusIndex = Math.max(0, list.findIndex(option => option.value === current))
@@ -469,11 +631,14 @@
       current = option.value
       close()
       sync()
+      trigger.focus()
       onChange(option.value)
     }
     const render = () => {
       menu.replaceChildren(...list.map((option, index) => {
         const item = el('button', { type: 'button', className: 'dd-item', role: 'option' })
+        item.id = `${menu.id}-${index}`
+        item.tabIndex = -1
         item.textContent = textOf(option)
         item.addEventListener('click', () => pick(option))
         item.addEventListener('mouseenter', () => { focusIndex = index; paintFocus() })
@@ -497,7 +662,12 @@
           if (option) pick(option)
         }
       } else if (event.key === 'Escape') {
+        if (root.classList.contains('open')) event.stopPropagation()
         close()
+      } else if (event.key === 'Tab') {
+        close()
+      } else if (event.key === 'Home' || event.key === 'End') {
+        if (root.classList.contains('open')) { event.preventDefault(); focusIndex = event.key === 'Home' ? 0 : list.length - 1; paintFocus() }
       }
     })
     document.addEventListener('click', event => { if (!root.contains(event.target)) close() })
@@ -543,30 +713,48 @@
 
   function toParent(message) {
     if (STANDALONE) return
+    if (message.type === 'params') message.id = state.activeId
     try { parent.postMessage(message, location.origin) } catch { /* parent gone */ }
   }
 
   function saveState() {
+    if (!stateLoaded || stateConflict) {
+      setNote(stateConflict ? '配置已在其他页面更新，请重新加载。' : '配置读取失败，请重新加载。', true)
+      return Promise.resolve(false)
+    }
+    const activeId = state.activeId
     const body = JSON.stringify({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides })
-    return fetch(`${BASE}/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body })
+    const revision = ++saveRevision
+    pendingWrites++
+    const result = saveQueue.then(() => {
+      const headers = { 'content-type': 'application/json' }
+      if (stateEtag) headers['if-match'] = stateEtag
+      return fetch(`${BASE}/state`, { method: 'PUT', headers, body })
+    })
       .then(response => {
-        setNote(response.ok ? '改动即时生效并已保存。' : `保存失败（HTTP ${response.status}）`, !response.ok)
+        if (response.status === 409) stateConflict = true
+        if (response.ok) stateEtag = response.headers.get('etag')
+        if (response.ok) persistedActiveId = activeId
+        if (revision === saveRevision) setNote(response.ok ? '已保存' : stateConflict ? '配置已在其他页面更新，请重新加载。' : `保存失败（HTTP ${response.status}），请重试。`, !response.ok)
         return response.ok
-      })
+      }).finally(() => { pendingWrites-- })
       .catch(() => {
-        setNote('保存失败：Host 路由不可用。', true)
+        if (revision === saveRevision) setNote('保存失败：Host 路由不可用，请重试。', true)
         return false
       })
+    saveQueue = result
+    return result
   }
 
   function scheduleSave() {
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { void saveState() }, 320)
+    saveTimer = setTimeout(() => { saveTimer = 0; void saveState() }, 320)
   }
 
   /** Persist right now — needed before telling the host to load a new preset. */
   async function saveNow() {
     clearTimeout(saveTimer)
+    saveTimer = 0
     return saveState()
   }
 
@@ -574,30 +762,47 @@
     const note = $('note')
     note.textContent = text
     note.classList.toggle('error', isError)
+    if (isError) {
+      const retry = el('button', { type: 'button', className: 'btn tiny', textContent: !stateLoaded || stateConflict ? '重新加载' : '重试' })
+      retry.addEventListener('click', () => {
+        if (!stateLoaded || stateConflict) location.reload()
+        else if (!$('view-code').hidden) void saveCode()
+        else void saveNow()
+      })
+      note.append(' ', retry)
+    }
   }
 
   function publishParams() {
+    if (!stateLoaded || stateConflict) { void saveState(); return }
     toParent({ type: 'params', params: effective() })
     scheduleSave()
   }
 
   async function setActive(id) {
-    if (!id) return
-    if (id === state.activeId) {
-      toParent({ type: 'preset', id })
-      toParent({ type: 'params', params: effective() })
-      return
-    }
+    if (!id) return false
+    const revision = ++activeRevision
+    const previousId = state.activeId
     state.activeId = id
     sync()
     renderLibrary()
     // Persist BEFORE the host reloads `/state` for the new preset: a brand-new
     // entry only exists on disk once this PUT succeeds, otherwise the host falls
     // back to the first built-in and shows the wrong shader.
-    await saveNow()
+    const saved = await saveNow()
+    if (revision !== activeRevision) return false
+    if (!saved) {
+      state.activeId = persistedActiveId ?? previousId
+      sync()
+      renderLibrary()
+      toParent({ type: 'preset', id: state.activeId })
+      toParent({ type: 'params', params: effective() })
+      return false
+    }
     toParent({ type: 'preset', id })
     toParent({ type: 'params', params: effective() })
     if (!$('view-code').hidden) void loadCode()
+    return true
   }
 
   function setParam(key, value) {
@@ -638,6 +843,10 @@
     $('view-params').hidden = next !== 'params'
     $('view-library').hidden = next !== 'library'
     $('view-code').hidden = next !== 'code'
+    for (const name of ['params', 'library', 'code']) {
+      $(`tab-${name}`).setAttribute('aria-selected', String(name === next))
+      $(`tab-${name}`).tabIndex = name === next ? 0 : -1
+    }
     panel.classList.toggle('wide', next === 'library')
     if (next === 'library') void loadLocalPresets()
     if (next === 'code') void loadCode()
@@ -645,6 +854,58 @@
   }
 
   // ---------------------------------------------------------------- params UI
+  function arrangeSettings() {
+    const view = $('view-params')
+    const grid = el('div', { className: 'settings-grid' })
+    const groups = [
+      ['appearance', '背景与外观', ['enabled', 'preset-dd', 'glass', 'brightness', 'panels-dd', 'blur']],
+      ['performance', '渲染与性能', ['scale-dd', 'fps-dd']],
+      ['playback', '画面播放', ['speed', 'loop', 'loop-seconds']],
+      ['sound', '声音', ['volume', 'muted', 'audio-mode-dd', 'audio-seconds']],
+    ]
+    for (const [kind, title, ids] of groups) {
+      const card = el('section', { className: `settings-card ${kind}` }, el('h3', { textContent: title }))
+      for (const id of ids) card.append($(id).closest('.row'))
+      grid.append(card)
+    }
+    const side = el('div', { className: 'settings-side' })
+    const performance = grid.querySelector('.performance')
+    performance.before(side)
+    side.append(performance, grid.querySelector('.playback'))
+    const note = $('note')
+    document.querySelector('.tabs').after(note)
+    const footer = el('div', { className: 'settings-footer' }, $('reset').closest('.actions'))
+    view.replaceChildren(grid, footer)
+    if (!STANDALONE && MODE === 'main') {
+      const preview = el('button', { type: 'button', className: 'wallpaper-preview', textContent: '预览背景 ↗' })
+      preview.setAttribute('aria-pressed', 'false')
+      const setPreview = value => {
+        document.body.classList.toggle('previewing', value)
+        applyTheme()
+        preview.setAttribute('aria-pressed', String(value))
+        preview.textContent = value ? '返回设置 · Esc' : '预览背景 ↗'
+      }
+      preview.addEventListener('click', () => setPreview(!document.body.classList.contains('previewing')))
+      document.addEventListener('keydown', event => { if (event.key === 'Escape' && document.body.classList.contains('previewing')) { setPreview(false); preview.focus({ preventScroll: true }) } })
+      document.querySelector('.page-head').append(preview)
+    }
+    $('note').setAttribute('role', 'status')
+    for (const name of ['params', 'library', 'code']) {
+      $(`tab-${name}`).setAttribute('aria-controls', `view-${name}`)
+      $(`view-${name}`).setAttribute('role', 'tabpanel')
+      $(`view-${name}`).setAttribute('aria-labelledby', `tab-${name}`)
+    }
+    document.querySelector('.tabs').addEventListener('keydown', event => {
+      const names = ['params', 'library', 'code']
+      const index = names.findIndex(name => $(`tab-${name}`) === event.target)
+      if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+      event.preventDefault()
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + (event.key === 'ArrowRight' ? 1 : 2)) % 3
+      setTab(names[next])
+      $(`tab-${names[next]}`).focus()
+    })
+    setTab('params')
+  }
   let presetDd
   let scaleDd
   let fpsDd
@@ -654,8 +915,18 @@
   const PANEL_KINDS = { opaque: '不透明', half: '半透明', clear: '透明' }
   const AUDIO_MODES = { loop: '循环重放', once: '只播一次' }
 
+  function syncPanelSurfaces(p) {
+    const root = document.documentElement
+    root.dataset.panels = p.enabled !== false && ['half', 'clear'].includes(p.panels) ? p.panels : 'opaque'
+    // Match client.js glassTokens(): clear is zero fill, half follows the slider.
+    const alpha = p.panels === 'clear' ? 0 : clamp(p.glass, 20, 95, 60) / 100
+    root.style.setProperty('--panel-alpha', String(alpha))
+    applyTheme()
+  }
+
   function sync() {
     const p = effective()
+    syncPanelSurfaces(p)
     $('enabled').checked = p.enabled !== false
     $('glass').value = String(p.glass)
     $('glass-out').textContent = `${Math.round(p.glass)}%`
@@ -687,11 +958,11 @@
     $('muted').checked = p.muted === true
     $('volume-hint').textContent = sound
       ? (p.muted ? '已静音'
-        : audioState === 'running' ? '有声播放中'
-          : audioState === 'suspended' ? '浏览器拦截了自动播放：点「开声音」，或点一下界面任意位置解锁'
-            : audioState === 'ended' ? '音乐已播完（「只播一次」），画面照常'
-              : '该作品带声音')
-      : '这个背景没有声音代码'
+        : audioState === 'running' ? '播放中'
+          : audioState === 'suspended' ? '点击「开声音」播放'
+            : audioState === 'ended' ? '已播完'
+              : '')
+      : '无声音'
     $('audio').hidden = !(sound && audioState === 'suspended')
     if (presetDd) presetDd.setOptions(presetOptions(), state.activeId ?? '')
     if (scaleDd) scaleDd.setValue(String(p.scale))
@@ -700,6 +971,11 @@
     if (audioModeDd) audioModeDd.setValue(p.audioMode === 'once' ? 'once' : 'loop')
     $('scale-hint').textContent = `实际渲染缓冲：${bufferSizeFor(p.scale)}（窗口 ${viewportBasePixels().cssW} × ${viewportBasePixels().cssH}，DPR 上限 1.5；换窗口大小这里的数字会跟着变）`
     $('preset-kind').textContent = state.activeId ? (entryById(state.activeId) ? '我的' : '内置') : ''
+    for (const range of document.querySelectorAll('input[type=range]')) {
+      range.style.setProperty('--range-fill', `${100 * (Number(range.value) - Number(range.min)) / (Number(range.max) - Number(range.min))}%`)
+    }
+    $('audio-seconds').disabled = !sound
+    if (audioModeDd) $('audio-mode-dd').querySelector('button').disabled = !sound
   }
 
   /**
@@ -754,17 +1030,17 @@
     })
     panelsDd = makeDropdown($('panels-dd'), {
       options: [
-        { value: 'opaque', text: '不透明（默认，最清楚）' },
+        { value: 'opaque', text: '不透明' },
         { value: 'half', text: '半透明' },
-        { value: 'clear', text: '透明（最透，文字会难读一些）' },
+        { value: 'clear', text: '透明' },
       ],
       value: effective().panels ?? 'opaque',
       onChange: value => setParam('panels', value),
     })
     audioModeDd = makeDropdown($('audio-mode-dd'), {
       options: [
-        { value: 'loop', text: '循环重放（每「音乐时长」秒从头再来）' },
-        { value: 'once', text: '只播一次（播完停，画面常驻）' },
+        { value: 'loop', text: '循环重放' },
+        { value: 'once', text: '只播一次' },
       ],
       value: effective().audioMode === 'once' ? 'once' : 'loop',
       onChange: value => setParam('audioMode', value),
@@ -792,6 +1068,11 @@
     $('tab-library').addEventListener('click', () => setTab('library'))
     $('tab-code').addEventListener('click', () => setTab('code'))
     $('fab').addEventListener('click', () => setOpen(true))
+    for (const range of document.querySelectorAll('input[type=range]')) range.addEventListener('change', () => { if (saveTimer) void saveNow() })
+    document.addEventListener('visibilitychange', () => { if (document.hidden && saveTimer) void saveNow() })
+    window.addEventListener('beforeunload', event => {
+      if (saveTimer || pendingWrites) { event.preventDefault(); event.returnValue = '' }
+    })
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && MODE === 'popup' && open && !document.querySelector('.dd.open')) setOpen(false)
     })
@@ -806,31 +1087,45 @@
     const passes = shader?.renderpass ?? shader?.passes
     let image = ''
     let sound = ''
+    let common = ''
     if (Array.isArray(passes)) {
+      if (passes.some(pass => /^(buffer|cubemap)$/i.test(pass?.type) || pass?.inputs?.length)) throw new Error('暂不支持 Buffer、多通道纹理或 Cubemap 作品，请导入独立的 Image / Sound 代码。')
       for (const pass of passes) {
         const type = String(pass?.type ?? 'image').toLowerCase()
         const source = typeof pass?.code === 'string' ? pass.code : ''
         if (source === '') continue
-        if (type === 'sound') sound = source
-        else if (image === '') image = source
+        if (type === 'common') common += `${source}\n`
+        else if (type === 'sound') sound = source
+        else if (type === 'image') image = source
       }
     }
     if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
     if (image === '' && typeof shader?.image === 'string') image = shader.image
     if (image === '' && typeof raw?.image === 'string') image = raw.image
+    if (sound === '' && typeof shader?.code?.sound === 'string') sound = shader.code.sound
+    if (sound === '' && typeof shader?.sound === 'string') sound = shader.sound
     if (image === '') return undefined
     const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
-    return { image, sound: sound || undefined, name: name || undefined }
+    return { image: common + image, sound: sound ? common + sound : undefined, name: name || undefined }
   }
 
   const looksLikeImage = code => /\bmainImage\s*\(/.test(code) || /\bvoid\s+main\s*\(/.test(code)
   const looksLikeSound = code => /\bmainSound\s*\(/.test(code)
 
   function addEntry({ name, image, sound, source, origin }) {
+    if (!stateLoaded || stateConflict) throw new Error('请先重新加载配置')
     if (!looksLikeImage(image)) throw new Error('Image 代码里找不到 mainImage() 或 main()')
+    if (sound?.trim() && !looksLikeSound(sound)) throw new Error('Sound 代码里找不到 mainSound()')
     const id = `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     const entry = { id, name: (name || '我的背景').slice(0, 120), source: source || 'paste', code: { image } }
+    if (origin) entry.origin = origin
     if (sound && looksLikeSound(sound)) entry.code.sound = sound
+    if (state.entries.length >= 200) throw new Error('背景库最多保存 200 个作品')
+    const bytes = new TextEncoder()
+    const total = [...state.entries, entry].reduce((sum, item) => sum + bytes.encode(item.code.image).length + bytes.encode(item.code.sound || '').length, 0)
+    if (total > 1_500_000) throw new Error('背景库代码总量超过 1.5 MB')
+    const payload = JSON.stringify({ version: 2, activeId: state.activeId, entries: [...state.entries, entry], overrides: state.overrides })
+    if (bytes.encode(payload).length > 2 * 1024 * 1024) throw new Error('导入后配置大小超过 2 MB')
     state.entries.push(entry)
     scheduleSave()
     renderLibrary()
@@ -841,7 +1136,7 @@
     const list = $('lib-list')
     const rows = [
       ...manifest.map(item => ({ id: item.id, name: item.name || item.id, kind: '内置', license: item.license, sound: Boolean(item.hasSound), entry: null })),
-      ...state.entries.map(item => ({ id: item.id, name: item.name, kind: '我的', license: null, sound: Boolean(item.code?.sound), entry: item })),
+      ...state.entries.map(item => ({ id: item.id, name: item.name, kind: '我的', license: item.license, sound: Boolean(item.code?.sound), entry: item })),
     ]
     list.replaceChildren(...rows.map(row => {
       const name = el('span', { className: 'name' })
@@ -879,11 +1174,12 @@
         remove.textContent = '删除'
         remove.addEventListener('click', async () => {
           if (!window.confirm(`删除「${row.entry.name}」？此操作不可恢复。`)) return
+          const previous = { entries: [...state.entries], overrides: { ...state.overrides }, activeId: state.activeId }
           const wasActive = state.activeId === row.id
           state.entries = state.entries.filter(item => item.id !== row.id)
           delete state.overrides[row.id]
           if (wasActive) state.activeId = manifest[0]?.id ?? null
-          await saveNow()
+          if (!await saveNow()) { Object.assign(state, previous); renderLibrary(); sync(); return }
           if (wasActive) {
             toParent({ type: 'preset', id: state.activeId })
             toParent({ type: 'params', params: effective() })
@@ -930,7 +1226,7 @@
         add.textContent = '导入中…'
         try {
           const text = await fetchText(`${BASE}/local/${encodeURIComponent(item.file)}`)
-          const parsed = item.kind === 'shadertoy' ? parseShaderDocument(text) : { image: text }
+          const parsed = item.kind === 'shadertoy' ? parseShaderDocument(text) : { image: text, sound: looksLikeSound(text) ? text : undefined }
           if (!parsed) throw new Error('无法解析这个文件')
           addEntry({ name: parsed.name || item.name, image: parsed.image, sound: parsed.sound, source: 'local', origin: item.file })
           setNote(`已导入「${parsed.name || item.name}」，可在列表里使用。`)
@@ -974,7 +1270,7 @@
       for (const file of files) {
         try {
           const text = await file.text()
-          const parsed = /\.json$/i.test(file.name) ? parseShaderDocument(text) : { image: text }
+          const parsed = /\.json$/i.test(file.name) ? parseShaderDocument(text) : { image: text, sound: looksLikeSound(text) ? text : undefined }
           if (!parsed) throw new Error('不是可识别的 ShaderToy JSON')
           addEntry({
             name: parsed.name || file.name.replace(/\.[^.]+$/, ''),
@@ -992,27 +1288,53 @@
 
   // ------------------------------------------------------------- code tab
   let codeLoadToken = 0
+  let codeLoadedId = null
+  let codeBaseline = { image: '', sound: '' }
+  let codeSaving = false
+  const codeDrafts = new Map()
   const CODE_HEIGHTS_KEY = 'shadertoy-skin.codeHeights'
+  const DEFAULT_CODE_HEIGHT = 360
+  const CODE_DRAFTS_KEY = 'shadertoy-skin.codeDrafts'
+  function rememberDrafts() {
+    if (codeLoadedId) {
+      const draft = { image: $('code-image').value, sound: $('code-sound').value }
+      if (draft.image !== codeBaseline.image || draft.sound !== codeBaseline.sound) codeDrafts.set(codeLoadedId, draft)
+      else codeDrafts.delete(codeLoadedId)
+    }
+    try { sessionStorage.setItem(CODE_DRAFTS_KEY, JSON.stringify([...codeDrafts])) } catch { /* storage full: current editor still holds the draft */ }
+  }
 
-  /** Restore the user's own code-box heights (drag the bottom-right corner to change). */
+  /** Version 2 gives Sound the same initial height, then remembers each grip. */
   function restoreCodeHeights() {
     try {
       const saved = JSON.parse(localStorage.getItem(CODE_HEIGHTS_KEY) ?? 'null')
       if (!saved || typeof saved !== 'object') return
-      if (Number.isFinite(saved.image)) $('code-image').style.height = `${saved.image}px`
-      if (Number.isFinite(saved.sound)) $('code-sound').style.height = `${saved.sound}px`
+      const image = clamp(saved.image, 160, 4000, DEFAULT_CODE_HEIGHT)
+      const sound = saved.version === 2 ? clamp(saved.sound, 160, 4000, DEFAULT_CODE_HEIGHT) : image
+      $('code-image').style.height = `${image}px`
+      $('code-sound').style.height = `${sound}px`
+      if (saved.version !== 2) localStorage.setItem(CODE_HEIGHTS_KEY, JSON.stringify({ version: 2, image, sound }))
     } catch { /* storage may be blocked */ }
   }
 
   function saveCodeHeights() {
+    if (document.querySelector('.code-card.focused')) return
     try {
-      const heights = { image: $('code-image').offsetHeight, sound: $('code-sound').offsetHeight }
+      // Collapsed boxes have offsetHeight 0; retain their explicit normal size.
+      const height = id => clamp(parseInt($(id).style.height), 160, 4000, DEFAULT_CODE_HEIGHT)
+      const heights = { version: 2, image: height('code-image'), sound: height('code-sound') }
       localStorage.setItem(CODE_HEIGHTS_KEY, JSON.stringify(heights))
     } catch { /* storage may be blocked */ }
   }
 
-  async function loadCode() {
+  async function loadCode(discard = false) {
+    if (codeLoadedId && ($('code-image').value !== codeBaseline.image || $('code-sound').value !== codeBaseline.sound)) {
+      codeDrafts.set(codeLoadedId, { image: $('code-image').value, sound: $('code-sound').value })
+    }
+    if (discard) codeDrafts.delete(state.activeId)
+    try { sessionStorage.setItem(CODE_DRAFTS_KEY, JSON.stringify([...codeDrafts])) } catch { /* optional recovery */ }
     const token = ++codeLoadToken
+    const id = state.activeId
     const entry = entryById(state.activeId)
     const builtin = builtinById(state.activeId)
     const editable = Boolean(entry)
@@ -1025,27 +1347,39 @@
       sound = entry.code?.sound ?? ''
     } else if (builtin) {
       name = builtin.name || builtin.id
-      try { image = await fetchText(`${BASE}/presets/${builtin.file}`) } catch { image = '' }
+      try { image = await fetchText(`${BASE}/presets/${builtin.file}`) } catch {
+        if (token === codeLoadToken) setCodeNote('代码读取失败，请重新打开代码页重试。', true)
+        return
+      }
       const soundFile = builtin.soundFile ?? `${builtin.id}-sound.glsl`
-      try { sound = await fetchText(`${BASE}/presets/${soundFile}`) } catch { sound = '' }
+      if (builtin.hasSound || builtin.soundFile) {
+        try { sound = await fetchText(`${BASE}/presets/${soundFile}`) } catch {
+          if (token === codeLoadToken) setCodeNote('声音代码读取失败，请重试。', true)
+          return
+        }
+      }
     }
-    if (token !== codeLoadToken) return
-    $('code-image').value = image
-    $('code-sound').value = sound
+    if (token !== codeLoadToken || id !== state.activeId) return
+    codeLoadedId = id
+    codeBaseline = { image, sound }
+    const draft = codeDrafts.get(id)
+    $('code-image').value = draft?.image ?? image
+    $('code-sound').value = draft?.sound ?? sound
     $('code-title').textContent = name
-    $('code-hint').textContent = `${editable
-      ? '正在编辑「我的」背景：保存后立刻重新编译运行，改动只存在本机。'
-      : '内置作品只读：保存会另存为「我的副本」并立刻运行，内置原件不动。'} 两个代码框都能拖下面的把手调高度（聚焦把手后按 ↑/↓ 也行），会记住。${builtin && builtin.license && builtin.license !== 'MIT'
-      ? ` 注意：这个内置作品是 ${builtin.license}（署名 / 非商业 / 相同方式共享），不是 MIT；另存的副本同样受它约束。`
-      : ''}`
+    $('code-hint').textContent = editable ? '正在编辑 · 本地作品' : '内置作品只读 · 保存为副本'
     updateCodeInfo()
     setCodeNote('')
   }
 
   function updateCodeInfo() {
     const image = $('code-image').value
-    $('code-image-info').textContent = `${image.split('\n').length} 行 · ${image.length} 字符`
+    const dirty = image !== codeBaseline.image || $('code-sound').value !== codeBaseline.sound
+    $('code-image-info').textContent = `${image.split('\n').length} 行 · ${image.length} 字符${dirty ? ' · 未保存' : ''}`
     $('code-sound-info').textContent = $('code-sound').value.trim() ? 'mainSound' : ''
+    for (const id of ['code-image', 'code-sound']) {
+      const gutter = $(`${id}-lines`)
+      if (gutter) gutter.textContent = Array.from({ length: $(id).value.split('\n').length }, (_, i) => i + 1).join('\n')
+    }
   }
 
   function setCodeNote(text, isError = false) {
@@ -1055,6 +1389,11 @@
   }
 
   async function saveCode() {
+    if (codeSaving) return
+    if (codeLoadedId !== state.activeId) {
+      setCodeNote('作品正在加载或切换，请加载完成后再保存。', true)
+      return
+    }
     const image = $('code-image').value
     const sound = $('code-sound').value.trim()
     if (!looksLikeImage(image)) {
@@ -1067,19 +1406,33 @@
     }
     const entry = entryById(state.activeId)
     const builtin = builtinById(state.activeId)
+    codeSaving = true
+    $('code-save').disabled = true
     try {
       if (entry) {
+        const previousCode = entry.code
+        const previousSource = entry.source
         entry.code = { ...(entry.code ?? {}), image }
         if (sound !== '') entry.code.sound = sound
         else delete entry.code.sound
         entry.source = 'edit'
         sync()
         renderLibrary()
-        await saveNow()
+        if (!await saveNow()) {
+          entry.code = previousCode
+          entry.source = previousSource
+          setCodeNote('保存失败，代码草稿已保留，请重试。', true)
+          return
+        }
+        if (state.activeId !== entry.id || codeLoadedId !== entry.id) return
         toParent({ type: 'preset', id: entry.id })
         toParent({ type: 'params', params: effective() })
         updateCodeInfo()
-        setCodeNote('已保存并重新运行。')
+        codeBaseline = { image, sound }
+        updateCodeInfo()
+        codeDrafts.delete(entry.id)
+        rememberDrafts()
+        setCodeNote('已保存，已请求重新编译运行。')
         return
       }
       if (!builtin) {
@@ -1088,11 +1441,28 @@
       }
       // built-ins are read-only package files -> save the edit as a copy
       const copy = addEntry({ name: `${builtin.name || builtin.id}（我的副本）`, image, sound, source: 'edit', origin: builtin.id })
-      await setActive(copy.id)
-      await loadCode()
+      if (builtin.license) copy.license = builtin.license
+      if (state.overrides[builtin.id]) state.overrides[copy.id] = { ...state.overrides[builtin.id] }
+      if (!await setActive(copy.id)) {
+        if (state.activeId !== builtin.id && state.activeId !== copy.id) return
+        state.entries = state.entries.filter(item => item.id !== copy.id)
+        delete state.overrides[copy.id]
+        renderLibrary()
+        setCodeNote('保存失败，代码草稿已保留，请重试。', true)
+        return
+      }
+      codeDrafts.delete(builtin.id)
+      if (state.activeId !== copy.id) return
+      codeBaseline = { image, sound }
+      codeLoadedId = copy.id
+      await loadCode(true)
+      rememberDrafts()
       setCodeNote('内置作品只读，已另存为「我的副本」并运行。')
     } catch (error) {
       setCodeNote(`保存失败：${error.message}`, true)
+    } finally {
+      codeSaving = false
+      $('code-save').disabled = false
     }
   }
 
@@ -1101,16 +1471,26 @@
     for (const grip of document.querySelectorAll('.code-grip')) {
       const area = $(grip.dataset.code)
       if (!area) continue
-      const isSound = area.classList.contains('sound')
-      const minHeight = isSound ? 80 : 160
-      const maxHeight = () => Math.max(minHeight + 80, Math.round(window.innerHeight * 0.72))
+      const minHeight = 160
+      const maxHeight = () => 4000
       const setHeight = (height) => {
         const clamped = Math.min(maxHeight(), Math.max(minHeight, Math.round(height)))
         area.style.height = `${clamped}px`
+        grip.setAttribute('aria-valuenow', String(clamped))
+        grip.setAttribute('aria-valuetext', `${clamped} 像素`)
       }
       let startY = 0
       let startHeight = 0
+      let startScroll = 0
+      let pointerY = 0
+      let animation = 0
+      let pointerId = null
       const stop = () => {
+        cancelAnimationFrame(animation)
+        if (pointerId !== null) {
+          try { grip.releasePointerCapture(pointerId) } catch { /* already released */ }
+          pointerId = null
+        }
         document.body.classList.remove('dragging-code')
         window.removeEventListener('pointermove', onMove)
         window.removeEventListener('pointerup', stop)
@@ -1120,35 +1500,61 @@
       const onMove = (event) => {
         if (typeof event.clientY !== 'number') return
         event.preventDefault()
-        setHeight(startHeight + (event.clientY - startY))
+        pointerY = event.clientY
+        setHeight(startHeight + pointerY - startY + document.body.scrollTop - startScroll)
       }
+      const autoScroll = () => {
+        const delta = pointerY > innerHeight - 56 ? 12 : pointerY < 56 ? -12 : 0
+        if (delta) {
+          document.body.scrollTop += delta
+          setHeight(startHeight + pointerY - startY + document.body.scrollTop - startScroll)
+        }
+        animation = requestAnimationFrame(autoScroll)
+      }
+      grip.setAttribute('aria-controls', area.id)
+      grip.setAttribute('aria-valuemin', String(minHeight))
+      grip.setAttribute('aria-valuemax', '4000')
+      grip.setAttribute('aria-valuenow', String(parseInt(area.style.height) || DEFAULT_CODE_HEIGHT))
+      grip.textContent = ''
+      grip.title = '拖动调整高度，双击还原'
       grip.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return
         event.preventDefault()
         startY = event.clientY
+        pointerY = event.clientY
+        startScroll = document.body.scrollTop
         startHeight = area.offsetHeight
+        pointerId = event.pointerId
         document.body.classList.add('dragging-code')
         try { grip.setPointerCapture(event.pointerId) } catch { /* older engines */ }
         window.addEventListener('pointermove', onMove)
         window.addEventListener('pointerup', stop)
         window.addEventListener('pointercancel', stop)
+        animation = requestAnimationFrame(autoScroll)
       })
+      grip.addEventListener('lostpointercapture', () => { if (pointerId !== null) stop() })
+      grip.addEventListener('dblclick', () => { setHeight(DEFAULT_CODE_HEIGHT); saveCodeHeights() })
       grip.addEventListener('keydown', (event) => {
-        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+        if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
         event.preventDefault()
-        setHeight(area.offsetHeight + (event.key === 'ArrowDown' ? (event.shiftKey ? 64 : 16) : (event.shiftKey ? -64 : -16)))
+        setHeight(event.key === 'Home' ? minHeight : event.key === 'End' ? 1200 : area.offsetHeight + (event.key === 'ArrowDown' ? (event.shiftKey ? 64 : 16) : (event.shiftKey ? -64 : -16)))
         saveCodeHeights()
       })
     }
   }
 
   function bindCode() {
+    buildCodeWorkspace()
     $('code-save').addEventListener('click', () => { void saveCode() })
     $('code-revert').addEventListener('click', () => {
-      void loadCode().then(() => setCodeNote('已重新读取当前运行的作品。'))
+      void loadCode(true).then(() => setCodeNote('已重新读取当前运行的作品。'))
     })
-    $('code-image').addEventListener('input', updateCodeInfo)
-    $('code-sound').addEventListener('input', updateCodeInfo)
+    try {
+      for (const [id, draft] of JSON.parse(sessionStorage.getItem(CODE_DRAFTS_KEY) || '[]')) {
+        if (typeof draft?.image === 'string' && typeof draft?.sound === 'string') codeDrafts.set(id, draft)
+      }
+    } catch { /* invalid recovery data */ }
+    for (const id of ['code-image', 'code-sound']) $(id).addEventListener('input', () => { updateCodeInfo(); rememberDrafts() })
     restoreCodeHeights()
     bindCodeGrips()
     // Ctrl/Cmd+S inside the editor saves & runs instead of the browser dialog
@@ -1160,15 +1566,124 @@
     })
   }
 
+  function buildCodeWorkspace() {
+    const toolbar = el('div', { className: 'editor-toolbar' })
+    const wrapLabel = el('label', { className: 'editor-wrap' })
+    const wrap = el('input', { type: 'checkbox', id: 'code-wrap' })
+    wrapLabel.append(wrap, document.createTextNode('自动换行'))
+    const size = el('select', { id: 'code-font', 'aria-label': '代码字号' })
+    size.setAttribute('aria-label', '代码字号')
+    for (const value of [12, 14, 16, 18, 20]) size.append(el('option', { value: String(value), textContent: `${value} px` }))
+    size.value = '14'
+    const sizeLabel = el('label', { textContent: '字号 ' }, size)
+    const shortcut = el('span', { className: 'editor-shortcut', textContent: 'Ctrl / ⌘ + S 保存并运行' })
+    toolbar.append(wrapLabel, sizeLabel, shortcut)
+    $('code-hint').after(toolbar)
+    let lastFocused = null
+    const exitFocus = () => {
+      const focused = document.querySelector('.code-card.focused')
+      if (!focused) return
+      focused.classList.remove('focused')
+      document.body.classList.remove('editor-focus')
+      const button = focused.querySelector('[data-focus]')
+      button.textContent = '专注编辑'
+      button.setAttribute('aria-pressed', 'false')
+      focused.removeAttribute('role')
+      focused.removeAttribute('aria-modal')
+      lastFocused?.focus({ preventScroll: true })
+    }
+    for (const id of ['code-image', 'code-sound']) {
+      const area = $(id)
+      const card = area.closest('.row')
+      card.classList.add('code-card')
+      const head = card.querySelector('.head')
+      const controls = el('div', { className: 'editor-controls' })
+      const collapse = el('button', { type: 'button', className: 'btn tiny', textContent: '收起' })
+      collapse.setAttribute('aria-expanded', 'true')
+      collapse.setAttribute('aria-controls', `${id}-frame`)
+      const focus = el('button', { type: 'button', className: 'btn tiny', textContent: '专注编辑' })
+      focus.dataset.focus = id
+      focus.setAttribute('aria-label', `专注编辑 ${id === 'code-image' ? 'Image' : 'Sound'}`)
+      focus.setAttribute('aria-pressed', 'false')
+      const save = el('button', { type: 'button', className: 'btn tiny primary editor-focus-save', textContent: '保存并运行' })
+      save.addEventListener('click', () => $('code-save').click())
+      controls.append(collapse, save, focus)
+      head.append(controls)
+      const frame = el('div', { className: 'code-frame', id: `${id}-frame` })
+      const gutter = el('pre', { className: 'code-lines', id: `${id}-lines` })
+      gutter.setAttribute('aria-hidden', 'true')
+      area.before(frame)
+      frame.append(gutter, area)
+      area.style.height = `${DEFAULT_CODE_HEIGHT}px`
+      area.addEventListener('scroll', () => { gutter.scrollTop = area.scrollTop })
+      collapse.addEventListener('click', () => {
+        const collapsed = card.classList.toggle('collapsed')
+        collapse.textContent = collapsed ? '展开' : '收起'
+        collapse.setAttribute('aria-expanded', String(!collapsed))
+      })
+      focus.addEventListener('click', () => {
+        if (card.classList.contains('focused')) return exitFocus()
+        exitFocus()
+        lastFocused = focus
+        card.classList.remove('collapsed')
+        collapse.textContent = '收起'
+        collapse.setAttribute('aria-expanded', 'true')
+        card.classList.add('focused')
+        card.setAttribute('role', 'dialog')
+        card.setAttribute('aria-modal', 'true')
+        card.setAttribute('aria-label', id === 'code-image' ? 'Image 专注编辑' : 'Sound 专注编辑')
+        document.body.classList.add('editor-focus')
+        focus.textContent = '退出专注 · Esc'
+        focus.setAttribute('aria-pressed', 'true')
+        const scrollTop = area.scrollTop
+        const scrollLeft = area.scrollLeft
+        area.focus({ preventScroll: true })
+        area.scrollTop = scrollTop
+        area.scrollLeft = scrollLeft
+      })
+      card.addEventListener('keydown', event => {
+        if (event.key !== 'Tab' || !card.classList.contains('focused')) return
+        const targets = [...card.querySelectorAll('button, textarea')].filter(node => !node.disabled && node.getClientRects().length)
+        const first = targets[0]
+        const last = targets.at(-1)
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+      })
+    }
+    const applyPreferences = () => {
+      $('view-code').classList.toggle('wrap-code', wrap.checked)
+      for (const id of ['code-image', 'code-sound']) {
+        $(id).wrap = wrap.checked ? 'soft' : 'off'
+        $(id).style.fontSize = `${size.value}px`
+        $(`${id}-lines`).style.fontSize = `${size.value}px`
+      }
+      try { localStorage.setItem('shadertoy-skin.codeView', JSON.stringify({ wrap: wrap.checked, size: Number(size.value) })) } catch { /* optional preference */ }
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem('shadertoy-skin.codeView') || 'null')
+      if (saved) { wrap.checked = saved.wrap === true; if ([12, 14, 16, 18, 20].includes(saved.size)) size.value = String(saved.size) }
+    } catch { /* default view */ }
+    wrap.addEventListener('change', applyPreferences)
+    size.addEventListener('change', applyPreferences)
+    applyPreferences()
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && document.body.classList.contains('editor-focus')) { event.preventDefault(); exitFocus() } })
+    $('code-note').setAttribute('role', 'status')
+  }
+
   // ---------------------------------------------------------------- messages
   if (!STANDALONE) {
     window.addEventListener('message', event => {
-      if (event.origin !== location.origin) return
+      if (event.origin !== location.origin || event.source !== parent) return
       const message = event.data
       if (!message || typeof message !== 'object') return
       if (message.type === 'audio') {
         audioState = typeof message.state === 'string' ? message.state : 'none'
         sync()
+        if (audioState === 'error') {
+          const text = `声音错误：${String(message.reason || '声音初始化失败').slice(0, 220)}`
+          setNote(text, true)
+          setCodeNote(text, true)
+        }
       } else if (message.type === 'error') {
         const text = `渲染错误（${message.stage}）：${String(message.log ?? '').slice(0, 220)}`
         setNote(text, true)
@@ -1198,18 +1713,26 @@
     try { manifest = await fetchJson(`${BASE}/presets/index.json`) } catch { manifest = [] }
     manifest = Array.isArray(manifest) ? manifest : []
     if (manifest.length === 0) manifest = [{ id: 'aurora', name: '极光（自写）' }, { id: 'flow', name: '流体色带（自写）' }]
-    if (!STANDALONE) {
+    {
       try {
-        const remote = await fetchJson(`${BASE}/state`)
+        const response = await fetch(`${BASE}/state`, { cache: 'no-store' })
+        if (!response.ok) throw new Error('state unavailable')
+        const remote = await response.json()
+        if (!remote || typeof remote !== 'object' || (remote.entries !== undefined && !Array.isArray(remote.entries))) throw new Error('invalid state')
+        if (remote.entries?.some(entry => !entry || typeof entry.id !== 'string' || typeof entry.code?.image !== 'string')) throw new Error('invalid entries')
         if (remote && typeof remote === 'object') {
           state.activeId = typeof remote.activeId === 'string' ? remote.activeId : null
           state.entries = Array.isArray(remote.entries) ? remote.entries : []
           if (remote.overrides && typeof remote.overrides === 'object') state.overrides = remote.overrides
           else if (remote.params && typeof remote.params === 'object' && state.activeId) state.overrides[state.activeId] = remote.params
         }
-      } catch { /* first run */ }
+        stateEtag = response.headers.get('etag')
+        stateLoaded = true
+      } catch { stateLoaded = false }
     }
     if (!state.activeId) state.activeId = manifest[0]?.id ?? 'aurora'
+    persistedActiveId = state.activeId
+    arrangeSettings()
     bindParams()
     bindLibrary()
     bindCode()
@@ -1217,7 +1740,8 @@
     renderLibrary()
     // Push the stored params once: the player/glass always mirror what this page
     // shows, and a page refresh is enough to re-sync after an edit elsewhere.
-    if (!STANDALONE) toParent({ type: 'params', params: effective() })
+    if (!STANDALONE && stateLoaded) toParent({ type: 'params', params: effective() })
+    if (!stateLoaded) setNote('配置读取失败，请重新加载。', true)
     if (MODE === 'main') {
       document.documentElement.classList.add('mode-main')
       document.body.classList.add('mode-main')

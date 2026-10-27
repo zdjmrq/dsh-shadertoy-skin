@@ -54,7 +54,7 @@
   // ---------- params (client half sends these; standalone defaults are for preview)
 
   const params = {
-    speed: 1,      // 0..2   time multiplier (visuals and audio timeline)
+    speed: 1,      // 0..2   image timeline multiplier (audio stays continuous)
     scale: 1,      // 0.5..2 render resolution multiplier
     blur: 0,       // 0..12  css blur px (only applied when > 0)
     fps: 30,       // 15..120 render-loop cap (battery vs smoothness)
@@ -92,9 +92,11 @@
     if ('tintMix' in next) { params.tintMix = clamp(next.tintMix, 0, 1, 0); lookExplicit = true }
     if ('loop' in next) params.loop = Boolean(next.loop)
     if ('loopSeconds' in next) params.loopSeconds = clamp(next.loopSeconds, 5, 120, 20)
-    const audioModeChanged = 'audioMode' in next || 'audioSeconds' in next
+    const previousAudioMode = params.audioMode
+    const previousAudioSeconds = params.audioSeconds
     if (next.audioMode === 'loop' || next.audioMode === 'once') params.audioMode = next.audioMode
     if ('audioSeconds' in next) params.audioSeconds = clamp(next.audioSeconds, 1, 600, 60)
+    const audioModeChanged = previousAudioMode !== params.audioMode || previousAudioSeconds !== params.audioSeconds
     if ('volume' in next) params.volume = clamp(next.volume, 0, 100, 60)
     if ('muted' in next) params.muted = Boolean(next.muted)
     if (typeof next.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(next.tint)) {
@@ -658,7 +660,9 @@
     if (period > 0 && start >= period) start = start % period
     if (params.audioMode === 'once' && start >= params.audioSeconds) return false
     if (!renderAudioChunk(start, chunkSeconds)) return false
-    audio.time = start + chunkSeconds * Math.max(params.speed, 0)
+    // The speed control belongs to the image timeline. Sound chunks must remain
+    // contiguous; scaling only chunk starts creates gaps, repeats and clicks.
+    audio.time = start + chunkSeconds
     try {
       const buffer = ctx.createBuffer(2, AUDIO_CHUNK, audio.sampleRate)
       buffer.copyToChannel(audio.left, 0)
@@ -680,6 +684,7 @@
 
   function startAudioScheduler() {
     if (!audio.program || !audio.ctx || audio.ctx.state !== 'running' || audio.running) return
+    if (params.paused || document.hidden || gl.isContextLost()) return
     // "music plays once": never resurrect the scheduler after the duration ran out
     if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
       setAudioState('ended', 'music played once')
@@ -722,8 +727,12 @@
     if (ctx.state !== 'running') { stopAudioScheduler('context'); return }
     // music-once: the timeline passed the configured duration → stop for good
     if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
-      stopAudioScheduler('once')
-      setAudioState('ended', 'music played once')
+      // The producer's clock includes the lookahead buffer. Drain it before
+      // stopping, otherwise the final scheduled notes are cut off early.
+      if (ctx.currentTime >= audio.scheduledUntil) {
+        stopAudioScheduler('once')
+        setAudioState('ended', 'music played once')
+      }
       return
     }
     if (audio.scheduledUntil < ctx.currentTime - 0.05) audio.scheduledUntil = ctx.currentTime + 0.15 // underrun: skip ahead
@@ -805,13 +814,24 @@
   if (STANDALONE) window.__audioInternals = audio
 
   const state = { time: 0, dt: 0, frame: 0, last: 0, drawMs: 0, fps: 0, fpsAcc: 0, fpsFrames: 0, ready: false, pendingSound: false }
+  canvas.addEventListener('webglcontextlost', event => {
+    event.preventDefault()
+    params.paused = true
+    stopAudioScheduler('context lost')
+    fail('context', '图形上下文丢失，恢复后将自动重新载入。')
+  })
+  canvas.addEventListener('webglcontextrestored', () => location.reload())
+  const zeroChannelResolution = new Float32Array(12)
+  const zeroChannelTime = new Float32Array(4)
   const mouse = { x: 0, y: 0, cx: 0, cy: 0, down: false, anchorX: 0, anchorY: 0 }
 
   function resize() {
+    if (gl.isContextLost()) return
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
     // 2× on a big window can ask for an 8k-wide drawing buffer; clamp each side to
     // the WebGL texture limit instead of letting the context fail.
-    const MAX_SIDE = 8192
+    const viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS)
+    const MAX_SIDE = Math.min(8192, gl.getParameter(gl.MAX_TEXTURE_SIZE), viewport[0], viewport[1])
     const w = Math.min(MAX_SIDE, Math.max(1, Math.round((canvas.clientWidth || window.innerWidth) * dpr * params.scale)))
     const h = Math.min(MAX_SIDE, Math.max(1, Math.round((canvas.clientHeight || window.innerHeight) * dpr * params.scale)))
     if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h }
@@ -858,10 +878,8 @@
     const date = nowDate()
     set4('iDate', date[0], date[1], date[2], date[3])
     set1('iSampleRate', audio.sampleRate || 44100)
-    const chRes = new Float32Array(12)
-    const chTime = new Float32Array(4)
-    if (locs['iChannelResolution[4]']) gl.uniform3fv(locs['iChannelResolution[4]'], chRes)
-    if (locs['iChannelTime[4]']) gl.uniform1fv(locs['iChannelTime[4]'], chTime)
+    if (locs['iChannelResolution[4]']) gl.uniform3fv(locs['iChannelResolution[4]'], zeroChannelResolution)
+    if (locs['iChannelTime[4]']) gl.uniform1fv(locs['iChannelTime[4]'], zeroChannelTime)
     set1('uDim', params.dim)
     set3('uTint', TINT[0], TINT[1], TINT[2])
     set1('uTintMix', params.tintMix)
@@ -909,13 +927,12 @@
   // ---------- shader loading
 
   function setShader(source, presetName) {
-    if (audio.program) stopAudio()
     const built = buildProgram(source)
     if (!built.program) {
-      program = null
       fail('compile', built.error)
       return false
     }
+    if (audio.program) stopAudio()
     if (program) gl.deleteProgram(program)
     program = built.program
     es3 = built.es3
@@ -995,11 +1012,12 @@
 
   if (!STANDALONE) {
     window.addEventListener('message', event => {
-      if (event.origin !== location.origin) return
+      if (event.origin !== location.origin || event.source !== parent) return
       const message = event.data
       if (!message || typeof message !== 'object') return
       switch (message.type) {
         case 'init': {
+          if (message.params) applyParams(message.params)
           if (message.preset) {
             const preset = message.preset
             const image = preset.code?.image ?? preset.image
@@ -1007,14 +1025,11 @@
               if (setShader(image, preset.name || preset.id)) {
                 const sound = preset.code?.sound
                 setSound(typeof sound === 'string' && sound.trim() ? sound : null)
-              } else {
-                setSound(null)
               }
             } else {
               fail('init', 'init 消息里没有 image 代码')
             }
           }
-          if (message.params) applyParams(message.params)
           break
         }
         case 'params': applyParams(message.params); break
