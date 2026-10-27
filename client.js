@@ -154,6 +154,7 @@ window.__ModuleLoader__.load({
           let glassDispose = null
           let background = null
           let booted = false
+          let disposed = false
           let sidebarRegistered = false
           // stays false until the safe-mode file check completed, so the self-heal
           // loop can never bypass `$DSH_HOME/shader-skin.safe`
@@ -190,13 +191,17 @@ window.__ModuleLoader__.load({
           // that is exactly what froze the app when the sidebar entry was clicked, and
           // dsh-better-sidebar documents the same pitfall (`#root [data-dsh-center-col]`
           // single-node marker instead of `:has()`).
-          const DARK_VEIL = '#090c10'
+          const DARK_VEIL = '#151517'
           const LIGHT_VEIL = '#ffffff'
           const STYLE_ID = 'shadertoy-skin-glass-style'
-          const GLASS_CSS = 'html, body { background: transparent !important; }'
+          const GLASS_CSS = `html, body { background: transparent !important; }
+            [role="dialog"], [role="alertdialog"], [data-shortcut-modal="settings"] {
+              background-color: var(--shader-skin-dialog-surface) !important;
+            }`
           const CLEAR_TOKENS = {
-            '--dsw-alias-bg-base': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
-            '--dsw-specific-sidebar-fill': { light: 'rgba(255, 255, 255, 0)', dark: 'rgba(9, 12, 16, 0)' },
+            '--dsw-alias-bg-base': { light: 'transparent', dark: 'transparent' },
+            '--dsw-specific-sidebar-fill': { light: 'transparent', dark: 'transparent' },
+            '--shader-skin-dialog-surface': { light: 'rgba(255, 255, 255, .98)', dark: 'rgba(35, 35, 36, .98)' },
           }
           // The boxes that follow the `panels` level: cards, nested panels, code
           // blocks, the composer/editor surface (`bg-module-platform`) and the
@@ -205,10 +210,11 @@ window.__ModuleLoader__.load({
           const LAYER_TOKENS = [
             '--dsw-alias-bg-layer-1', '--dsw-alias-bg-layer-2',
             '--dsw-alias-bg-layer-3', '--dsw-alias-bg-layer-4',
-            '--dsw-alias-bg-module-platform', '--dsw-specific-input-major',
+            '--dsw-alias-bg-module-platform',
           ]
           const RAISED_TOKENS = [
-            '--dsw-alias-bg-overlay', '--dsw-specific-menu',
+            '--dsw-alias-bg-overlay', '--dsw-specific-menu', '--dsw-menu-surface-fill',
+            '--dsw-alias-menu-group-header-fill', '--dsw-specific-selector',
           ]
           /**
            * Content fills that never go through the `bg-layer-*` tokens: the
@@ -220,18 +226,14 @@ window.__ModuleLoader__.load({
            * [token, weight]: the weight scales the current `panels` alpha.
            */
           const CONTENT_TOKENS = [
-            ['--dsw-static-neutral-50', 0.62],
-            ['--dsw-static-neutral-100', 0.62],
-            ['--dsw-static-neutral-800', 0.62],
-            ['--dsw-static-neutral-850', 0.62],
-            ['--dsw-alias-markdown-code-block', 0.9],
+            ['--dsw-alias-markdown-code-block', 1],
             ['--dsw-alias-markdown-code-block-banner', 1],
             ['--dsw-alias-markdown-inline-code', 0.7],
             ['--dsw-specific-bubble', 1],
           ]
 
           /** `panels` = opaque (leave theme fills) | half | clear. */
-          const PANEL_ALPHA = { half: 0.62, clear: 0.22 }
+          const PANEL_ALPHA = { half: 0.72, clear: 0.38 }
 
           function ensureGlassStyle() {
             if (document.getElementById(STYLE_ID)) return
@@ -247,13 +249,22 @@ window.__ModuleLoader__.load({
 
           function glassTokens() {
             const tokens = { ...CLEAR_TOKENS }
-            const alpha = PANEL_ALPHA[effective().panels] ?? null
-            if (alpha === null) return tokens
-            const raised = Math.min(0.96, alpha + 0.32)
-            for (const token of LAYER_TOKENS) tokens[token] = rgba('9, 12, 16', alpha)
-            for (const token of RAISED_TOKENS) tokens[token] = rgba('9, 12, 16', raised)
+            const selected = PANEL_ALPHA[effective().panels] ?? null
+            if (selected === null) return tokens
+            // Keep primary text readable even with the veil at 20% and a solid
+            // white/black shader. Low glass levels need a stronger card surface.
+            const glass = clamp(effective().glass, 20, 95, 60) / 100
+            const darkestLight = 255 * glass * 0.92
+            const brightestDark = 255 * (1 - glass) + 21 * glass
+            const darkFloor = Math.max(0, (brightestDark - 110) / Math.max(1, brightestDark - 35))
+            const lightFloor = Math.max(0, (140 - darkestLight) / Math.max(1, 255 - darkestLight))
+            const alpha = Math.min(0.96, Math.max(selected, darkFloor, lightFloor))
+            for (const token of LAYER_TOKENS) tokens[token] = rgba('35, 35, 36', alpha)
+            for (const token of RAISED_TOKENS) tokens[token] = rgba('44, 44, 46', 0.97)
+            tokens['--dsw-specific-input-major'] = rgba('44, 44, 46', Math.max(0.85, alpha))
             for (const [token, weight] of CONTENT_TOKENS) {
-              tokens[token] = rgba('9, 12, 16', Math.min(0.96, alpha * weight))
+              const floor = token.includes('code-block') ? 0.84 : 0.38
+              tokens[token] = rgba('35, 35, 36', Math.max(floor, alpha * weight))
             }
             return tokens
           }
@@ -273,6 +284,7 @@ window.__ModuleLoader__.load({
            */
           function applyGlass(force = false) {
             if (!booted) return false
+            if (effective().enabled === false) { clearGlass(); return false }
             const theme = service('theme')
             if (theme === undefined) return false
             const tokens = glassTokens()
@@ -416,7 +428,11 @@ window.__ModuleLoader__.load({
             host.insertBefore(frame, host.firstChild)
             playerReady = false
             playerInitAttempts = 0
-            frame.addEventListener('load', () => { void sendInit(frame) })
+            frame.addEventListener('load', () => {
+              playerInitAttempts = 0
+              playerReady = false
+              void sendInit(frame)
+            })
             return frame
           }
 
@@ -475,7 +491,7 @@ window.__ModuleLoader__.load({
             if (enabled && !document.getElementById(BG_ID)) {
               background = createBackground()
               applyGlass()
-            } else if (!enabled && document.getElementById(BG_ID)) {
+            } else if (!enabled) {
               removeBackground()
               clearGlass()
             }
@@ -611,7 +627,10 @@ window.__ModuleLoader__.load({
             const dark = isDark()
             if (dark === lastDark) return
             lastDark = dark
-            if (background) postTo(background, { type: 'theme', dark })
+            if (background) {
+              postTo(background, { type: 'theme', dark })
+              postTo(background, { type: 'params', params: playerLook() })
+            }
             broadcastPanel({ type: 'theme', dark })
           })
           if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
@@ -702,8 +721,10 @@ window.__ModuleLoader__.load({
             }
             store.defaults = { ...FALLBACK_DEFAULTS }
             const defaults = await fetchJson(`${BASE}/defaults.json`).catch(() => null)
+            if (disposed) return
             if (defaults?.params && typeof defaults.params === 'object') store.defaults = { ...FALLBACK_DEFAULTS, ...defaults.params }
             await reloadState()
+            if (disposed) return
             if (!store.activeId) store.activeId = FALLBACK_PRESET
             booted = true
             syncEnabled()
@@ -726,6 +747,7 @@ window.__ModuleLoader__.load({
           })()
 
           return () => {
+            disposed = true
             booted = false
             if (scheduled !== 0) cancelAnimationFrame(scheduled)
             for (const id of timers) clearTimeout(id)

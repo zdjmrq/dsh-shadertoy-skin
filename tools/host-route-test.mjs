@@ -159,6 +159,24 @@ try {
   const afterParallel = JSON.parse(await readFile(join(home, 'shader-skin.json'), 'utf8'))
   check('concurrent saves leave a complete valid document', /^concurrent-\d+$/.test(afterParallel.activeId) && afterParallel.version === 2)
 
+  const currentResponse = await get('/shader-skin/state')
+  const etag = currentResponse.headers.get('etag')
+  check('state GET supplies a revision tag', Boolean(etag))
+  const guarded = body => fetch(`${origin}/shader-skin/state`, {
+    method: 'PUT', headers: { 'content-type': 'application/json', 'if-match': etag }, body: JSON.stringify(body),
+  })
+  const fresh = await guarded({ version: 2, activeId: 'first-window', entries: [] })
+  check('a matching revision can save', fresh.status === 200 && fresh.headers.get('etag') !== etag)
+  const stale = await guarded({ version: 2, activeId: 'stale-window', entries: [] })
+  check('a stale window cannot overwrite newer state', stale.status === 409 && (await json('/shader-skin/state')).activeId === 'first-window')
+  await putState({ version: 2, activeId: 'aurora', entries: [], overrides: { aurora: { brightness: 999, glass: -100, speed: -10, fps: 99, scale: 0.333 } } })
+  const bounded = (await json('/shader-skin/state')).overrides.aurora
+  check('numeric settings stay within declared limits', bounded.brightness === 180 && bounded.glass === 20 && bounded.speed === 0 && bounded.fps === undefined && bounded.scale === undefined)
+  await writeFile(join(home, 'shader-skin.json'), '{broken', 'utf8')
+  check('corrupt state is reported instead of served as a valid document', (await get('/shader-skin/state')).status === 500)
+  check('corrupt state is left untouched for recovery', await readFile(join(home, 'shader-skin.json'), 'utf8') === '{broken')
+  await putState({ version: 2, entries: [] })
+
   // --- state validation
   const badJson = await fetch(`${origin}/shader-skin/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: '{oops' })
   check('malformed state is rejected', badJson.status === 400)

@@ -15,7 +15,7 @@
  * @module dsh-shadertoy-skin
  */
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
@@ -28,6 +28,8 @@ const ROUTE = '/shader-skin'
 const DIST = resolve(fileURLToPath(new URL('./native-dist/', import.meta.url)))
 const MAX_STATE_BYTES = 2 * 1024 * 1024
 let stateWrites = Promise.resolve()
+const stateTag = body => `"${createHash('sha256').update(body).digest('hex')}"`
+const DEFAULT_LIMITS = JSON.parse(readFileSync(new URL('./native-dist/defaults.json', import.meta.url), 'utf8')).limits
 
 const MIME = Object.freeze({
   '.html': 'text/html; charset=utf-8',
@@ -83,6 +85,8 @@ function parseShaderDocument(text) {
   if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
   if (image === '' && typeof shader?.image === 'string') image = shader.image
   if (image === '' && typeof raw?.image === 'string') image = raw.image
+  if (sound === '' && typeof shader?.code?.sound === 'string') sound = shader.code.sound
+  if (sound === '' && typeof shader?.sound === 'string') sound = shader.sound
   if (image === '') return undefined
   const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
   return { image: common + image, sound: sound ? common + sound : undefined, name: name || undefined }
@@ -120,7 +124,7 @@ async function listLocalPresets() {
         continue
       }
       // a .glsl/.txt file only counts when it actually looks like a shader
-      if (!/\b(?:mainImage|mainSound|void\s+main)\s*\(/.test(text)) continue
+      if (!/\b(?:mainImage|void\s+main)\s*\(/.test(text)) continue
       out.push({
         file: name,
         name: name.replace(/\.[^.]+$/, ''),
@@ -238,7 +242,11 @@ function sanitizeParams(raw) {
       if (AUDIO_MODES.has(value)) out[key] = value
       continue
     }
-    if (typeof value === 'number' && Number.isFinite(value)) out[key] = value
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const limit = DEFAULT_LIMITS[key]
+      if (limit?.values) { if (limit.values.includes(value)) out[key] = value }
+      else out[key] = limit ? Math.min(limit.max, Math.max(limit.min, value)) : value
+    }
   }
   return out
 }
@@ -262,9 +270,11 @@ function sanitizeEntry(raw, index) {
 
 function sanitizeState(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('state must be an object')
+  if (raw.entries !== undefined && !Array.isArray(raw.entries)) throw new Error('entries must be an array')
   const entries = (Array.isArray(raw.entries) ? raw.entries : []).map(sanitizeEntry)
+  if (new Set(entries.map(entry => entry.id)).size !== entries.length) throw new Error('duplicate entry ids')
   if (entries.length > 200) throw new Error('too many entries (max 200)')
-  const codeBytes = entries.reduce((total, entry) => total + entry.code.image.length + (entry.code.sound?.length ?? 0), 0)
+  const codeBytes = entries.reduce((total, entry) => total + Buffer.byteLength(entry.code.image) + Buffer.byteLength(entry.code.sound ?? ''), 0)
   if (codeBytes > 1_500_000) throw new Error('shader code too large (max 1.5 MB in total)')
 
   const overrides = Object.create(null)
@@ -292,13 +302,19 @@ async function handleState(req, res) {
       body = await readFile(statePath(), 'utf8')
     } catch (error) {
       if (error && error.code === 'ENOENT') {
-        finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify(EMPTY_STATE))
+        const empty = JSON.stringify(EMPTY_STATE)
+        finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag: stateTag(empty) }, req.method === 'HEAD' ? undefined : empty)
         return
       }
       fail(res, 500, 'state read failed')
       return
     }
-    finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, req.method === 'HEAD' ? undefined : body)
+    try {
+      const parsed = JSON.parse(body)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad shape')
+      sanitizeState(parsed)
+    } catch { return fail(res, 500, 'state is corrupted; original file preserved') }
+    finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag: stateTag(body) }, req.method === 'HEAD' ? undefined : body)
     return
   }
   if (req.method !== 'PUT') {
@@ -319,12 +335,20 @@ async function handleState(req, res) {
   }
   const target = statePath()
   const temp = `${target}.${randomUUID()}.tmp`
+  const body = `${JSON.stringify(state, null, 2)}\n`
   // A shared .tmp file lets concurrent PUTs rename or overwrite each other's
   // data. Queue complete atomic replacements, and recover the queue on errors.
   const write = stateWrites.then(async () => {
     try {
+      if (req.headers['if-match']) {
+        const current = await readFile(target, 'utf8').catch(error => {
+          if (error.code === 'ENOENT') return JSON.stringify(EMPTY_STATE)
+          throw error
+        })
+        if (req.headers['if-match'] !== stateTag(current)) throw Object.assign(new Error('state conflict'), { code: 'E_CONFLICT' })
+      }
       await mkdir(join(dirname(target), 'shader-skin'), { recursive: true })
-      await writeFile(temp, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+      await writeFile(temp, body, 'utf8')
       await rename(temp, target)
     } finally {
       await rm(temp, { force: true }).catch(() => {})
@@ -333,11 +357,12 @@ async function handleState(req, res) {
   stateWrites = write.catch(() => {})
   try {
     await write
-  } catch {
+  } catch (error) {
+    if (error.code === 'E_CONFLICT') return fail(res, 409, 'state changed in another window; reload before saving')
     fail(res, 500, 'state write failed')
     return
   }
-  finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify({ ok: true }))
+  finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag: stateTag(body) }, JSON.stringify({ ok: true }))
 }
 
 export async function handler(req, res) {

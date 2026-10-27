@@ -512,6 +512,10 @@
   let saveRevision = 0
   let activeRevision = 0
   let persistedActiveId = null
+  let stateLoaded = false
+  let stateEtag = null
+  let stateConflict = false
+  let pendingWrites = 0
 
   const clamp = (v, lo, hi, fb) => {
     const n = Number(v)
@@ -682,15 +686,26 @@
   }
 
   function saveState() {
+    if (!stateLoaded || stateConflict) {
+      setNote(stateConflict ? '配置已在其他页面更新，请重新加载。' : '配置读取失败，请重新加载。', true)
+      return Promise.resolve(false)
+    }
     const activeId = state.activeId
     const body = JSON.stringify({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides })
     const revision = ++saveRevision
-    const result = saveQueue.then(() => fetch(`${BASE}/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body }))
+    pendingWrites++
+    const result = saveQueue.then(() => {
+      const headers = { 'content-type': 'application/json' }
+      if (stateEtag) headers['if-match'] = stateEtag
+      return fetch(`${BASE}/state`, { method: 'PUT', headers, body })
+    })
       .then(response => {
+        if (response.status === 409) stateConflict = true
+        if (response.ok) stateEtag = response.headers.get('etag')
         if (response.ok) persistedActiveId = activeId
-        if (revision === saveRevision) setNote(response.ok ? '改动即时生效并已保存。' : `保存失败（HTTP ${response.status}），请重试。`, !response.ok)
+        if (revision === saveRevision) setNote(response.ok ? '已保存' : stateConflict ? '配置已在其他页面更新，请重新加载。' : `保存失败（HTTP ${response.status}），请重试。`, !response.ok)
         return response.ok
-      })
+      }).finally(() => { pendingWrites-- })
       .catch(() => {
         if (revision === saveRevision) setNote('保存失败：Host 路由不可用，请重试。', true)
         return false
@@ -701,12 +716,13 @@
 
   function scheduleSave() {
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { void saveState() }, 320)
+    saveTimer = setTimeout(() => { saveTimer = 0; void saveState() }, 320)
   }
 
   /** Persist right now — needed before telling the host to load a new preset. */
   async function saveNow() {
     clearTimeout(saveTimer)
+    saveTimer = 0
     return saveState()
   }
 
@@ -714,9 +730,15 @@
     const note = $('note')
     note.textContent = text
     note.classList.toggle('error', isError)
+    if (isError) {
+      const retry = el('button', { type: 'button', className: 'btn tiny', textContent: !stateLoaded || stateConflict ? '重新加载' : '重试' })
+      retry.addEventListener('click', () => { if (!stateLoaded || stateConflict) location.reload(); else void saveNow() })
+      note.append(' ', retry)
+    }
   }
 
   function publishParams() {
+    if (!stateLoaded || stateConflict) { void saveState(); return }
     toParent({ type: 'params', params: effective() })
     scheduleSave()
   }
@@ -1000,6 +1022,11 @@
     $('tab-library').addEventListener('click', () => setTab('library'))
     $('tab-code').addEventListener('click', () => setTab('code'))
     $('fab').addEventListener('click', () => setOpen(true))
+    for (const range of document.querySelectorAll('input[type=range]')) range.addEventListener('change', () => { if (saveTimer) void saveNow() })
+    document.addEventListener('visibilitychange', () => { if (document.hidden && saveTimer) void saveNow() })
+    window.addEventListener('beforeunload', event => {
+      if (saveTimer || pendingWrites) { event.preventDefault(); event.returnValue = '' }
+    })
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && MODE === 'popup' && open && !document.querySelector('.dd.open')) setOpen(false)
     })
@@ -1029,6 +1056,8 @@
     if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
     if (image === '' && typeof shader?.image === 'string') image = shader.image
     if (image === '' && typeof raw?.image === 'string') image = raw.image
+    if (sound === '' && typeof shader?.code?.sound === 'string') sound = shader.code.sound
+    if (sound === '' && typeof shader?.sound === 'string') sound = shader.sound
     if (image === '') return undefined
     const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
     return { image: common + image, sound: sound ? common + sound : undefined, name: name || undefined }
@@ -1038,11 +1067,17 @@
   const looksLikeSound = code => /\bmainSound\s*\(/.test(code)
 
   function addEntry({ name, image, sound, source, origin }) {
+    if (!stateLoaded || stateConflict) throw new Error('请先重新加载配置')
     if (!looksLikeImage(image)) throw new Error('Image 代码里找不到 mainImage() 或 main()')
+    if (sound?.trim() && !looksLikeSound(sound)) throw new Error('Sound 代码里找不到 mainSound()')
     const id = `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     const entry = { id, name: (name || '我的背景').slice(0, 120), source: source || 'paste', code: { image } }
     if (origin) entry.origin = origin
     if (sound && looksLikeSound(sound)) entry.code.sound = sound
+    if (state.entries.length >= 200) throw new Error('背景库最多保存 200 个作品')
+    const bytes = new TextEncoder()
+    const total = [...state.entries, entry].reduce((sum, item) => sum + bytes.encode(item.code.image).length + bytes.encode(item.code.sound || '').length, 0)
+    if (total > 1_500_000) throw new Error('背景库代码总量超过 1.5 MB')
     state.entries.push(entry)
     scheduleSave()
     renderLibrary()
@@ -1143,7 +1178,7 @@
         add.textContent = '导入中…'
         try {
           const text = await fetchText(`${BASE}/local/${encodeURIComponent(item.file)}`)
-          const parsed = item.kind === 'shadertoy' ? parseShaderDocument(text) : { image: text }
+          const parsed = item.kind === 'shadertoy' ? parseShaderDocument(text) : { image: text, sound: looksLikeSound(text) ? text : undefined }
           if (!parsed) throw new Error('无法解析这个文件')
           addEntry({ name: parsed.name || item.name, image: parsed.image, sound: parsed.sound, source: 'local', origin: item.file })
           setNote(`已导入「${parsed.name || item.name}」，可在列表里使用。`)
@@ -1187,7 +1222,7 @@
       for (const file of files) {
         try {
           const text = await file.text()
-          const parsed = /\.json$/i.test(file.name) ? parseShaderDocument(text) : { image: text }
+          const parsed = /\.json$/i.test(file.name) ? parseShaderDocument(text) : { image: text, sound: looksLikeSound(text) ? text : undefined }
           if (!parsed) throw new Error('不是可识别的 ShaderToy JSON')
           addEntry({
             name: parsed.name || file.name.replace(/\.[^.]+$/, ''),
@@ -1210,6 +1245,15 @@
   let codeSaving = false
   const codeDrafts = new Map()
   const CODE_HEIGHTS_KEY = 'shadertoy-skin.codeHeights'
+  const CODE_DRAFTS_KEY = 'shadertoy-skin.codeDrafts'
+  function rememberDrafts() {
+    if (codeLoadedId) {
+      const draft = { image: $('code-image').value, sound: $('code-sound').value }
+      if (draft.image !== codeBaseline.image || draft.sound !== codeBaseline.sound) codeDrafts.set(codeLoadedId, draft)
+      else codeDrafts.delete(codeLoadedId)
+    }
+    try { sessionStorage.setItem(CODE_DRAFTS_KEY, JSON.stringify([...codeDrafts])) } catch { /* storage full: current editor still holds the draft */ }
+  }
 
   /** Restore the user's own code-box heights (drag the bottom-right corner to change). */
   function restoreCodeHeights() {
@@ -1234,6 +1278,7 @@
       codeDrafts.set(codeLoadedId, { image: $('code-image').value, sound: $('code-sound').value })
     }
     if (discard) codeDrafts.delete(state.activeId)
+    try { sessionStorage.setItem(CODE_DRAFTS_KEY, JSON.stringify([...codeDrafts])) } catch { /* optional recovery */ }
     const token = ++codeLoadToken
     const id = state.activeId
     const entry = entryById(state.activeId)
@@ -1248,9 +1293,17 @@
       sound = entry.code?.sound ?? ''
     } else if (builtin) {
       name = builtin.name || builtin.id
-      try { image = await fetchText(`${BASE}/presets/${builtin.file}`) } catch { image = '' }
+      try { image = await fetchText(`${BASE}/presets/${builtin.file}`) } catch {
+        if (token === codeLoadToken) setCodeNote('代码读取失败，请重新打开代码页重试。', true)
+        return
+      }
       const soundFile = builtin.soundFile ?? `${builtin.id}-sound.glsl`
-      try { sound = await fetchText(`${BASE}/presets/${soundFile}`) } catch { sound = '' }
+      if (builtin.hasSound || builtin.soundFile) {
+        try { sound = await fetchText(`${BASE}/presets/${soundFile}`) } catch {
+          if (token === codeLoadToken) setCodeNote('声音代码读取失败，请重试。', true)
+          return
+        }
+      }
     }
     if (token !== codeLoadToken || id !== state.activeId) return
     codeLoadedId = id
@@ -1321,12 +1374,14 @@
           setCodeNote('保存失败，代码草稿已保留，请重试。', true)
           return
         }
+        if (state.activeId !== entry.id || codeLoadedId !== entry.id) return
         toParent({ type: 'preset', id: entry.id })
         toParent({ type: 'params', params: effective() })
         updateCodeInfo()
         codeBaseline = { image, sound }
         updateCodeInfo()
         codeDrafts.delete(entry.id)
+        rememberDrafts()
         setCodeNote('已保存，已请求重新编译运行。')
         return
       }
@@ -1339,6 +1394,7 @@
       if (builtin.license) copy.license = builtin.license
       if (state.overrides[builtin.id]) state.overrides[copy.id] = { ...state.overrides[builtin.id] }
       if (!await setActive(copy.id)) {
+        if (state.activeId !== builtin.id && state.activeId !== copy.id) return
         state.entries = state.entries.filter(item => item.id !== copy.id)
         delete state.overrides[copy.id]
         renderLibrary()
@@ -1346,9 +1402,11 @@
         return
       }
       codeDrafts.delete(builtin.id)
+      if (state.activeId !== copy.id) return
       codeBaseline = { image, sound }
       codeLoadedId = copy.id
       await loadCode(true)
+      rememberDrafts()
       setCodeNote('内置作品只读，已另存为「我的副本」并运行。')
     } catch (error) {
       setCodeNote(`保存失败：${error.message}`, true)
@@ -1441,8 +1499,12 @@
     $('code-revert').addEventListener('click', () => {
       void loadCode(true).then(() => setCodeNote('已重新读取当前运行的作品。'))
     })
-    $('code-image').addEventListener('input', updateCodeInfo)
-    $('code-sound').addEventListener('input', updateCodeInfo)
+    try {
+      for (const [id, draft] of JSON.parse(sessionStorage.getItem(CODE_DRAFTS_KEY) || '[]')) {
+        if (typeof draft?.image === 'string' && typeof draft?.sound === 'string') codeDrafts.set(id, draft)
+      }
+    } catch { /* invalid recovery data */ }
+    for (const id of ['code-image', 'code-sound']) $(id).addEventListener('input', () => { updateCodeInfo(); rememberDrafts() })
     restoreCodeHeights()
     bindCodeGrips()
     // Ctrl/Cmd+S inside the editor saves & runs instead of the browser dialog
@@ -1567,6 +1629,11 @@
       if (message.type === 'audio') {
         audioState = typeof message.state === 'string' ? message.state : 'none'
         sync()
+        if (audioState === 'error') {
+          const text = `声音错误：${String(message.reason || '声音初始化失败').slice(0, 220)}`
+          setNote(text, true)
+          setCodeNote(text, true)
+        }
       } else if (message.type === 'error') {
         const text = `渲染错误（${message.stage}）：${String(message.log ?? '').slice(0, 220)}`
         setNote(text, true)
@@ -1598,14 +1665,20 @@
     if (manifest.length === 0) manifest = [{ id: 'aurora', name: '极光（自写）' }, { id: 'flow', name: '流体色带（自写）' }]
     {
       try {
-        const remote = await fetchJson(`${BASE}/state`)
+        const response = await fetch(`${BASE}/state`, { cache: 'no-store' })
+        if (!response.ok) throw new Error('state unavailable')
+        const remote = await response.json()
+        if (!remote || typeof remote !== 'object' || (remote.entries !== undefined && !Array.isArray(remote.entries))) throw new Error('invalid state')
+        if (remote.entries?.some(entry => !entry || typeof entry.id !== 'string' || typeof entry.code?.image !== 'string')) throw new Error('invalid entries')
         if (remote && typeof remote === 'object') {
           state.activeId = typeof remote.activeId === 'string' ? remote.activeId : null
           state.entries = Array.isArray(remote.entries) ? remote.entries : []
           if (remote.overrides && typeof remote.overrides === 'object') state.overrides = remote.overrides
           else if (remote.params && typeof remote.params === 'object' && state.activeId) state.overrides[state.activeId] = remote.params
         }
-      } catch { /* first run */ }
+        stateEtag = response.headers.get('etag')
+        stateLoaded = true
+      } catch { stateLoaded = false }
     }
     if (!state.activeId) state.activeId = manifest[0]?.id ?? 'aurora'
     persistedActiveId = state.activeId
@@ -1617,7 +1690,8 @@
     renderLibrary()
     // Push the stored params once: the player/glass always mirror what this page
     // shows, and a page refresh is enough to re-sync after an edit elsewhere.
-    if (!STANDALONE) toParent({ type: 'params', params: effective() })
+    if (!STANDALONE && stateLoaded) toParent({ type: 'params', params: effective() })
+    if (!stateLoaded) setNote('配置读取失败，请重新加载。', true)
     if (MODE === 'main') {
       document.documentElement.classList.add('mode-main')
       document.body.classList.add('mode-main')
