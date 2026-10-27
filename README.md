@@ -235,8 +235,6 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 
 > 注意：ShaderToy 的 WebGL2 着色器语言是 ESSL 3.00，**不支持 `precise` 限定符**（那是 GLSL 4.0 / ESSL 3.20 的东西，ShaderToy 的 Vulkan 后端才有）。需要「共享晶格点必须同哈希」这类修复时，用**整数哈希**（`uint` + 位混合）代替 `precise`——效果是确定的，也不会被驱动 FMA 收缩影响。
 
-![代码页](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/page-code.png)
-
 ## 预设与许可证（重要）
 
 随包预设分两类（完整清单见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)）：
