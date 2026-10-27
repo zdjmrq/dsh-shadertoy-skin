@@ -21,6 +21,9 @@ import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const ROOT = new URL('..', import.meta.url)
 const PORT = Number(process.env.SMOKE_PORT ?? 8731)
@@ -57,9 +60,11 @@ async function main() {
     process.exit(2)
   }
 
+  const testHome = await mkdtemp(join(tmpdir(), 'shader-renderer-'))
   const server = spawn(process.execPath, [fileURLToPath(new URL('./dev-server.mjs', import.meta.url)), String(PORT)], {
     cwd: fileURLToPath(ROOT),
     stdio: 'ignore',
+    env: { ...process.env, DSH_DEV_STATE: '1', DSH_HOME: testHome },
   })
 
   let browser
@@ -257,16 +262,9 @@ async function main() {
     check('loop toggle turns on', loopState.loopChecked === true && loopState.loopRowHidden === false)
     await page.click('#loop')
 
-    // music "play once": picking it reveals the duration slider
-    // music "play once": picking it reveals the duration slider. The row is dimmed
-    // while the preset has no sound (aurora), so lift that veil for the click.
-    await page.evaluate(() => document.getElementById('audio-mode-row').classList.remove('dim'))
-    await page.click('#audio-mode-dd .dd-trigger')
-    await page.waitForSelector('#audio-mode-dd .dd.open .dd-menu', { timeout: 5_000 })
-    await page.locator('#audio-mode-dd .dd-item', { hasText: '只播一次' }).click()
-    const onceState = await panelState()
-    check('music can play once', onceState.audioMode === '只播一次', String(onceState.audioMode))
-    check('duration row stays hidden without a sound pass', onceState.audioSecondsRowHidden === true)
+    // Sound controls stay disabled when the selected work has no sound pass.
+    check('silent works disable the music mode picker', await page.locator('#audio-mode-dd .dd-trigger').isDisabled())
+    check('duration row stays hidden without a sound pass', (await panelState()).audioSecondsRowHidden === true)
 
     // custom dropdown: no native (light) popup — a themed list we control
     await page.click('#fps-dd .dd-trigger')
@@ -323,6 +321,7 @@ async function main() {
     // --- code boxes: the visible grip drags the height, and it is remembered
     const codeHeight = () => page.evaluate(() => Math.round(document.getElementById('code-image').getBoundingClientRect().height))
     const beforeDrag = await codeHeight()
+    await page.locator('.code-grip').first().scrollIntoViewIfNeeded()
     const gripBox = await page.locator('.code-grip').first().boundingBox()
     await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2)
     await page.mouse.down()
@@ -399,6 +398,7 @@ async function main() {
   } finally {
     await browser?.close().catch(() => {})
     server.kill()
+    await rm(testHome, { recursive: true, force: true })
   }
 
   if (failures.length > 0) {

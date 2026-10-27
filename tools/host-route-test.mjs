@@ -10,7 +10,7 @@
  * Usage: node tools/host-route-test.mjs
  */
 import { createServer } from 'node:http'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { handler } from '../index.js'
@@ -42,6 +42,14 @@ await writeFile(join(home, 'shader-skin', 'presets', 'exported.json'), JSON.stri
 }), 'utf8')
 await writeFile(join(home, 'shader-skin', 'presets', 'broken.json'), '{"nope":true}', 'utf8')
 await writeFile(join(home, 'shader-skin', 'presets', 'notes.txt'), 'not a shader', 'utf8')
+await writeFile(join(home, 'shader-skin', 'presets', 'common-first.json'), JSON.stringify({ renderpass: [
+  { type: 'common', code: 'float helper() { return 0.5; }' },
+  { type: 'sound', code: 'vec2 mainSound(float t) { return vec2(helper()); }' },
+  { type: 'image', code: seascape },
+] }))
+await writeFile(join(home, 'shader-skin', 'presets', 'buffer.json'), JSON.stringify({ renderpass: [
+  { type: 'buffer', code: seascape }, { type: 'image', code: seascape },
+] }))
 
 const server = createServer((req, res) => {
   handler(req, res).catch(error => {
@@ -104,6 +112,8 @@ try {
   check('local listing parses a ShaderToy export', exported?.kind === 'shadertoy' && exported?.name === 'Exported Toy' && exported?.hasSound === true)
   check('local listing skips unusable json', !local.some(item => item.file === 'broken.json'))
   check('local listing skips unrelated files', !local.some(item => item.file === 'notes.txt'))
+  check('Common before Image is recognized as a usable export', local.some(item => item.file === 'common-first.json' && item.hasSound))
+  check('unsupported Buffer exports are not offered as usable presets', !local.some(item => item.file === 'buffer.json'))
   const localFile = await get('/shader-skin/local/my-shader.glsl')
   check('local preset file is served', localFile.status === 200 && (await localFile.text()).includes('mainImage'))
 
@@ -142,6 +152,31 @@ try {
   const migrated = await json('/shader-skin/state')
   check('v1 params migrate into an override', migrated.version === 2 && migrated.overrides?.aurora?.glass === 50)
 
+  const parallel = await Promise.all(Array.from({ length: 24 }, (_, i) => putState({
+    version: 2, activeId: `concurrent-${i}`, entries: [], overrides: {},
+  })))
+  check('concurrent state replacements all succeed', parallel.every(response => response.status === 200), parallel.map(response => response.status).join(','))
+  const afterParallel = JSON.parse(await readFile(join(home, 'shader-skin.json'), 'utf8'))
+  check('concurrent saves leave a complete valid document', /^concurrent-\d+$/.test(afterParallel.activeId) && afterParallel.version === 2)
+
+  const currentResponse = await get('/shader-skin/state')
+  const etag = currentResponse.headers.get('etag')
+  check('state GET supplies a revision tag', Boolean(etag))
+  const guarded = body => fetch(`${origin}/shader-skin/state`, {
+    method: 'PUT', headers: { 'content-type': 'application/json', 'if-match': etag }, body: JSON.stringify(body),
+  })
+  const fresh = await guarded({ version: 2, activeId: 'first-window', entries: [] })
+  check('a matching revision can save', fresh.status === 200 && fresh.headers.get('etag') !== etag)
+  const stale = await guarded({ version: 2, activeId: 'stale-window', entries: [] })
+  check('a stale window cannot overwrite newer state', stale.status === 409 && (await json('/shader-skin/state')).activeId === 'first-window')
+  await putState({ version: 2, activeId: 'aurora', entries: [], overrides: { aurora: { brightness: 999, glass: -100, speed: -10, fps: 99, scale: 0.333 } } })
+  const bounded = (await json('/shader-skin/state')).overrides.aurora
+  check('numeric settings stay within declared limits', bounded.brightness === 180 && bounded.glass === 20 && bounded.speed === 0 && bounded.fps === undefined && bounded.scale === undefined)
+  await writeFile(join(home, 'shader-skin.json'), '{broken', 'utf8')
+  check('corrupt state is reported instead of served as a valid document', (await get('/shader-skin/state')).status === 500)
+  check('corrupt state is left untouched for recovery', await readFile(join(home, 'shader-skin.json'), 'utf8') === '{broken')
+  await putState({ version: 2, entries: [] })
+
   // --- state validation
   const badJson = await fetch(`${origin}/shader-skin/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: '{oops' })
   check('malformed state is rejected', badJson.status === 400)
@@ -157,6 +192,10 @@ try {
   // --- traversal / methods
   const traversal = await get('/shader-skin/%2e%2e%2fpackage.json')
   check('path traversal is rejected', traversal.status === 403 || traversal.status === 404, String(traversal.status))
+  await mkdir(join(home, 'outside-presets'))
+  await writeFile(join(home, 'outside-presets', 'private.txt'), 'must not be served')
+  await symlink(join(home, 'outside-presets'), join(home, 'shader-skin', 'presets', 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
+  check('symlink directory traversal is rejected', (await get('/shader-skin/local/linked/private.txt')).status === 403)
   const post = await fetch(`${origin}/shader-skin/player.html`, { method: 'POST' })
   check('POST on a static file is a 405', post.status === 405)
   const del = await fetch(`${origin}/shader-skin/state`, { method: 'DELETE' })

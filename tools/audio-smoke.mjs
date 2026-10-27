@@ -164,6 +164,13 @@ async function main() {
     state = await player()
     check('unmuted volume reaches the GainNode', Math.abs(state.audio.gain - 0.7) < 0.01, String(state.audio.gain))
 
+    // Freezing the image must not repeatedly render the same sound chunk.
+    await open('preset=pulse&fps=30&speed=0&audioprobe=1&muted=0&volume=70')
+    await waitFor(() => window.__player?.audio?.state === 'running', 15_000, 'frozen-image audio')
+    const soundTime = await page.evaluate(() => window.__audioInternals.time)
+    await page.waitForFunction(start => window.__audioInternals.time > start + .2, soundTime, { timeout: 5000 })
+    check('image speed zero does not freeze or repeat the audio timeline', (await page.evaluate(() => window.__audioInternals.time)) > soundTime + 0.2)
+
     // ---- audioMode=once: the music stops at the duration, the image keeps going
     await open('preset=dev/mono-sound&fps=30&dim=1&audioMode=once&audioSeconds=2&muted=0&volume=70')
     await waitFor(() => window.__player?.ready === true, 20_000, 'play-once ready')

@@ -62,3 +62,15 @@ jobs:
         env:
           PLAYWRIGHT_CHANNEL: chrome
           SMOKE_PORT: '8732'
+      - name: Panel regressions (real client, persistence and import)
+        run: npm run test:panel
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+      - name: Settings and editor interaction checks
+        run: npm run test:ui
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+      - name: Extended plugin audit regressions
+        run: npm run test:audit
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
