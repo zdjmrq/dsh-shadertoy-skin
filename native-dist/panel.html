@@ -6,33 +6,35 @@
 <title>ShaderToy 背景设置</title>
 <style>
   :root {
-    --bg: rgba(255, 255, 255, .96);
-    --fg: #1a2330;
-    --muted: rgba(26, 35, 48, .58);
-    --faint: rgba(26, 35, 48, .40);
-    --line: rgba(15, 23, 42, .12);
-    --field: rgba(15, 23, 42, .045);
-    --field-hover: rgba(15, 23, 42, .09);
-    /* DSH native brand blue (one step darker than #4176e6 so 11px values stay readable) */
-    --accent: #3568dc;
-    --accent-soft: rgba(53, 104, 220, .12);
-    --pop: rgba(255, 255, 255, .99);
-    --shadow: 0 18px 44px rgba(15, 23, 42, .18);
+    --bg: #fff;
+    --fg: #0f1115;
+    --muted: #61666b;
+    --faint: #737373;
+    --surface: #fff;
+    --canvas: #fff;
+    --line: #e8e8e8;
+    --field: #f7f7f8;
+    --field-hover: #ededee;
+    --accent: #202020;
+    --accent-soft: #00000007;
+    --pop: #fff;
+    --shadow: 0 12px 36px #00000014;
     --danger: #c0362c;
   }
   html[data-theme="dark"] {
-    --bg: rgba(10, 14, 20, .92);
-    --fg: #eef4f6;
-    --muted: rgba(238, 244, 246, .58);
-    --faint: rgba(238, 244, 246, .38);
-    --line: rgba(255, 255, 255, .13);
-    --field: rgba(255, 255, 255, .06);
-    --field-hover: rgba(255, 255, 255, .11);
-    /* DSH deepseek-400: the same blue the native dark UI uses */
-    --accent: #7aaaff;
-    --accent-soft: rgba(122, 170, 255, .16);
-    --pop: rgba(18, 24, 32, .99);
-    --shadow: 0 18px 50px rgba(0, 0, 0, .45);
+    --bg: #232324;
+    --fg: #f9fafb;
+    --muted: #b5b5b5;
+    --faint: #a0a0a0;
+    --surface: #232324;
+    --canvas: #151517;
+    --line: #ffffff14;
+    --field: #1b1b1c;
+    --field-hover: #303032;
+    --accent: #eeeeef;
+    --accent-soft: #ffffff08;
+    --pop: #2c2c2e;
+    --shadow: 0 12px 36px #00000040;
     --danger: #ff8d7e;
   }
   * { box-sizing: border-box; }
@@ -177,7 +179,8 @@
   .wrap-code .code-frame { padding-left: 0; }
   .wrap-code .code-area { white-space: pre-wrap; overflow-wrap: anywhere; }
   .code-grip { height: 30px; margin: 4px 0 -8px; font-size: 11px; color: var(--muted); border: 1px dashed transparent; }
-  .code-grip::before, .code-grip::after { display: none; }
+  .code-grip::before { content: ''; display: block; width: 30px; height: 3px; background: var(--line); border-radius: 2px; }
+  .code-grip::after { display: none; }
   .code-grip:hover, body.dragging-code .code-grip { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
   .code-card.collapsed .code-frame, .code-card.collapsed .code-grip { display: none; }
   .code-card.collapsed > .head { margin-bottom: 0; }
@@ -205,7 +208,7 @@
     position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
     max-height: 280px; overflow: auto; padding: 4px;
     border-radius: 10px; border: 1px solid var(--line); background: var(--pop);
-    box-shadow: 0 12px 32px rgba(0,0,0,.28);
+    box-shadow: 0 12px 32px rgba(0,0,0,.12);
     display: none;
   }
   .dd.open .dd-menu { display: block; }
@@ -226,7 +229,7 @@
     flex: 1; padding: 7px 0; border-radius: 9px; cursor: pointer; font-size: 11px;
     border: 1px solid var(--line); background: var(--field); color: var(--fg);
   }
-  .btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .btn:hover { background: var(--field-hover); border-color: var(--muted); }
   .btn.primary { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .btn.tiny { flex: 0 0 auto; padding: 4px 8px; font-size: 10px; }
   .btn.danger:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
@@ -243,7 +246,7 @@
   .item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .item .badge { flex: 0 0 auto; font-size: 9px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; line-height: 16px; }
   .item .badge.sound { color: var(--accent); border-color: var(--accent); }
-  .item .badge.nc { color: var(--danger); border-color: var(--danger); }
+  .item .badge.nc { color: var(--muted); border-color: var(--line); }
   .item .tools { display: flex; gap: 4px; flex: 0 0 auto; }
   .import-box { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; margin-top: 10px; }
   .import-box h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
@@ -253,34 +256,31 @@
   .local-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* Settings are a reading surface even when the wallpaper is bright or busy. */
-  :root { --surface: #fff; --canvas: #f3f5fa; --muted: #526078; --faint: #647086; --field: #f4f6fa; --field-hover: #e9edf5; --line: #dbe1ec; }
-  html[data-theme="dark"] { --surface: #1a2230; --canvas: #111722; --muted: #b2bed1; --faint: #98a7bd; --field: #121a27; --field-hover: #253247; --line: #344156; }
   body { font-size: 13px; line-height: 1.6; }
   body.mode-main { background: var(--canvas); }
-  body.mode-main .panel, body.mode-main .panel.wide { max-width: 1140px; padding: 32px clamp(16px, 4vw, 48px) 48px; }
+  body.mode-main .panel, body.mode-main .panel.wide { max-width: 1080px; padding: 40px clamp(20px, 4vw, 48px) 48px; }
   body.mode-main .page-head { margin-bottom: 24px; }
-  .page-head .eyebrow { color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .16em; margin-bottom: 6px; }
-  body.mode-main .page-head h2 { font-size: 25px; letter-spacing: -.03em; margin-bottom: 8px; }
+  body.mode-main .page-head h2 { font-size: 23px; letter-spacing: -.025em; font-weight: 600; margin: 0; }
   body.mode-main .page-head p { color: var(--muted); font-size: 13px; }
   .page-head { position: relative; }
-  .wallpaper-preview { position: absolute; top: 24px; right: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--accent); font-size: 12px; cursor: pointer; }
+  .wallpaper-preview { position: absolute; top: 0; right: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); font-size: 12px; cursor: pointer; }
   body.mode-main.previewing { background: transparent; overflow: hidden; }
   .previewing .panel { visibility: hidden; }
   .previewing .wallpaper-preview { visibility: visible; position: fixed; top: 24px; right: 24px; box-shadow: var(--shadow); }
-  body.mode-main .tabs { max-width: none; width: fit-content; min-width: min(100%, 320px); margin: 0 0 24px; padding: 4px; border: 1px solid var(--line); background: var(--field); }
+  body.mode-main .tabs { max-width: none; width: fit-content; min-width: min(100%, 288px); margin: 0 0 28px; padding: 3px; border: 1px solid var(--line); background: var(--field); }
   .tabs button { padding: 9px 22px; font-size: 13px; letter-spacing: 0; white-space: nowrap; }
-  body.mode-main .tabs button.active { background: var(--surface); color: var(--accent); box-shadow: 0 1px 4px #0001; }
+  body.mode-main .tabs button.active { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px #00000012; font-weight: 600; }
   button, input, textarea { transition: border-color .15s; }
   button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .settings-grid { display: grid; gap: 18px; align-items: start; }
   body.mode-main .sub { max-width: none; }
-  .settings-card { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
-  .settings-card h3 { margin: 0; font-size: 15px; font-weight: 650; }
-  .settings-card > p { margin: 4px 0 20px; color: var(--faint); font-size: 12px; }
-  .settings-card .row { margin-top: 20px; }
+  .settings-card { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 1px 2px #00000003; }
+  .settings-card h3 { margin: 0 0 24px; font-size: 14px; font-weight: 600; }
+  .settings-card .row { margin-top: 24px; }
   .settings-card .row.switch { padding: 0 0 14px; border-bottom: 1px solid var(--line); }
-  .head label, .form-row label, .lib-head span { font-size: 13px; letter-spacing: 0; color: var(--muted); }
-  .head output { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .head label, .form-row label, .lib-head span { font-size: 13px; letter-spacing: 0; color: var(--fg); }
+  .head output { font-size: 12px; font-weight: 400; white-space: nowrap; color: var(--muted); }
+  #preset-kind, #scale-out, #fps-out, #panels-out, #audio-mode-out { display: none; }
   .hint, .note { font-size: 12px; color: var(--faint); line-height: 1.7; }
   .hint { margin-top: 8px; }
   .dd-trigger, input[type=text], input[type=file] { min-height: 40px; padding: 9px 12px; font-size: 13px; }
@@ -289,7 +289,7 @@
   .dd-item { padding: 9px 10px; font-size: 13px; }
   .dd-menu { max-height: min(280px, 45vh); }
   input[type=range] { height: 28px; }
-  input[type=range]::-webkit-slider-runnable-track { height: 5px; background: linear-gradient(to right, var(--accent) var(--range-fill, 0%), var(--line) var(--range-fill, 0%)); }
+  input[type=range]::-webkit-slider-runnable-track { height: 3px; background: linear-gradient(to right, var(--accent) var(--range-fill, 0%), var(--line) var(--range-fill, 0%)); }
   input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -6.5px; border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); }
   .switch input { appearance: none; position: relative; width: 36px; height: 22px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--field-hover); }
   .switch input::after { content: ''; position: absolute; width: 16px; height: 16px; top: 2px; left: 2px; border-radius: 50%; background: var(--muted); transition: transform .15s; }
@@ -297,12 +297,14 @@
   .switch input:checked::after { transform: translateX(14px); background: var(--canvas); }
   .dim { opacity: .6; }
   .btn { min-height: 38px; padding: 8px 14px; font-size: 13px; }
-  .btn.primary { background: var(--accent); color: var(--canvas); font-weight: 600; }
+  .btn.primary { background: var(--accent); color: var(--canvas); border-color: var(--accent); font-weight: 600; }
+  .btn.primary:hover { filter: brightness(.94); }
   .btn:disabled { opacity: .5; cursor: default; }
   .settings-footer { margin-top: 20px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .settings-footer .actions { margin: 0; }
   .settings-footer .note { margin: 0; }
-  #note { margin: -10px 0 20px; min-height: 20px; color: var(--muted); }
+  #note { margin: -12px 0 20px; color: var(--muted); }
+  #note:empty { display: none; }
   #note.error { color: var(--danger); }
   .item { padding: 14px 12px; margin-bottom: 8px; border: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
   .item .name { flex-basis: 160px; font-weight: 600; }
@@ -384,7 +386,7 @@
     <div class="row">
       <div class="head"><label>渲染分辨率</label><output id="scale-out"></output></div>
       <div id="scale-dd"></div>
-      <div class="hint" id="scale-hint"></div>
+      <div class="hint" id="scale-hint" hidden></div>
     </div>
 
     <div class="row">
@@ -434,7 +436,7 @@
       <button class="btn" id="reset" type="button">本背景恢复默认</button>
       <button class="btn" id="audio" type="button" hidden>开声音</button>
     </div>
-    <p class="note" id="note">改动即时生效并自动保存。</p>
+    <p class="note" id="note"></p>
   </div>
 
   <div id="view-library" hidden>
@@ -456,11 +458,11 @@
     <div class="import-box">
       <h2>导入文件（ShaderToy 导出的 JSON / 一段 GLSL）</h2>
       <input type="file" id="file-input" accept=".json,.glsl,.txt" multiple>
-      <p class="note">JSON 会解析 image / sound pass；GLSL 当作 image pass。作品许可证由原作者决定，仅供个人使用。</p>
+      <p class="note">支持 ShaderToy JSON、GLSL、TXT。</p>
     </div>
 
     <div class="import-box">
-      <h2>从本地目录导入（$DSH_HOME/shader-skin/presets/）</h2>
+      <h2>从本地目录导入</h2>
       <div id="local-list"><p class="note">正在读取…</p></div>
     </div>
 
@@ -800,13 +802,13 @@
     const view = $('view-params')
     const grid = el('div', { className: 'settings-grid' })
     const groups = [
-      ['appearance', '背景与外观', '选择作品，调整背景与界面的视觉平衡。', ['enabled', 'preset-dd', 'glass', 'brightness', 'panels-dd', 'blur']],
-      ['performance', '渲染与性能', '在画质、流畅度和耗电之间找到平衡。', ['scale-dd', 'fps-dd']],
-      ['playback', '画面播放', '控制时间流速与画面的循环方式。', ['speed', 'loop', 'loop-seconds']],
-      ['sound', '声音', '有声音代码的作品可独立调整音乐。', ['volume', 'muted', 'audio-mode-dd', 'audio-seconds']],
+      ['appearance', '背景与外观', ['enabled', 'preset-dd', 'glass', 'brightness', 'panels-dd', 'blur']],
+      ['performance', '渲染与性能', ['scale-dd', 'fps-dd']],
+      ['playback', '画面播放', ['speed', 'loop', 'loop-seconds']],
+      ['sound', '声音', ['volume', 'muted', 'audio-mode-dd', 'audio-seconds']],
     ]
-    for (const [kind, title, description, ids] of groups) {
-      const card = el('section', { className: `settings-card ${kind}` }, el('h3', { textContent: title }), el('p', { textContent: description }))
+    for (const [kind, title, ids] of groups) {
+      const card = el('section', { className: `settings-card ${kind}` }, el('h3', { textContent: title }))
       for (const id of ids) card.append($(id).closest('.row'))
       grid.append(card)
     }
@@ -1259,11 +1261,7 @@
     $('code-image').value = draft?.image ?? image
     $('code-sound').value = draft?.sound ?? sound
     $('code-title').textContent = name
-    $('code-hint').textContent = `${editable
-      ? '正在编辑「我的」背景：保存后立刻重新编译运行，改动只存在本机。'
-      : '内置作品只读：保存会另存为「我的副本」并立刻运行，内置原件不动。'} 两个代码框都能拖下面的把手调高度（聚焦把手后按 ↑/↓ 也行），会记住。${builtin && builtin.license && builtin.license !== 'MIT'
-      ? ` 注意：这个内置作品是 ${builtin.license}（署名 / 非商业 / 相同方式共享），不是 MIT；另存的副本同样受它约束。`
-      : ''}`
+    $('code-hint').textContent = editable ? '正在编辑 · 本地作品' : '内置作品只读 · 保存为副本'
     updateCodeInfo()
     setCodeNote('')
   }
@@ -1408,7 +1406,8 @@
       grip.setAttribute('aria-valuemin', String(minHeight))
       grip.setAttribute('aria-valuemax', '4000')
       grip.setAttribute('aria-valuenow', String(parseInt(area.style.height) || (isSound ? 180 : 360)))
-      grip.textContent = '↕ 拖动调整高度 · 双击还原'
+      grip.textContent = ''
+      grip.title = '拖动调整高度，双击还原'
       grip.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return
         event.preventDefault()
