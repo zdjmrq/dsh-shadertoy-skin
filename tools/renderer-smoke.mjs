@@ -257,16 +257,9 @@ async function main() {
     check('loop toggle turns on', loopState.loopChecked === true && loopState.loopRowHidden === false)
     await page.click('#loop')
 
-    // music "play once": picking it reveals the duration slider
-    // music "play once": picking it reveals the duration slider. The row is dimmed
-    // while the preset has no sound (aurora), so lift that veil for the click.
-    await page.evaluate(() => document.getElementById('audio-mode-row').classList.remove('dim'))
-    await page.click('#audio-mode-dd .dd-trigger')
-    await page.waitForSelector('#audio-mode-dd .dd.open .dd-menu', { timeout: 5_000 })
-    await page.locator('#audio-mode-dd .dd-item', { hasText: '只播一次' }).click()
-    const onceState = await panelState()
-    check('music can play once', onceState.audioMode === '只播一次', String(onceState.audioMode))
-    check('duration row stays hidden without a sound pass', onceState.audioSecondsRowHidden === true)
+    // Sound controls stay disabled when the selected work has no sound pass.
+    check('silent works disable the music mode picker', await page.locator('#audio-mode-dd .dd-trigger').isDisabled())
+    check('duration row stays hidden without a sound pass', (await panelState()).audioSecondsRowHidden === true)
 
     // custom dropdown: no native (light) popup — a themed list we control
     await page.click('#fps-dd .dd-trigger')
