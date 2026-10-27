@@ -201,7 +201,7 @@ window.__ModuleLoader__.load({
           const CLEAR_TOKENS = {
             '--dsw-alias-bg-base': { light: 'transparent', dark: 'transparent' },
             '--dsw-specific-sidebar-fill': { light: 'transparent', dark: 'transparent' },
-            '--shader-skin-dialog-surface': { light: 'rgba(255, 255, 255, .98)', dark: 'rgba(35, 35, 36, .98)' },
+            '--shader-skin-dialog-surface': { light: '#fff', dark: '#232324' },
           }
           // The boxes that follow the `panels` level: cards, nested panels, code
           // blocks, the composer/editor surface (`bg-module-platform`) and the
@@ -217,13 +217,9 @@ window.__ModuleLoader__.load({
             '--dsw-alias-menu-group-header-fill', '--dsw-specific-selector',
           ]
           /**
-           * Content fills that never go through the `bg-layer-*` tokens: the
-           * changed-files header strip, deliverable/plan cards, markdown code
-           * blocks + inline code, and the user-message bubble. In the light theme
-           * those default to opaque near-white (the static neutral-50/100 scale),
-           * which is what made some assistant replies look like solid white
-           * patches while every other card was translucent. Each entry is
-           * [token, weight]: the weight scales the current `panels` alpha.
+           * Semantic content surfaces only. Never override a static palette:
+           * the same neutral value may also be used for foreground text/icons.
+           * Each entry is [token, weight] relative to the selected card alpha.
            */
           const CONTENT_TOKENS = [
             ['--dsw-alias-markdown-code-block', 1],

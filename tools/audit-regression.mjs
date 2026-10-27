@@ -69,7 +69,7 @@ try {
         assert.match(values['--dsw-alias-markdown-code-block'], /0\.84/)
       }
       const dialog = await page.locator('.audit-fixture [role=dialog]').evaluate(node => getComputedStyle(node).backgroundColor)
-      assert.match(dialog, /0\.98\)/)
+      assert.match(dialog, /^rgb\((255, 255, 255|35, 35, 36)\)$/)
       await page.screenshot({ path: join(shots.pathname.replace(/^\/([A-Za-z]:)/, '$1'), `${dark ? 'dark' : 'light'}-${mode}.png`) })
     }
   }
