@@ -955,17 +955,17 @@
     })
     panelsDd = makeDropdown($('panels-dd'), {
       options: [
-        { value: 'opaque', text: '不透明（默认，最清楚）' },
+        { value: 'opaque', text: '不透明' },
         { value: 'half', text: '半透明' },
-        { value: 'clear', text: '透明（最透，文字会难读一些）' },
+        { value: 'clear', text: '透明' },
       ],
       value: effective().panels ?? 'opaque',
       onChange: value => setParam('panels', value),
     })
     audioModeDd = makeDropdown($('audio-mode-dd'), {
       options: [
-        { value: 'loop', text: '循环重放（每「音乐时长」秒从头再来）' },
-        { value: 'once', text: '只播一次（播完停，画面常驻）' },
+        { value: 'loop', text: '循环重放' },
+        { value: 'once', text: '只播一次' },
       ],
       value: effective().audioMode === 'once' ? 'once' : 'loop',
       onChange: value => setParam('audioMode', value),
