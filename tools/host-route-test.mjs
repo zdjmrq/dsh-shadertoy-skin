@@ -10,7 +10,7 @@
  * Usage: node tools/host-route-test.mjs
  */
 import { createServer } from 'node:http'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { handler } from '../index.js'
@@ -192,6 +192,10 @@ try {
   // --- traversal / methods
   const traversal = await get('/shader-skin/%2e%2e%2fpackage.json')
   check('path traversal is rejected', traversal.status === 403 || traversal.status === 404, String(traversal.status))
+  await mkdir(join(home, 'outside-presets'))
+  await writeFile(join(home, 'outside-presets', 'private.txt'), 'must not be served')
+  await symlink(join(home, 'outside-presets'), join(home, 'shader-skin', 'presets', 'linked'), process.platform === 'win32' ? 'junction' : 'dir')
+  check('symlink directory traversal is rejected', (await get('/shader-skin/local/linked/private.txt')).status === 403)
   const post = await fetch(`${origin}/shader-skin/player.html`, { method: 'POST' })
   check('POST on a static file is a 405', post.status === 405)
   const del = await fetch(`${origin}/shader-skin/state`, { method: 'DELETE' })

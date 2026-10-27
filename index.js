@@ -14,7 +14,7 @@
  *
  * @module dsh-shadertoy-skin
  */
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -108,6 +108,7 @@ async function listLocalPresets() {
     if (!isJson && !isSource) continue
     const file = join(localDir(), name)
     try {
+      if (!await realInside(localDir(), file)) continue
       const info = await stat(file)
       if (!info.isFile() || info.size > 1_500_000) continue
       const text = await readFile(file, 'utf8')
@@ -180,6 +181,12 @@ function resolveInside(root, requestPath) {
   return target
 }
 
+async function realInside(root, target) {
+  const [base, file] = await Promise.all([realpath(root), realpath(target)])
+  const normalizeCase = value => process.platform === 'win32' ? value.toLowerCase() : value
+  return normalizeCase(file).startsWith(`${normalizeCase(base)}${sep}`)
+}
+
 async function serveFile(root, requestPath, req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     finish(res, 405, { allow: 'GET, HEAD' })
@@ -192,6 +199,7 @@ async function serveFile(root, requestPath, req, res) {
   }
   let body
   try {
+    if (!await realInside(root, target)) return fail(res, 403, 'symlink leaves the preset directory')
     body = await readFile(target)
   } catch (error) {
     if (error && (error.code === 'ENOENT' || error.code === 'EISDIR' || error.code === 'ENOTDIR')) {
