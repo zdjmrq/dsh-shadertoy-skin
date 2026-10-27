@@ -680,6 +680,7 @@
 
   function startAudioScheduler() {
     if (!audio.program || !audio.ctx || audio.ctx.state !== 'running' || audio.running) return
+    if (params.paused || document.hidden) return
     // "music plays once": never resurrect the scheduler after the duration ran out
     if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
       setAudioState('ended', 'music played once')
@@ -722,8 +723,12 @@
     if (ctx.state !== 'running') { stopAudioScheduler('context'); return }
     // music-once: the timeline passed the configured duration → stop for good
     if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
-      stopAudioScheduler('once')
-      setAudioState('ended', 'music played once')
+      // The producer's clock includes the lookahead buffer. Drain it before
+      // stopping, otherwise the final scheduled notes are cut off early.
+      if (ctx.currentTime >= audio.scheduledUntil) {
+        stopAudioScheduler('once')
+        setAudioState('ended', 'music played once')
+      }
       return
     }
     if (audio.scheduledUntil < ctx.currentTime - 0.05) audio.scheduledUntil = ctx.currentTime + 0.15 // underrun: skip ahead
@@ -909,13 +914,12 @@
   // ---------- shader loading
 
   function setShader(source, presetName) {
-    if (audio.program) stopAudio()
     const built = buildProgram(source)
     if (!built.program) {
-      program = null
       fail('compile', built.error)
       return false
     }
+    if (audio.program) stopAudio()
     if (program) gl.deleteProgram(program)
     program = built.program
     es3 = built.es3
@@ -995,7 +999,7 @@
 
   if (!STANDALONE) {
     window.addEventListener('message', event => {
-      if (event.origin !== location.origin) return
+      if (event.origin !== location.origin || event.source !== parent) return
       const message = event.data
       if (!message || typeof message !== 'object') return
       switch (message.type) {
@@ -1007,8 +1011,6 @@
               if (setShader(image, preset.name || preset.id)) {
                 const sound = preset.code?.sound
                 setSound(typeof sound === 'string' && sound.trim() ? sound : null)
-              } else {
-                setSound(null)
               }
             } else {
               fail('init', 'init 消息里没有 image 代码')

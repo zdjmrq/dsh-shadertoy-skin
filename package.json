@@ -75,6 +75,8 @@
     "test:host": "node tools/host-route-test.mjs",
     "test:renderer": "node tools/renderer-smoke.mjs",
     "test:audio": "node tools/audio-smoke.mjs",
+    "test:panel": "node tools/panel-regression.mjs",
+    "preview": "node tools/browser-harness.mjs 8735",
     "pack:check": "npm pack --dry-run --json"
   },
   "devDependencies": {
