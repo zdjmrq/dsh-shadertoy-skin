@@ -49,5 +49,225 @@
     "sourceUrl": "https://www.shadertoy.com/user/iq",
     "hasSound": true,
     "note": "第三方作品（非商业）：像素画 + 一首曲子，适合「音乐只播一次」"
+  },
+  {
+    "id": "take-on-me",
+    "name": "Take On Me",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Tonny Espeset",
+    "sourceUrl": "https://www.shadertoy.com/view/fXc3RB",
+    "hasSound": true,
+    "commonFile": "take-on-me/common.glsl",
+    "bufferFiles": {
+      "A": "take-on-me/a.glsl"
+    },
+    "file": "take-on-me/image.glsl",
+    "soundFile": "take-on-me/sound.glsl",
+    "channels": {
+      "image": [
+        "buffer:A",
+        "font"
+      ]
+    },
+    "duration": {
+      "image": 209,
+      "sound": 180
+    },
+    "bufferSettings": {
+      "A": {
+        "format": "float16",
+        "filter": "linear",
+        "mipmaps": false
+      }
+    }
+  },
+  {
+    "id": "never-gonna-give-you-up",
+    "name": "Never Gonna Give You Up",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Tonny Espeset",
+    "sourceUrl": "https://www.shadertoy.com/view/fXdXR7",
+    "hasSound": true,
+    "commonFile": "never-gonna-give-you-up/common.glsl",
+    "file": "never-gonna-give-you-up/image.glsl",
+    "soundFile": "never-gonna-give-you-up/sound.glsl",
+    "duration": {
+      "image": 177,
+      "sound": 177
+    }
+  },
+  {
+    "id": "rain-window",
+    "name": "下雨的窗户",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Martijn Steinrucken aka BigWings",
+    "sourceUrl": "https://www.shadertoy.com/user/BigWings",
+    "hasSound": false,
+    "file": "rain-window/image.glsl",
+    "channels": {
+      "image": [
+        "scene"
+      ]
+    },
+    "duration": {
+      "image": 102
+    }
+  },
+  {
+    "id": "racing",
+    "name": "赛车",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "dathor / diatribes; Reinder & Effie (car models); PCrush & Mr Laine (sound)",
+    "sourceUrl": "https://www.shadertoy.com/user/dathor",
+    "hasSound": true,
+    "commonFile": "racing/common.glsl",
+    "bufferFiles": {
+      "A": "racing/a.glsl",
+      "B": "racing/b.glsl"
+    },
+    "file": "racing/image.glsl",
+    "soundFile": "racing/sound.glsl",
+    "channels": {
+      "B": [
+        "buffer:A",
+        "buffer:B"
+      ],
+      "image": [
+        "buffer:B",
+        null,
+        null,
+        "font"
+      ]
+    },
+    "duration": {
+      "image": 180,
+      "sound": 180
+    },
+    "bufferSettings": {
+      "A": {
+        "format": "float16",
+        "filter": "linear",
+        "mipmaps": false
+      },
+      "B": {
+        "format": "float16",
+        "filter": "linear",
+        "mipmaps": false
+      }
+    }
+  },
+  {
+    "id": "voxel-world",
+    "name": "我的世界",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "fb39ca4; Ashima Arts (noise)",
+    "sourceUrl": "https://www.shadertoy.com/user/fb39ca4",
+    "hasSound": false,
+    "bufferFiles": {
+      "A": "voxel-world/a.glsl",
+      "B": "voxel-world/b.glsl",
+      "C": "voxel-world/c.glsl",
+      "D": "voxel-world/d.glsl"
+    },
+    "file": "voxel-world/image.glsl",
+    "channels": {
+      "A": [
+        "buffer:A",
+        "buffer:B",
+        "keyboard"
+      ],
+      "B": [
+        "buffer:A",
+        "buffer:B"
+      ],
+      "C": [
+        "buffer:A",
+        "noise",
+        "buffer:C",
+        "buffer:C"
+      ],
+      "D": [
+        "buffer:A",
+        "buffer:B",
+        "buffer:C",
+        "buffer:C"
+      ],
+      "image": [
+        "buffer:A",
+        "keyboard",
+        "buffer:C",
+        "buffer:D"
+      ]
+    },
+    "bufferSettings": {
+      "A": {
+        "format": "float32",
+        "filter": "nearest",
+        "mipmaps": false
+      },
+      "B": {
+        "format": "float32",
+        "filter": "nearest",
+        "mipmaps": false
+      },
+      "C": {
+        "format": "float32",
+        "filter": "nearest",
+        "mipmaps": false
+      },
+      "D": {
+        "format": "float32",
+        "filter": "nearest",
+        "mipmaps": false
+      }
+    }
+  },
+  {
+    "id": "tree-in-wind",
+    "name": "风中的树",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Maurrourgilk; mercury (SDF helpers)",
+    "sourceUrl": "https://www.shadertoy.com",
+    "hasSound": false,
+    "commonFile": "tree-in-wind/common.glsl",
+    "bufferFiles": {
+      "A": "tree-in-wind/a.glsl",
+      "B": "tree-in-wind/b.glsl"
+    },
+    "file": "tree-in-wind/image.glsl",
+    "channels": {
+      "A": [
+        null,
+        null,
+        "noise"
+      ],
+      "B": [
+        "buffer:B",
+        "buffer:A",
+        "noise",
+        "noise3d"
+      ],
+      "image": [
+        "buffer:B"
+      ]
+    },
+    "bufferSettings": {
+      "A": {
+        "format": "float32",
+        "filter": "linear",
+        "mipmaps": false
+      },
+      "B": {
+        "format": "float16",
+        "filter": "linear",
+        "mipmaps": true
+      }
+    }
   }
 ]

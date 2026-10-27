@@ -23,9 +23,7 @@ window.__ModuleLoader__.load({
     const FALLBACK_DEFAULTS = { enabled: true, glass: 60, brightness: 100, panels: 'half', blur: 0, scale: 1, fps: 30, speed: 1, loop: true, loopMode: 'auto', audioDurationMode: 'auto', volume: 60, muted: false }
     const GLOBAL_KEYS = ['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted']
     const FALLBACK_PRESET = 'aurora'
-    // ⚠️ Keep off while the sidebar route is unstable: registering into
-    // `sidebar.panellist` + `main` has frozen the frontend on panel switch.
-    // Flip to true only after the cause is isolated (see docs/renderer-notes.md).
+    // The settings surface is independent of whether the background is enabled.
     const ENABLE_SIDEBAR_ENTRY = true
 
     let React = null
@@ -165,6 +163,7 @@ window.__ModuleLoader__.load({
           let initRequest = 0
           let presetRequest = 0
           let stateRequest = 0
+          let paramsRevision = 0
           // WebAudio inside an iframe may start suspended until a real user gesture
           // (autoplay policy); the first click / keypress in the app is that gesture.
           let audioSuspended = false
@@ -356,20 +355,28 @@ window.__ModuleLoader__.load({
               state.overrides[state.activeId] = raw.params // v1 migration
             }
             const legacy = state.overrides[state.activeId] ?? {}
-            state.settings = Object.fromEntries(GLOBAL_KEYS.filter(key => key in (raw.settings ?? legacy)).map(key => [key, (raw.settings ?? legacy)[key]]))
+            const preferences = { ...legacy, ...raw.settings }
+            state.settings = Object.fromEntries(GLOBAL_KEYS.filter(key => key in preferences).map(key => [key, preferences[key]]))
             return state
           }
 
           async function reloadState() {
             const request = ++stateRequest
+            const paramsAtRead = paramsRevision
             const raw = await fetchJson(`${BASE}/state`).catch(() => undefined)
             if (request !== stateRequest) return store
             if (raw === undefined) return store
             const next = normalizeState(raw)
-            store.activeId = next.activeId
             store.entries = next.entries
-            store.overrides = next.overrides
-            store.settings = next.settings
+            if (paramsAtRead === paramsRevision) {
+              store.activeId = next.activeId
+              store.overrides = next.overrides
+              store.settings = next.settings
+            } else {
+              // A live parameter edit cannot invalidate the source/library read
+              // that makes a newly imported or edited project available.
+              store.overrides = { ...next.overrides, ...store.overrides }
+            }
             return store
           }
 
@@ -377,23 +384,14 @@ window.__ModuleLoader__.load({
           async function resolvePreset(id) {
             const entry = store.entries.find(item => item.id === id)
             if (entry) {
-              const code = { image: entry.code.image }
-              if (typeof entry.code.sound === 'string' && entry.code.sound.trim() !== '') code.sound = entry.code.sound
-              return { id: entry.id, name: entry.name || entry.id, code }
+              return { id: entry.id, name: entry.name || entry.id, code: entry.code }
             }
             const manifest = await fetchJson(`${BASE}/presets/index.json`).catch(() => [])
             const list = Array.isArray(manifest) ? manifest : []
             const item = list.find(candidate => candidate.id === id) ?? list[0]
             if (!item) throw new Error('no presets available')
-            const image = await fetchText(`${BASE}/presets/${item.file}`)
-            let sound
-            if (typeof item.soundFile === 'string' && item.soundFile !== '') {
-              sound = await fetchText(`${BASE}/presets/${item.soundFile}`).catch(() => undefined)
-            } else {
-              sound = await fetchText(`${BASE}/presets/${item.id}-sound.glsl`).catch(() => undefined)
-            }
-            const code = { image }
-            if (typeof sound === 'string' && sound.trim() !== '') code.sound = sound
+            const { loadBuiltin } = await import(`${BASE}/project.js`)
+            const code = await loadBuiltin(item, file => fetchText(`${BASE}/presets/${file}`))
             return { id: item.id, name: item.name || item.id, code }
           }
 
@@ -470,11 +468,10 @@ window.__ModuleLoader__.load({
             if (!message || typeof message !== 'object') return
             switch (message.type) {
               case 'params': {
-                stateRequest++ // Invalidate a pending read that predates this edit.
+                paramsRevision++
                 const id = typeof message.id === 'string' ? message.id : store.activeId
                 store.overrides[id] = { ...(message.params ?? {}) }
                 for (const key of GLOBAL_KEYS) if (key in (message.params ?? {})) store.settings[key] = message.params[key]
-                if (id !== store.activeId) return
                 applyGlass()
                 syncEnabled()
                 postTo(background, { type: 'params', params: { ...effective(), ...playerLook() } })
@@ -734,6 +731,9 @@ window.__ModuleLoader__.load({
           //   • the sidebar row could not register while slots was still missing -> retry
           function verifySurface() {
             if (!booted) return
+            if (sidebarAllowed && !sidebarRegistered) {
+              try { sidebarRegistered = registerSidebar() } catch { /* retried later */ }
+            }
             if (effective().enabled === false) return
             const frame = document.getElementById(BG_ID)
             if (frame === null) {
@@ -741,9 +741,6 @@ window.__ModuleLoader__.load({
               return
             }
             if (frame !== background) background = frame
-            if (sidebarAllowed && !sidebarRegistered) {
-              try { sidebarRegistered = registerSidebar() } catch { /* retried later */ }
-            }
             applyGlass()
             if (!playerReady && playerInitAttempts < 4) void sendInit(background)
           }
@@ -787,7 +784,9 @@ window.__ModuleLoader__.load({
               sidebarAllowed = ENABLE_SIDEBAR_ENTRY
               if (booted && !sidebarRegistered) {
                 await waitForService('slots')
+                if (disposed) return
                 try { sidebarRegistered = registerSidebar() } catch (error) { console.warn('[shadertoy-skin] sidebar registration skipped:', error) }
+                if (!sidebarRegistered) scheduleVerify()
               }
             }
           })()

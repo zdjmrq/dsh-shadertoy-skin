@@ -108,6 +108,12 @@ async function main() {
     const file = join('native-dist/presets', item.file).replaceAll('\\', '/')
     check(`preset ${item.id}: file exists`, existsSync(join(ROOT, file)), file)
     presetLicences.set(file, item.license)
+    for (const extra of [item.commonFile, ...Object.values(item.bufferFiles ?? {})].filter(Boolean)) {
+      const rel = `native-dist/presets/${extra}`
+      check(`preset ${item.id}: project file ${extra} exists`, existsSync(join(ROOT, rel)))
+      presetLicences.set(rel, item.license)
+      if (item.license === 'CC BY-NC-SA 3.0') check(`preset ${item.id}: ${extra} preserves its CC notice`, /Attribution-NonCommercial-ShareAlike 3\.0/.test(await readFile(join(ROOT, rel), 'utf8')))
+    }
     check(`preset ${item.id}: not a dev fixture`, !String(item.id).startsWith('_') && !String(item.file).startsWith('_'))
     check(`preset ${item.id}: hasSound is boolean`, typeof item.hasSound === 'boolean', String(item.hasSound))
     if (item.license === 'CC BY-NC-SA 3.0') {

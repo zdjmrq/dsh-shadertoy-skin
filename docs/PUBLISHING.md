@@ -5,7 +5,7 @@
 | 工作流 | 触发 | 做什么 |
 |---|---|---|
 | `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | `bundle` 检查（manifest、文件、许可证卫生、`npm pack` 内容）+ `renderer` 真浏览器 WebGL2 冒烟 |
-| `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 校验版本与 tag 一致 → `npm run check` → `npm publish`（OIDC，无 token） |
+| `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 校验版本与 tag 一致 → 包、Host 和浏览器回归 → `npm publish`（OIDC，无 token） |
 
 npm 侧用 **Trusted Publisher（OIDC）**：不需要在仓库里放 `NPM_TOKEN`，发布时由 GitHub Actions 的 OIDC 身份换取短期凭证，并自动生成 provenance 证明。
 
@@ -98,8 +98,8 @@ node tools/push-via-api.mjs --message "feat: ..."
 - `dsh.bundle.patch` 存在、`dsh.client.platform === 'web'`、`exports['./client']` 指向真实文件
 - `files` 里声明的每个文件都存在
 - `cordis.patch.yml` 里不许出现绝对路径 / `file://`（发布包不能带作者机器的路径）
-- 随包预设必须 `license: MIT`、文件存在、不是 `_` 开头的调试夹具
-- 随包 `.glsl/.html/.js` 里不许出现 `shadertoy.com/view|embed` 链接（防止 NC 作品代码被误打包）
+- 随包预设必须为 MIT 或带完整署名/来源/许可声明的 CC BY-NC-SA 3.0；Image、Common、Buffer 和 Sound 文件均需存在
+- ShaderToy view/embed 来源链接仅允许出现在已登记 CC BY-NC-SA 3.0 的预设文件中，避免把第三方作品标为 MIT
 - `native-dist/presets/local/` 必须不存在（用户导入目录）
 - `npm pack --dry-run` 的文件清单：必须含 `player.html`/两半入口，必须排除 `docs/`、`tools/`、`presets/dev/`、`presets/local/`
 

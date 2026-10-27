@@ -40,6 +40,7 @@ try {
   assert.equal(await page.locator('#shadertoy-skin-glass-style').count(), 0)
   await panel.check('#enabled')
   await page.waitForSelector('#shadertoy-skin-bg')
+  await page.frameLocator('#shadertoy-skin-bg').locator('canvas').waitFor()
   await getPlayer().waitForFunction(() => document.querySelector('#diag').textContent.includes('running'))
   console.log('ok    disabling the background restores native surfaces, including later parameter changes')
 
@@ -62,7 +63,7 @@ try {
     fixture.innerHTML = '<b>卡片 / Card</b><input value="聊天输入框 / Composer"><pre>void mainImage(...) { ... }</pre><div role="menu">菜单 / Menu</div><div role="dialog">弹层 / Dialog<br>正文应清楚可读</div>'
     document.body.append(fixture)
   })
-  const shots = new URL('../docs/verify/surface-audit/', import.meta.url)
+  const shots = new URL('../.tmp-validation/verify/surface-audit/', import.meta.url)
   await mkdir(shots, { recursive: true })
   for (const dark of [false, true]) {
     await page.evaluate(dark => document.body.toggleAttribute('data-ds-dark-theme', dark), dark)

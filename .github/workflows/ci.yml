@@ -38,6 +38,11 @@ jobs:
           node --check tools/ui-regression.mjs
           node --check tools/audit-regression.mjs
           node --check tools/core-regression.mjs
+          node --check tools/project-audit-regression.mjs
+          node --check tools/multipass-regression.mjs
+          node --check native-dist/project.js
+          node --check native-dist/pipeline.js
+          node --check native-dist/textures.js
           node --check tools/panel-surfaces-regression.mjs
           node --check tools/unified-transparency-regression.mjs
       - name: Bundle checks (manifest, files, licence hygiene, npm pack content)
@@ -84,5 +89,15 @@ jobs:
 
       - name: Playback, persistence and pointer regressions
         run: npm run test:core
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+
+      - name: Project audit regressions
+        run: npm run test:project
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+
+      - name: Multi-file projects and bundled shaders
+        run: npm run test:multi
         env:
           PLAYWRIGHT_CHANNEL: chrome

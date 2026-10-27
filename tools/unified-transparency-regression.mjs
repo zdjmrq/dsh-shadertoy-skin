@@ -7,7 +7,7 @@ import { chromium } from 'playwright'
 import { startHarness } from './browser-harness.mjs'
 
 const h = await startHarness()
-const output = new URL('../docs/verify/unified-transparency/', import.meta.url)
+const output = new URL('../.tmp-validation/verify/unified-transparency/', import.meta.url)
 await mkdir(output, { recursive: true })
 let browser
 try {
@@ -20,8 +20,7 @@ try {
   const panel = page.frames().find(f => f.url().includes('panel.html'))
   await panel.waitForSelector('#preset-dd .dd-trigger')
   await panel.click('#preset-dd .dd-trigger')
-  await panel.press('#preset-dd .dd-trigger', 'End')
-  await panel.press('#preset-dd .dd-trigger', 'Enter')
+  await panel.locator('#preset-dd .dd-item').filter({ hasText: '马里奥' }).click()
   await panel.waitForFunction(() => document.querySelector('#preset-dd .dd-trigger').textContent.includes('马里奥'))
   await panel.check('#muted')
   await page.evaluate(() => {

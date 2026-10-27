@@ -287,7 +287,8 @@ async function main() {
     check('library lists the built-in presets',
       ['极光', '流体色带', '脉冲（带音乐）', '海面（Seascape）', '马里奥（带音乐）'].every((name) => library.items.includes(name)),
       library.items.join(','))
-    check('third-party presets carry a CC licence badge', library.ncBadges === 2, String(library.ncBadges))
+    const ncCount = (await (await fetch(`${BASE}/presets/index.json`)).json()).filter(item => item.license === 'CC BY-NC-SA 3.0').length
+    check('third-party presets carry a CC licence badge', library.ncBadges === ncCount, String(library.ncBadges))
     check('preset picker shows the third-party licence', library.presetChoices.some((text) => /CC BY-NC-SA/.test(text)),
       library.presetChoices.join(' | '))
 

@@ -20,6 +20,10 @@ permissions:
   contents: read
   id-token: write # required for npm trusted publishing / provenance
 
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: npm publish
@@ -41,11 +45,12 @@ jobs:
 
       - name: Verify release tag matches package version
         if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          TAG="${{ github.event.release.tag_name }}"
-          if [ "v$VERSION" != "$TAG" ]; then
-            echo "package.json version $VERSION does not match release tag $TAG"
+          if [ "v$VERSION" != "$RELEASE_TAG" ]; then
+            echo "package.json version $VERSION does not match release tag $RELEASE_TAG"
             exit 1
           fi
           echo "publishing $VERSION"
@@ -55,8 +60,21 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
-      - name: Bundle checks
-        run: npm run check
+      - name: Bundle and Host checks
+        run: npm test
+
+      - name: Browser regression checks
+        run: |
+          npm run test:renderer
+          npm run test:audio
+          npm run test:panel
+          npm run test:ui
+          npm run test:audit
+          npm run test:core
+          npm run test:project
+          npm run test:multi
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
 
       - name: Publish to npm
         run: npm publish

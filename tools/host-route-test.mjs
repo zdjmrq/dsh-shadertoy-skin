@@ -113,7 +113,7 @@ try {
   check('local listing skips unusable json', !local.some(item => item.file === 'broken.json'))
   check('local listing skips unrelated files', !local.some(item => item.file === 'notes.txt'))
   check('Common before Image is recognized as a usable export', local.some(item => item.file === 'common-first.json' && item.hasSound))
-  check('unsupported Buffer exports are not offered as usable presets', !local.some(item => item.file === 'buffer.json'))
+  check('Buffer exports are available as multi-file projects', local.some(item => item.file === 'buffer.json'))
   const localFile = await get('/shader-skin/local/my-shader.glsl')
   check('local preset file is served', localFile.status === 200 && (await localFile.text()).includes('mainImage'))
 
@@ -145,6 +145,9 @@ try {
   const globalState = await json('/shader-skin/state')
   check('global settings persist and exclude artwork playback keys', globalPut.ok && globalState.settings.glass === 42 && globalState.settings.panels === 'clear' && globalState.settings.enabled === false && !('speed' in globalState.settings))
   check('automatic playback modes survive host roundtrip', globalState.overrides.flow.loopMode === 'auto' && globalState.overrides.flow.audioDurationMode === 'manual')
+  await putState({ ...next, settings: { enabled: false }, overrides: { 'user-1': { glass: 44, fps: 15 } } })
+  const partial = await json('/shader-skin/state')
+  check('partial global settings retain unmigrated appearance choices', partial.settings.enabled === false && partial.settings.glass === 44 && partial.settings.fps === 15)
   await putState(next)
   check('state drops unknown override keys', stored.overrides?.['user-1']?.nonsense === undefined)
   const onDisk = JSON.parse(await readFile(join(home, 'shader-skin.json'), 'utf8'))
@@ -181,6 +184,13 @@ try {
   await writeFile(join(home, 'shader-skin.json'), '{broken', 'utf8')
   check('corrupt state is reported instead of served as a valid document', (await get('/shader-skin/state')).status === 500)
   check('corrupt state is left untouched for recovery', await readFile(join(home, 'shader-skin.json'), 'utf8') === '{broken')
+  for (const key of ['settings', 'overrides', 'params']) {
+    const invalid = JSON.stringify({ version: 2, entries: [], [key]: 'invalid object' })
+    await writeFile(join(home, 'shader-skin.json'), invalid)
+    check(`malformed ${key} cannot break client boot`, (await get('/shader-skin/state')).status === 500)
+    check(`malformed ${key} file remains recoverable`, await readFile(join(home, 'shader-skin.json'), 'utf8') === invalid)
+    check(`malformed ${key} PUT is rejected`, (await putState(JSON.parse(invalid))).status === 400)
+  }
   await putState({ version: 2, entries: [] })
 
   // --- state validation
@@ -204,6 +214,8 @@ try {
   check('symlink directory traversal is rejected', (await get('/shader-skin/local/linked/private.txt')).status === 403)
   const post = await fetch(`${origin}/shader-skin/player.html`, { method: 'POST' })
   check('POST on a static file is a 405', post.status === 405)
+  for (const path of ['health', 'safe-mode', 'local/index.json']) check(`POST on ${path} is a 405`, (await fetch(`${origin}/shader-skin/${path}`, { method: 'POST' })).status === 405)
+  check('unrelated prefix routes are not served', (await get('/not-a-plugin/state')).status === 404)
   const del = await fetch(`${origin}/shader-skin/state`, { method: 'DELETE' })
   check('DELETE on state is a 405', del.status === 405)
 } finally {

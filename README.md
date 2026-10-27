@@ -8,8 +8,8 @@
 
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
-> **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的 5 个预设只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
-> **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库自写代码是 MIT，两个第三方预设按各自许可证收录）。
+> **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的 11 个预设只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
+> **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库自写代码是 MIT，八个第三方预设按各自许可证收录）。
 > **欢迎 issue 和 PR**：装不上、画面不对、想要新功能 → 开 [Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)（附截图和 `$DSH_HOME/shader-skin.json` 里对应条目更好排查）；bug 修复、文档修正、自写预设 → 直接提 [PR](https://github.com/zdjmrq/dsh-shadertoy-skin/pulls)。
 > **欢迎分享你发现的 / 自己改过的 ShaderToy 作品**：作品链接、截图、调好的参数都行，开 [Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues) 贴出来大家就能直接用；想让它进内置预设就提 PR（先确认原作者的许可证允许再分发）。
 >
@@ -40,15 +40,15 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 
 ## 从 ShaderToy 装一个作品
 
-插件自带 5 个预设（3 个自写 MIT + 2 个第三方 CC BY-NC-SA 3.0，见文末许可证），但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
+插件自带 11 个预设（3 个自写 MIT + 8 个第三方 CC BY-NC-SA 3.0，见文末许可证），但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
 
 > **推荐一试**：[`shadertoy.com/view/4dfXWj`](https://www.shadertoy.com/view/4dfXWj) —— 装进来效果挺带感，导入方式见下面任意一种。
-> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0）：装在本机自己玩没问题；想提交进仓库或随包分发，先确认许可证允许，并带上署名与相同许可证（本仓库的两个第三方预设就是这么收录的）。
+> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0）：装在本机自己玩没问题；想提交进仓库或随包分发，先确认许可证允许，并带上署名与相同许可证（本仓库的八个第三方预设就是这么收录的）。
 
 ### 1. 粘贴代码（最稳，不用抓网页）
 
 1. 打开作品页 `https://www.shadertoy.com/view/xxxxxxxx`，右上角 **Shader** 页签；
-2. 全选 `Image` 页签里的代码（如果作品用了 `Common`，把 Common 里的函数一起复制到开头；用了 Buffer 的作品暂不支持）；
+2. 全选 `Image` 页签里的代码（如果作品用了 `Common`，把 Common 里的函数一起复制到开头；多文件作品请使用下述多文件导入）；
 3. 回到插件设置页 → **背景库** → 「粘贴 ShaderToy 代码」→ 填名字 → 粘进 `Image 代码` → **加入背景库**；
 4. 列表里点 **使用** 即可，参数会即时生效。
 
@@ -86,6 +86,14 @@ float mainSound(int samp, float time)  // 单声道 + 采样序号
 ```
 
 > AI 抓不到 ShaderToy 页面时（它经常挡爬虫），就走上面第 1 种的「手动粘贴」——一样能装好，而且不会有许可证问题。
+
+### 多文件项目：文件夹或多个文件一起导入
+
+背景库 → **导入多文件项目** → 选择文件夹或多个代码/图片文件 → 检查每个文件的 Image / Sound / Common / Buffer A–D / Include / 图片角色及四个输入通道 → **作为一个项目导入并运行**。通道依赖无法仅凭 GLSL 完全推断，自动建议后仍可手动调整。ShaderToy 导出的 JSON 也会保留 Common、各 Buffer 及已声明的 Buffer 连接；未附带的外部纹理会明确报错。
+
+代码页顶部可切换项目文件，或在“全部文件”中阅读；支持新建 Common、Buffer A–D、Sound 和自定义 include 文件，独立编辑后一次保存整个项目。使用 `#include "helper.glsl"` 引用 include 文件；循环引用、路径越界和过大的展开会拒绝。新增图片随项目内嵌保存，导出 JSON 可以再次导入，作者和许可证也一并保留。
+
+多 pass 按 A → B → C → D → Image 执行：读取已经完成的前序 Buffer 得到当前帧；读取自身或后序 Buffer 得到上一帧。Buffer 不套用界面亮度/遮罩，也不截断浮点状态值；这些只作用于最终 Image。大窗口下会缩小离屏缓冲，以将缓冲数据限制在约 96 MiB；项目图片合计限制 1600 万像素。键盘通道只在独立预览中接收按键，嵌入 DSH 时保持释放，避免输入冲突。Cubemap、远程视频/音频输入暂不支持。
 
 ### 3. 从本地目录导入（批量最方便）
 
@@ -140,7 +148,8 @@ Shader 没有通用的“播完”事件，因此自动模式是一种保守判�
 - [x] **自动画面循环**：识别结束淡出或动画停止，重置 `iTime` / `iFrame` 重播，另有手动周期可选（只重置画面）
 - [x] 设置页采用 **DSH 原生中性色**：浅色白底、深色黑灰底，移除长说明与重复数值，自动跟随主题
 - [x] **背景库**：内置 + 我的背景列表、切换、改名、删除；粘贴代码导入、文件导入（ShaderToy JSON / GLSL）、从 `$DSH_HOME/shader-skin/presets/` 导入
-- [x] **随包 5 个预设**：自写的「极光 / 流体色带 / 脉冲」（MIT）+ 第三方「海面（Seascape）」「马里奥」（CC BY-NC-SA 3.0，署名/非商业/相同方式共享，背景库和下拉里带 `CC BY-NC-SA` 标）
+- [x] **新增六个多文件/纹理项目**：Take On Me、Never Gonna Give You Up、下雨的窗户、赛车、我的世界、风中的树（CC BY-NC-SA 3.0）。
+- [x] **随包 11 个预设**：自写的「极光 / 流体色带 / 脉冲」（MIT）+ 第三方「海面（Seascape）」「马里奥」（CC BY-NC-SA 3.0，署名/非商业/相同方式共享，背景库和下拉里带 `CC BY-NC-SA` 标）
 - [x] **代码页**：查看当前运行作品的 Image / Sound 源码，直接改 → **保存并运行**（内置作品会自动另存为「我的副本」，原件不动；编辑器里 Ctrl/⌘+S 同样保存）
 - [x] **iMouse 只在「按住左键 + 从空白处开始拖动」时驱动**：点按钮、拖滚动条、选中/复制回复文字都不会再带动背景；松手发一次释放（`iMouse.z < 0`）
 - [x] **卡片透明度三档**（不透明 / 半透明 / 透明）：控制卡片、代码块、弹层、输入框、聊天输入栏的底色，让背景能透进这些「框」里
@@ -152,7 +161,8 @@ Shader 没有通用的“播完”事件，因此自动模式是一种保守判�
 - [x] **自动解锁音频**：被浏览器 autoplay 策略拦下时，点一下界面任意位置就恢复出声（面板里也有「开声音」按钮）
 - [x] 深浅色主题适配（设置页与玻璃都跟随 DSH；亮色主题滤镜走向白色）
 - [x] **启动自愈**：桌面端 client 插件行与服务是并发激活的，首次启动时 `theme`/`slots` 可能还没就绪（旧版因此「重启后要手动关开一次插件」）。现在服务现取 + 启动后 10 秒内多次自检（背景层缺失就重建、token 被重置就重设、播放器没 `ready` 就重发 init、侧栏没注册上就补注册），**装好重启即生效**
-- [ ] 多 pass（Buffer A–D）、音频可视化回馈、兼容性静态体检
+- [x] 多文件项目：Common / Image / Sound / Buffer A–D、双缓冲反馈、include 文件、2D/3D 噪声、字体和本地图片通道
+- [ ] Cubemap、外部视频 / 音频可视化输入与完整 ShaderToy 资源兼容
 
 ## 要求
 
@@ -231,11 +241,11 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 
 | 你想做的事 | 怎么做 |
 |---|---|
-| 看看它怎么写的 | 切到「代码」，Image（和可选 Sound）源码直接可读，顶部显示作品名与行数/字符数 |
+| 看看它怎么写的 | 切到「代码」，通过顶部文件横条选择 Image / Sound / Common / Buffer / Include，源码直接可读，顶部显示作品名与行数/字符数 |
 | 改几行立刻看效果 | 改完点 **「保存并运行」**（或 Ctrl/⌘+S）：保存状态 → 播放器重新编译 → 画面即时更新；编译错误会显示在按钮下方（带行号） |
 | 改坏了想还原 | 点 **「放弃修改」**，重新读取当前已保存的版本（想彻底恢复默认就去「参数 → 本背景恢复默认」，或从「背景库」重新导入） |
 | 内置作品能改吗 | 能改，但内置文件是只读的：保存时会自动另存为 **「<原名>（我的副本）」** 并切过去运行，内置原件不动 |
-| 代码框太小/太大 | 两个代码框下方都有**整行拖动条**，可自由拉高（上限 4000 px）；拖到页面边缘会自动滚动。双击拖动条还原高度；方向键微调、Shift + 方向键加大步长、Home / End 快速缩小或拉高。高度会记住 |
+| 代码框太小/太大 | 代码文件的编辑框下方都有**整行拖动条**，可自由拉高（上限 4000 px）；拖到页面边缘会自动滚动。双击拖动条还原高度；方向键微调、Shift + 方向键加大步长、Home / End 快速缩小或拉高。高度会记住 |
 | 只想看 Image 或 Sound | 点对应代码框的**专注编辑**，铺满设置区域，保留原来的阅读位置；Esc 返回。可以单独收起暂时不用的代码框 |
 | 长行难读、字太小 | 顶部可切换自动换行与 12–20 px 字号，自动记住阅读偏好。不换行时提供与代码同步滚动的行号 |
 
@@ -250,11 +260,16 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 | `极光` / `流体色带` / `脉冲（带音乐）` | 本项目自写 | **MIT**（可商用、随便改） |
 | `海面（Seascape）` | [Seascape](https://www.shadertoy.com/view/Ms2SD1)，© Alexander Alekseev aka TDM | **CC BY-NC-SA 3.0**（非 MIT） |
 | `马里奥（带音乐）` | [Mario](https://www.shadertoy.com/user/iq)，© Inigo Quilez | **CC BY-NC-SA 3.0**（非 MIT） |
+| `Take On Me` / `Never Gonna Give You Up` | Tonny Espeset，原文件署名与链接保留 | **CC BY-NC-SA 3.0** |
+| `下雨的窗户` | Heartfelt，Martijn Steinrucken aka BigWings；附离线程序化城市纹理 | **CC BY-NC-SA 3.0** |
+| `赛车` | dathor / diatribes 等，原文件贡献者声明保留 | **CC BY-NC-SA 3.0** |
+| `我的世界` | Voxel Game，fb39ca4；内含噪声函数原许可声明保留 | **CC BY-NC-SA 3.0** |
+| `风中的树` | 原作者署名与组件许可声明见第三方清单 | **CC BY-NC-SA 3.0** |
 
-两个第三方作品是**按上游许可证收录的**（上游允许再分发），所以：
+第三方作品是**按上游许可证收录的**（上游允许再分发），所以：
 
 - **署名**：保留作者与许可证声明（文件头、`presets/index.json`、背景库里的红色 `CC BY-NC-SA` 标记）；
-- **非商业**：这两个 shader 不能用于商业用途。要把这个插件用于商业产品，请先删掉 `native-dist/presets/seascape.glsl`、`mario.glsl`、`mario-sound.glsl`（或只保留自写预设）；
+- **非商业**：这些第三方项目 不能用于商业用途。要把这个插件用于商业产品，请先删掉 `native-dist/presets/seascape.glsl`、`mario.glsl`、`mario-sound.glsl`及本轮新增的六个第三方项目目录（或只保留自写预设）；
 - **相同方式共享**：改过的版本再分发时仍要留在 CC BY-NC-SA 3.0 下。设置页「代码」里另存的「我的副本」同样受这个约束。
 
 其余从 ShaderToy 导入的作品（默认 CC BY-NC-SA 3.0，作者可另行声明）**只存在本机** `$DSH_HOME/shader-skin.json`，不会上传，也不会进包；想把自己的修改提交进仓库/随包分发，先确认许可证允许，并带上署名与相同的许可证。
@@ -268,6 +283,8 @@ npm run test:host        # Host 半路由 + 状态 v2 + 本地预设列表
 npm run test:renderer    # 真浏览器 WebGL2 渲染 + 设置页冒烟（需 playwright）
 npm run test:audio       # mainSound → readPixels → WebAudio 真实出声验证（需 playwright）
 npm run test:core        # 自动结束/重播、设置恢复、字号与鼠标隔离回归
+npm run test:project     # 项目整体审查、音频暂停、导出与文件边界
+npm run test:multi       # 多文件导入/编辑与六个新增内置项目的真实 WebGL 验证
 ```
 
 Windows 上已装 Edge 可以跳过浏览器下载：`PLAYWRIGHT_CHANNEL=msedge npm run test:renderer`。
@@ -294,7 +311,7 @@ native-dist/
   player.html         零依赖 WebGL2 播放器（渲染 + 滤镜 + mainSound 音频）
   panel.html          设置页（参数 / 背景库 / 代码，深浅色自适应）
   defaults.json       全部默认参数（改这里就改默认值）
-  presets/*.glsl      随包预设：3 个自写 MIT + 2 个第三方 CC BY-NC-SA 3.0（`seascape` / `mario`）
+  presets/*.glsl      随包预设：3 个自写 MIT + 8 个第三方 CC BY-NC-SA 3.0（`seascape` / `mario`）
   presets/dev/        测试夹具（不进 npm 包）
 locale/ icon.svg      插件管理器展示资源
 tools/                开发服务器 / 包检查 / 渲染冒烟 / 音频冒烟 / 实机检查
@@ -311,4 +328,4 @@ THIRD-PARTY-NOTICES.md  第三方作品的作者 / 来源 / 许可证清单
 
 ## License
 
-[MIT](LICENSE) 适用于插件代码与三个自写预设。**随包的两个第三方作品（`seascape` / `mario`）不是 MIT**，它们按上游的 [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/) 收录，署名见文件头与 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
+[MIT](LICENSE) 适用于插件代码与三个自写预设。**随包的第三方作品（`seascape` / `mario`）不是 MIT**，它们按上游的 [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/) 收录，署名见文件头与 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。

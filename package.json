@@ -1,6 +1,6 @@
 {
   "name": "dsh-shadertoy-skin",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Realtime ShaderToy background skin for DeepSeek Harness — a zero-runtime-dependency WebGL2 player, background library and glass UI integration.",
   "type": "module",
   "license": "MIT",
@@ -40,6 +40,9 @@
     "native-dist/player.html",
     "native-dist/panel.html",
     "native-dist/defaults.json",
+    "native-dist/project.js",
+    "native-dist/textures.js",
+    "native-dist/pipeline.js",
     "native-dist/presets/index.json",
     "native-dist/presets/aurora.glsl",
     "native-dist/presets/flow.glsl",
@@ -50,7 +53,29 @@
     "native-dist/presets/mario-sound.glsl",
     "README.md",
     "LICENSE",
-    "THIRD-PARTY-NOTICES.md"
+    "THIRD-PARTY-NOTICES.md",
+    "native-dist/presets/take-on-me/common.glsl",
+    "native-dist/presets/take-on-me/a.glsl",
+    "native-dist/presets/take-on-me/image.glsl",
+    "native-dist/presets/take-on-me/sound.glsl",
+    "native-dist/presets/never-gonna-give-you-up/common.glsl",
+    "native-dist/presets/never-gonna-give-you-up/image.glsl",
+    "native-dist/presets/never-gonna-give-you-up/sound.glsl",
+    "native-dist/presets/rain-window/image.glsl",
+    "native-dist/presets/racing/common.glsl",
+    "native-dist/presets/racing/a.glsl",
+    "native-dist/presets/racing/b.glsl",
+    "native-dist/presets/racing/image.glsl",
+    "native-dist/presets/racing/sound.glsl",
+    "native-dist/presets/voxel-world/a.glsl",
+    "native-dist/presets/voxel-world/b.glsl",
+    "native-dist/presets/voxel-world/c.glsl",
+    "native-dist/presets/voxel-world/d.glsl",
+    "native-dist/presets/voxel-world/image.glsl",
+    "native-dist/presets/tree-in-wind/common.glsl",
+    "native-dist/presets/tree-in-wind/a.glsl",
+    "native-dist/presets/tree-in-wind/b.glsl",
+    "native-dist/presets/tree-in-wind/image.glsl"
   ],
   "dsh": {
     "bundle": {
@@ -82,7 +107,9 @@
     "test:transparency": "node tools/unified-transparency-regression.mjs",
     "preview": "node tools/browser-harness.mjs 8735",
     "pack:check": "npm pack --dry-run --json",
-    "test:core": "node tools/core-regression.mjs"
+    "test:core": "node tools/core-regression.mjs",
+    "test:project": "node tools/project-audit-regression.mjs",
+    "test:multi": "node tools/multipass-regression.mjs"
   },
   "devDependencies": {
     "playwright": "^1.55.0"

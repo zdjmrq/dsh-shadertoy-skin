@@ -4,7 +4,7 @@ import { chromium } from 'playwright'
 import { startHarness } from './browser-harness.mjs'
 
 const harness = await startHarness()
-const output = new URL('../docs/verify/ui-refresh/', import.meta.url)
+const output = new URL('../.tmp-validation/verify/ui-refresh/', import.meta.url)
 await mkdir(output, { recursive: true })
 let browser
 try {
@@ -57,7 +57,9 @@ try {
 
   await frame.click('#tab-params')
   await frame.click('#preset-dd .dd-trigger')
-  await frame.press('#preset-dd .dd-trigger', 'End')
+  const marioIndex = (await frame.locator('#preset-dd .dd-item').allTextContents()).findIndex(text => text.includes('马里奥'))
+  await frame.press('#preset-dd .dd-trigger', 'Home')
+  for (let i = 0; i < marioIndex; i++) await frame.press('#preset-dd .dd-trigger', 'ArrowDown')
   await frame.press('#preset-dd .dd-trigger', 'Enter')
   await frame.waitForFunction(() => document.querySelector('#preset-dd .dd-trigger').textContent.includes('马里奥'))
   await frame.waitForFunction(() => !document.querySelector('#audio-mode-dd .dd-trigger').disabled)
@@ -122,7 +124,7 @@ try {
   await shot('editor-narrow')
   assert.deepEqual(errors, [])
   console.log('ok    390px settings / library / editor layouts and no uncaught errors')
-  console.log('UI regressions ok; screenshots in docs/verify/ui-refresh/')
+  console.log('UI regressions ok; screenshots in .tmp-validation/verify/ui-refresh/')
 } finally {
   await browser?.close()
   await harness.close()

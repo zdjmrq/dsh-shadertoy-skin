@@ -20,6 +20,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { normalizeCode, codeBytes, parseDocument as parseShaderDocument } from './native-dist/project.js'
 
 export const name = 'shadertoy-skin'
 export const inject = ['webServer']
@@ -59,39 +60,6 @@ const EMPTY_STATE = Object.freeze({
  * Best-effort reader for ShaderToy's exported JSON (also accepts our own shape).
  * Returns undefined when the file is not a usable shader document.
  */
-function parseShaderDocument(text) {
-  let raw
-  try {
-    raw = JSON.parse(text)
-  } catch {
-    return undefined
-  }
-  const shader = raw?.Shader ?? raw?.shader ?? raw
-  const passes = shader?.renderpass ?? shader?.passes
-  let image = ''
-  let sound = ''
-  let common = ''
-  if (Array.isArray(passes)) {
-    if (passes.some(pass => /^(buffer|cubemap)$/i.test(pass?.type) || pass?.inputs?.length)) return undefined
-    for (const pass of passes) {
-      const type = String(pass?.type ?? 'image').toLowerCase()
-      const source = typeof pass?.code === 'string' ? pass.code : ''
-      if (source === '') continue
-      if (type === 'common') common += `${source}\n`
-      else if (type === 'sound') sound = source
-      else if (type === 'image') image = source
-    }
-  }
-  if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
-  if (image === '' && typeof shader?.image === 'string') image = shader.image
-  if (image === '' && typeof raw?.image === 'string') image = raw.image
-  if (sound === '' && typeof shader?.code?.sound === 'string') sound = shader.code.sound
-  if (sound === '' && typeof shader?.sound === 'string') sound = shader.sound
-  if (image === '') return undefined
-  const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
-  return { image: common + image, sound: sound ? common + sound : undefined, name: name || undefined }
-}
-
 /** List the user-imported presets directory ($DSH_HOME/shader-skin/presets). */
 async function listLocalPresets() {
   let names
@@ -273,22 +241,26 @@ function sanitizeEntry(raw, index) {
     id: raw.id,
     name: typeof raw.name === 'string' && raw.name.trim() !== '' ? raw.name.slice(0, 120) : raw.id,
     source: ['paste', 'file', 'local', 'edit'].includes(raw.source) ? raw.source : 'paste',
-    code: { image: code.image },
+    code: normalizeCode(code),
   }
   if (typeof code.sound === 'string' && code.sound.trim() !== '') entry.code.sound = code.sound
   if (typeof raw.license === 'string') entry.license = raw.license.slice(0, 80)
   if (typeof raw.origin === 'string') entry.origin = raw.origin.slice(0, 300)
+  for (const key of ['author', 'sourceUrl', 'licenseUrl']) if (typeof raw[key] === 'string') entry[key] = raw[key].slice(0, 300)
   return entry
 }
 
 function sanitizeState(raw) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('state must be an object')
   if (raw.entries !== undefined && !Array.isArray(raw.entries)) throw new Error('entries must be an array')
+  for (const key of ['settings', 'overrides', 'params']) {
+    if (raw[key] !== undefined && (raw[key] === null || typeof raw[key] !== 'object' || Array.isArray(raw[key]))) throw new Error(`${key} must be an object`)
+  }
   const entries = (Array.isArray(raw.entries) ? raw.entries : []).map(sanitizeEntry)
   if (new Set(entries.map(entry => entry.id)).size !== entries.length) throw new Error('duplicate entry ids')
   if (entries.length > 200) throw new Error('too many entries (max 200)')
-  const codeBytes = entries.reduce((total, entry) => total + Buffer.byteLength(entry.code.image) + Buffer.byteLength(entry.code.sound ?? ''), 0)
-  if (codeBytes > 1_500_000) throw new Error('shader code too large (max 1.5 MB in total)')
+  const totalCodeBytes = entries.reduce((total, entry) => total + codeBytes(entry.code), 0)
+  if (totalCodeBytes > 1_500_000) throw new Error('shader code too large (max 1.5 MB in total)')
 
   const overrides = Object.create(null)
   if (raw.overrides !== null && typeof raw.overrides === 'object' && !Array.isArray(raw.overrides)) {
@@ -307,7 +279,7 @@ function sanitizeState(raw) {
 
   // Migrate appearance from the active artwork once. Explicit saved choices,
   // including opaque, survive upgrades; changing artwork no longer changes them.
-  const settings = Object.fromEntries(Object.entries(sanitizeParams(raw.settings ?? overrides[activeId])).filter(([key]) => GLOBAL_KEYS.has(key)))
+  const settings = Object.fromEntries(Object.entries(sanitizeParams({ ...overrides[activeId], ...raw.settings })).filter(([key]) => GLOBAL_KEYS.has(key)))
   return { version: 2, activeId, settings, overrides, entries, updatedAt: Date.now() }
 }
 
@@ -390,9 +362,11 @@ export async function handler(req, res) {
     return
   }
   if (pathname === ROUTE) pathname = `${ROUTE}/`
+  if (!pathname.startsWith(`${ROUTE}/`)) return fail(res, 404, 'not found')
   const suffix = pathname.slice(ROUTE.length)
 
   if (suffix === '/state') return handleState(req, res)
+  if (req.method !== 'GET' && req.method !== 'HEAD') return finish(res, 405, { allow: 'GET, HEAD' })
   if (suffix === '/health') {
     finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify({ ok: true, name, version: VERSION }))
     return

@@ -15,6 +15,7 @@ try {
   await page.waitForSelector('iframe[title="ShaderToy 背景设置"]')
   const frame = page.frames().find(frame => frame.url().includes('panel.html'))
   await frame.waitForSelector('#preset-dd .dd-trigger')
+  const builtinCount = await frame.locator('#lib-list .item').count()
   const player = () => page.frames().find(frame => frame.url().includes('player.html'))
   const running = async id => {
     await player().waitForFunction(id => {
@@ -85,7 +86,7 @@ try {
   await frame.click('#code-save')
   await frame.waitForFunction(() => document.querySelector('#code-note').textContent.includes('保存失败'))
   assert.equal(await frame.inputValue('#code-image'), draft)
-  assert.equal(await frame.locator('#lib-list .item').count(), 5)
+  assert.equal(await frame.locator('#lib-list .item').count(), builtinCount)
   console.log('ok    failed writes keep the draft, report failure and roll back the fork')
   await page.unroute('**/shader-skin/state', failWrites)
   await frame.click('#code-save')
@@ -110,17 +111,18 @@ try {
     { type: 'common', code: common }, { type: 'image', code: image },
     { type: 'sound', code: 'vec2 mainSound(float t) { return vec2(commonValue()); }' },
   ] })) })
-  await frame.waitForFunction(() => document.querySelectorAll('#lib-list .item').length === 7)
+  await frame.waitForFunction(count => document.querySelectorAll('#lib-list .item').length === count + 2, builtinCount)
   await frame.waitForFunction(() => document.querySelector('#note').textContent.includes('已保存'))
   const imported = JSON.parse(await readFile(join(harness.home, 'shader-skin.json'), 'utf8')).entries.at(-1)
-  assert.equal(imported.code.image, common + '\n' + image)
-  assert.ok(imported.code.sound.startsWith(common + '\n'))
-  console.log('ok    Common is prepended to Image and Sound instead of replacing Image')
+  assert.equal(imported.code.image, image)
+  assert.equal(imported.code.common.trim(), common)
+  assert.ok(imported.code.sound.includes('mainSound'))
+  console.log('ok    Common, Image and Sound are preserved as independently editable files')
 
-  await frame.setInputFiles('#file-input', { name: 'buffer.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ renderpass: [{ type: 'buffer', code: image }, { type: 'image', code: image }] })) })
+  await frame.setInputFiles('#file-input', { name: 'cubemap.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ renderpass: [{ type: 'cubemap', code: image }, { type: 'image', code: image }] })) })
   await frame.waitForFunction(() => document.querySelector('#note').textContent.includes('暂不支持'))
-  assert.equal(await frame.locator('#lib-list .item').count(), 7)
-  console.log('ok    unsupported Buffer imports show a clear error and do not add broken entries')
+  assert.equal(await frame.locator('#lib-list .item').count(), builtinCount + 2)
+  console.log('ok    unsupported Cubemap imports show a clear error and do not add broken entries')
 
   // An invalid shader must leave the previous GPU program rendering.
   const oldFrames = await player().evaluate(() => Number(/frames=(\d+)/.exec(document.querySelector('#diag').textContent)?.[1]))

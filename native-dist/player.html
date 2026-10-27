@@ -22,7 +22,9 @@
 <canvas id="c"></canvas>
 <pre id="err"></pre>
 <pre id="diag"></pre>
-<script>
+<script type="module">
+import { normalizeCode, sourceFor, loadBuiltin, parseDocument, BUFFER_IDS } from './project.js'
+import { createPipeline } from './pipeline.js'
 /* ShaderSkin player — zero-dependency WebGL2 ShaderToy-compatible runtime (M2).
  * Runs standalone (dev) or inside the skin iframe (parent = plugin client half).
  * Protocol (postMessage, same origin only):
@@ -87,6 +89,7 @@
     if (!next || typeof next !== 'object') return
     const resetProbe = ['loop', 'loopMode', 'speed', 'dim', 'tintMix', 'tint'].some(key => key in next && next[key] !== params[key])
     const wasPaused = params.paused
+    const wasAudible = targetGain() > 0
     if ('speed' in next) params.speed = clamp(next.speed, 0, 2, 1)
     if ('scale' in next) params.scale = clamp(next.scale, 0.25, 2, 1)
     if ('blur' in next) params.blur = clamp(next.blur, 0, 12, 0)
@@ -120,20 +123,14 @@
       if (params.paused) stopAudioScheduler('paused')
       else if (audio.program && audio.ctx && audio.ctx.state === 'running') startAudioScheduler()
     }
-    // Switching between "music loops" and "music plays once" while running:
-    // re-evaluate immediately instead of waiting for the next preset switch.
-    if (audioModeChanged && audio.program && audio.ctx && audio.ctx.state === 'running' && !params.paused) {
-      if (params.audioMode === 'once' && audio.time >= musicDuration()) {
-        stopAudioScheduler('once')
-        setAudioState('ended', 'music played once')
-      } else if (params.audioMode === 'loop' && audioLoopPeriod() > 0 && audio.time >= musicDuration()) {
-        // once → loop after the piece already ended: play it again from the top
-        audio.time = 0
-        audio.chunks = 0
-        if (!audio.running) startAudioScheduler()
-      } else if (!audio.running) {
-        startAudioScheduler()
-      }
+    // Rebuild queued samples from the audible cursor, not the producer clock.
+    // Otherwise a mode change can cut off the final lookahead or leak samples
+    // beyond a newly shortened duration.
+    const synthesisChanged = wasAudible !== (targetGain() > 0) && Number.isFinite(musicDuration())
+    if ((audioModeChanged || synthesisChanged) && audio.program && audio.ctx) {
+      stopAudioScheduler('reconfigure')
+      if (audioLoopPeriod() > 0 && audio.time >= musicDuration()) audio.time = 0
+      if (audio.ctx.state === 'running' && !params.paused) startAudioScheduler()
     }
     resize()
     if (resetProbe) resetDetection()
@@ -197,6 +194,8 @@
   })
   if (!gl) { diag.gl = 'none'; fail('context', 'getContext("webgl2") 返回 null。请确认显卡驱动 / 是否被远程桌面禁用。'); return }
   diag.gl = 'webgl2'
+  const viewportLimit = gl.getParameter(gl.MAX_VIEWPORT_DIMS)
+  const maxRenderSide = Math.min(8192, gl.getParameter(gl.MAX_TEXTURE_SIZE), viewportLimit[0], viewportLimit[1])
 
   const VBO = gl.createBuffer()
   gl.bindBuffer(gl.ARRAY_BUFFER, VBO)
@@ -219,7 +218,7 @@
   const KNOWN_EXTENSIONS = /^(GL_OES_standard_derivatives|GL_EXT_shader_texture_lod|GL_EXT_frag_depth|GL_EXT_shadow_samplers|GL_OES_EGL_image_external_essl3)$/
 
   function stripComments(src) {
-    return src.replace(/\/\*[\s\S]*?\*\//g, block => block.replace(/[^\n]/g, ' ')).replace(/\/\/[^\n]*/g, '')
+    return src.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, comment => comment.replace(/[^\n]/g, ' '))
   }
 
   // Split off directives that must live in the header; keep line count stable for error mapping.
@@ -259,37 +258,49 @@
   /** Build a compilable fragment shader from ShaderToy-style source.
    *  kind 'image' -> wraps mainImage(); kind 'sound' -> wraps mainSound() and packs
    *  stereo samples into RGBA8 (16 bit per channel) for readPixels + WebAudio. */
-  function assemble(rawSrc, es3, skip, kind = 'image') {
+  function assemble(rawSrc, es3, skip, kind = 'image', channels = []) {
+    rawSrc = rawSrc.replace(/^\uFEFF/, '')
     const { body, extensions } = splitDirectives(rawSrc)
-    const rewritten = es3 ? rewriteLegacyEs3(body) : body
+    let rewritten = es3 ? rewriteLegacyEs3(body) : body
     const analysis = stripComments(rewritten)
+    const ownMain = /\bvoid\s+main\s*\(\s*(?:void\s*)?\)\s*\{/.exec(analysis)
+    const ownOutput = es3 ? /\bout\s+(?:(?:lowp|mediump|highp)\s+)?vec4\s+([A-Za-z_]\w*)\s*;/.exec(analysis)?.[1] : null
+    const target = es3 ? ownOutput || 'st_out' : /\bgl_FragData\s*\[/.test(analysis) ? 'gl_FragData[0]' : 'gl_FragColor'
+    if (kind !== 'sound' && ownMain) {
+      const index = ownMain.index + ownMain[0].indexOf('main')
+      rewritten = rewritten.slice(0, index) + 'st_userMain' + rewritten.slice(index + 4)
+    }
 
     const defines = new Set()
     for (const m of analysis.matchAll(/#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)/g)) defines.add(m[1])
 
-    const has = name => new RegExp(`uniform\\s+[A-Za-z0-9_]+\\s+${name.replace(/\[.*$/, '')}\\b`).test(analysis)
+    const has = name => new RegExp(`uniform\\s+(?:(?:lowp|mediump|highp)\\s+)?[A-Za-z0-9_]+\\s+${name.replace(/\[.*$/, '')}\\b`).test(analysis)
 
     const header = []
     if (es3) header.push('#version 300 es')
     for (const ext of extensions) header.push(ext)
     header.push('precision highp float;', 'precision highp int;')
-    if (es3) header.push('out vec4 st_out;')
+    if (es3) header.push('precision highp sampler3D;')
+    if (es3 && !ownOutput) header.push('out vec4 st_out;')
     for (const [type, name] of UNIFORMS) {
       const base = name.replace(/\[.*$/, '')
       if (has(name) || defines.has(base) || skip.has(name)) continue
-      header.push(`uniform ${type} ${name};`)
+      const samplerType = /^iChannel[0-3]$/.test(name) && channels[Number(name.slice(-1))] === 'noise3d' ? 'sampler3D' : type
+      header.push(`uniform ${samplerType} ${name};`)
     }
     if (kind === 'image') for (const [type, name] of OWN_UNIFORMS) header.push(`uniform ${type} ${name};`)
 
-    const target = es3 ? 'st_out' : 'gl_FragColor'
     const tail = []
-    if (kind === 'image') {
-      if (/\bmainImage\s*\(/.test(analysis)) {
+    if (kind !== 'sound') {
+      if (ownMain) {
+        tail.push(`void main(){`, `  ${target} = vec4(0.0, 0.0, 0.0, 1.0);`, `  st_userMain();`,
+          ...(kind === 'image' ? [`  ${target}.rgb = mix(clamp(${target}.rgb, 0.0, 1.0) * uDim, uTint, uTintMix);`] : []), `}`)
+      } else if (/\bmainImage\s*\(/.test(analysis)) {
         tail.push(
           `void main(){`,
           `  vec4 c = vec4(0.0, 0.0, 0.0, 1.0);`,
           `  mainImage(c, gl_FragCoord.xy);`,
-          `  c.rgb = mix(clamp(c.rgb, 0.0, 1.0) * uDim, uTint, uTintMix);`,
+          ...(kind === 'image' ? [`  c.rgb = mix(clamp(c.rgb, 0.0, 1.0) * uDim, uTint, uTintMix);`] : []),
           `  ${target} = c;`,
           `}`,
         )
@@ -313,7 +324,7 @@
         `  return vec2(floor(n / 256.0), n - 256.0 * floor(n / 256.0)) / 255.0;`,
         `}`,
         `void main(){`,
-        `  float st_t = iTime + gl_FragCoord.x / iSampleRate;`,
+        `  float st_t = iTime + (gl_FragCoord.x - 0.5) / iSampleRate;`,
         // absolute sample index, wrapped well below int overflow for very long runs
         `  int st_samp = int(floor(mod(st_t * iSampleRate, 2147483000.0)));`,
         ...sample,
@@ -377,11 +388,11 @@
   let es3 = true
   let locs = Object.create(null)
 
-  function buildProgram(rawSrc) {
+  function buildProgram(rawSrc, channels = [], kind = 'image') {
     const skip = new Set()
     let lastError = ''
     for (let attempt = 0; attempt < 8; attempt++) {
-      const { source, headerLineCount } = assemble(rawSrc, true, skip)
+      const { source, headerLineCount } = assemble(rawSrc, true, skip, kind, channels)
       const result = tryLink(source, true)
       if (result.program) return { program: result.program, es3: true, source }
       lastError = remapLog(result.error, headerLineCount)
@@ -394,7 +405,7 @@
     }
     // Fallback: plain GLSL ES 1.00 (WebGL2 accepts both), original syntax untouched.
     if (q.get('noes1') === '1') return { error: lastError || 'unknown shader error' }
-    const { source, headerLineCount } = assemble(rawSrc, false, new Set())
+    const { source, headerLineCount } = assemble(rawSrc, false, new Set(), kind, channels)
     const result = tryLink(source, false)
     if (result.program) return { program: result.program, es3: false, source, note: 'es1-fallback' }
     const es1Error = remapLog(result.error, headerLineCount)
@@ -402,14 +413,14 @@
   }
 
   /** Sound pass: same preprocessing/fallback ladder, different wrapper. */
-  function buildSoundProgram(rawSrc) {
+  function buildSoundProgram(rawSrc, channels = []) {
     if (!/\bmainSound\s*\(/.test(stripComments(rawSrc))) {
       return { error: 'sound 代码里没有 vec2 mainSound(float time)' }
     }
     const skip = new Set()
     let lastError = ''
     for (let attempt = 0; attempt < 8; attempt++) {
-      const { source, headerLineCount } = assemble(rawSrc, true, skip, 'sound')
+      const { source, headerLineCount } = assemble(rawSrc, true, skip, 'sound', channels)
       const result = tryLink(source, true)
       if (result.program) return { program: result.program, es3: true, source }
       lastError = remapLog(result.error, headerLineCount)
@@ -420,7 +431,7 @@
       }
       break
     }
-    const { source, headerLineCount } = assemble(rawSrc, false, new Set(), 'sound')
+    const { source, headerLineCount } = assemble(rawSrc, false, new Set(), 'sound', channels)
     const result = tryLink(source, false)
     if (result.program) return { program: result.program, es3: false, source, note: 'es1-fallback' }
     const es1Error = remapLog(result.error, headerLineCount)
@@ -468,10 +479,12 @@
     time: 0,               // shader time at the next chunk start
     chunks: 0,             // scheduled chunk count
     scheduledUntil: 0,     // ctx.currentTime of the next chunk start
-    sources: new Set(), timer: 0, running: false,
+    sources: new Map(), timer: 0, running: false,
     state: 'none', reason: '',
     peak: 0, rms: 0,
   }
+  let pipeline = null
+  let projectRequest = 0
 
   // GLSL has no ended event. Only recognize an explicit duration annotation or
   // the simple terminal fade idiom; arbitrary GLSL is never evaluated as JS.
@@ -499,6 +512,16 @@
 
   function audioChunkSeconds() { return audio.chunkSize / (audio.sampleRate || 44100) }
 
+  // The producer clock includes prebuffer/lookahead. Resume at the first
+  // unplayed sample, including a loop seam, instead of skipping queued sound.
+  function audibleMusicTime() {
+    const now = audio.ctx?.currentTime ?? 0
+    for (const { when, start, duration } of audio.sources.values()) {
+      if (now < when + duration) return start + Math.max(0, now - when)
+    }
+    return audio.time
+  }
+
   function publishAudio() {
     audioStateLabel = audio.program ? `${audio.state}/${audio.chunks}` : 'none'
     if (typeof window.__player !== 'object' || window.__player === null) window.__player = {}
@@ -508,11 +531,13 @@
     p.es3 = es3
     p.preset = diag.preset
     p.frames = state.frame
+    p.project = pipeline ? { buffers: [...pipeline.buffers.keys()], textures: [...pipeline.textures.keys()], ...pipeline.stats() } : null
+    p.render = { fps: state.fps, submissionMs: state.drawMs, width: canvas.width, height: canvas.height }
     p.audio = {
       state: audio.state, sampleRate: audio.sampleRate, chunks: audio.chunks,
       chunkSize: audio.chunkSize, peak: audio.peak, rms: audio.rms, gain: targetGain(),
     }
-    p.playback = { time: state.time, frame: state.frame, duration: playback.duration, repeats: playback.repeats, mode: params.loopMode, musicDuration: Number.isFinite(musicDuration()) ? musicDuration() : null, musicTime: audio.time }
+    p.playback = { time: state.time, frame: state.frame, duration: playback.duration, repeats: playback.repeats, mode: params.loopMode, musicDuration: Number.isFinite(musicDuration()) ? musicDuration() : null, musicTime: audio.time, musicAudibleTime: audibleMusicTime() }
     if (AUDIOPROBE) window.__audioProbe = { peak: audio.peak, rms: audio.rms, chunks: audio.chunks }
   }
 
@@ -581,7 +606,10 @@
     audio.gain.gain.value = targetGain()
     ctx.onstatechange = () => {
       if (ctx.state === 'running') { if (audio.program) startAudioScheduler() }
-      else if (audio.program) setAudioState(ctx.state === 'suspended' ? 'suspended' : 'error', `context ${ctx.state}`)
+      else if (audio.program) {
+        stopAudioScheduler('context')
+        setAudioState(ctx.state === 'suspended' ? 'suspended' : 'error', `context ${ctx.state}`)
+      }
     }
     try { const p = ctx.resume(); if (p && typeof p.catch === 'function') p.catch(() => {}) } catch { /* blocked */ }
     // Autoplay policy may keep us suspended; that is a normal state, not an error.
@@ -624,9 +652,18 @@
    */
   function renderAudioChunk(startTime, chunkSeconds) {
     if (!audio.program || !audio.sampleRate) return false
+    // A known finite piece can keep its clock/looping while muted without
+    // evaluating thousands of expensive vocal/synth samples that nobody hears.
+    // Unknown durations still render so end-of-sound detection remains valid.
+    if (targetGain() === 0 && Number.isFinite(musicDuration())) {
+      audio.left.fill(0); audio.right.fill(0); audio.peak = 0; audio.rms = 0
+      return true
+    }
     if (!ensureAudioTarget()) return false
     const L = audio.locs
+    const dither = gl.isEnabled(gl.DITHER)
     try {
+      gl.disable(gl.DITHER) // byte packing must not be dithered like visual colour
       gl.bindFramebuffer(gl.FRAMEBUFFER, audio.fbo)
       gl.viewport(0, 0, AUDIO_CHUNK, 1)
       gl.useProgram(audio.program)
@@ -642,8 +679,9 @@
       if (L.iDate) { const d = nowDate(); gl.uniform4f(L.iDate, d[0], d[1], d[2], d[3]) }
       if (L.iSampleRate) gl.uniform1f(L.iSampleRate, audio.sampleRate)
       for (let i = 0; i < 4; i++) if (L[`iChannel${i}`]) gl.uniform1i(L[`iChannel${i}`], i)
-      if (L['iChannelResolution[4]']) gl.uniform3fv(L['iChannelResolution[4]'], new Float32Array(12))
-      if (L['iChannelTime[4]']) gl.uniform1fv(L['iChannelTime[4]'], new Float32Array(4))
+      if (L['iChannelResolution[4]']) gl.uniform3fv(L['iChannelResolution[4]'], zeroChannelResolution)
+      if (L['iChannelTime[4]']) gl.uniform1fv(L['iChannelTime[4]'], zeroChannelTime)
+      pipeline?.channels('sound', L, startTime)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
       gl.readPixels(0, 0, AUDIO_CHUNK, 1, gl.RGBA, gl.UNSIGNED_BYTE, audio.bytes)
     } catch (error) {
@@ -651,6 +689,7 @@
       return false
     } finally {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      if (dither) gl.enable(gl.DITHER)
     }
     const bytes = audio.bytes
     const perSample = chunkSeconds / AUDIO_CHUNK
@@ -684,7 +723,7 @@
     if (period > 0 && start >= period) start = start % period
     let duration = musicDuration()
     if (params.audioMode === 'once' && start >= duration) return false
-    if (!renderAudioChunk(start, chunkSeconds)) return false
+    if (!renderAudioChunk(start, chunkSeconds)) return abortAudioScheduler(audio.reason)
     if (params.audioDurationMode === 'auto' && !soundDuration) {
       // The encoded zero level has ~1/65535 quantization noise. Detect the raw
       // sound before the user's mute/volume gain; those must never end a song.
@@ -701,7 +740,7 @@
         // Start at sample zero, not silenceTime % the newly learned duration.
         start = 0
         duration = musicDuration()
-        if (!renderAudioChunk(start, chunkSeconds)) return false
+        if (!renderAudioChunk(start, chunkSeconds)) return abortAudioScheduler(audio.reason)
       }
     }
     // The speed control belongs to the image timeline. Sound chunks must remain
@@ -720,14 +759,19 @@
       source.connect(audio.gain)
       source.onended = () => audio.sources.delete(source)
       source.start(when)
-      audio.sources.add(source)
+      audio.sources.set(source, { when, start, duration: count / audio.sampleRate })
       audio.chunks++
       audio.scheduledUntil = when + count / audio.sampleRate
       return true
     } catch (error) {
-      setAudioState('error', `audio schedule: ${error.message}`)
-      return false
+      return abortAudioScheduler(`audio schedule: ${error.message}`)
     }
+  }
+
+  function abortAudioScheduler(reason) {
+    stopAudioScheduler('error')
+    setAudioState('error', reason)
+    return false
   }
 
   function startAudioScheduler() {
@@ -750,14 +794,15 @@
       if (!scheduleAudioChunk(audio.scheduledUntil)) break
     }
     if (audio.state !== 'error') setAudioState('running')
-    audio.timer = setInterval(tickAudio, AUDIO_TICK_MS)
+    if (audio.running) audio.timer = setInterval(tickAudio, AUDIO_TICK_MS)
     publishAudio()
   }
 
   function stopAudioScheduler(reason) {
+    if (!['switch', 'reset', 'once'].includes(reason)) audio.time = audibleMusicTime()
     if (audio.timer) { clearInterval(audio.timer); audio.timer = 0 }
     audio.running = false
-    for (const source of audio.sources) {
+    for (const source of audio.sources.keys()) {
       try { source.onended = null; source.stop() } catch { /* already stopped */ }
       try { source.disconnect() } catch { /* noop */ }
     }
@@ -766,6 +811,7 @@
     if (audio.program && reason !== 'switch' && reason !== 'reset' && reason !== 'once') {
       setAudioState('suspended', reason)
     }
+    publishAudio()
   }
 
   function tickAudio() {
@@ -810,7 +856,7 @@
     soundSeen = false
     soundLastSignal = 0
     if (typeof source !== 'string' || !source.trim()) { setAudioState('none'); publishAudio(); return false }
-    const built = buildSoundProgram(source)
+    const built = buildSoundProgram(source, pipeline?.code.channels?.sound)
     if (!built.program) {
       const detail = String(built.error).split('\n').filter(line => line.trim() !== '').slice(0, 3).join(' · ')
       console.warn('[shader-skin] sound compile error', built.error)
@@ -843,23 +889,6 @@
     publishAudio()
   }
 
-  async function loadSoundForEntry(entry, id) {
-    const candidates = []
-    if (entry && typeof entry.soundFile === 'string' && entry.soundFile.trim()) {
-      candidates.push(`presets/${entry.soundFile.trim()}`)
-    }
-    const convention = `presets/${id}-sound.glsl`
-    if (!candidates.includes(convention)) candidates.push(convention)
-    for (const url of candidates) {
-      try {
-        const code = await fetchText(url)
-        if (code && code.trim()) { setSound(code); return true }
-      } catch { /* 404 → try the next convention / treat as no sound */ }
-    }
-    setSound(null)
-    return false
-  }
-
   // ---------- state
 
   if (STANDALONE) window.__audioInternals = audio
@@ -878,6 +907,7 @@
     state.dt = 0
     playback.repeats++
     resetDetection()
+    pipeline?.clear()
   }
   function detectImageEnd(now) {
     if (!params.loop || params.loopMode !== 'auto' || playback.duration || params.speed === 0 || !program) return
@@ -935,11 +965,10 @@
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
     // 2× on a big window can ask for an 8k-wide drawing buffer; clamp each side to
     // the WebGL texture limit instead of letting the context fail.
-    const viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS)
-    const MAX_SIDE = Math.min(8192, gl.getParameter(gl.MAX_TEXTURE_SIZE), viewport[0], viewport[1])
-    const w = Math.min(MAX_SIDE, Math.max(1, Math.round((canvas.clientWidth || window.innerWidth) * dpr * params.scale)))
-    const h = Math.min(MAX_SIDE, Math.max(1, Math.round((canvas.clientHeight || window.innerHeight) * dpr * params.scale)))
+    const w = Math.min(maxRenderSide, Math.max(1, Math.round((canvas.clientWidth || window.innerWidth) * dpr * params.scale)))
+    const h = Math.min(maxRenderSide, Math.max(1, Math.round((canvas.clientHeight || window.innerHeight) * dpr * params.scale)))
     if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h; resetDetection() }
+    if (pipeline?.resize(w, h)) state.frame = 0
     diag.w = canvas.width
     diag.h = canvas.height
   }
@@ -952,17 +981,12 @@
     ]
   }
 
-  function draw() {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-    gl.viewport(0, 0, canvas.width, canvas.height)
-    if (DEBUG_BG) {
-      gl.clearColor(1, 0, 1, 1)
-      gl.clear(gl.COLOR_BUFFER_BIT)
-      return
-    }
-    if (!program) return
-    const t0 = performance.now()
-    gl.useProgram(program)
+  function drawPass(targetProgram, locations, fbo, width, height, role) {
+    const previousLocations = locs
+    locs = locations
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+    gl.viewport(0, 0, width, height)
+    gl.useProgram(targetProgram)
     gl.bindBuffer(gl.ARRAY_BUFFER, VBO)
     gl.enableVertexAttribArray(0)
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
@@ -970,25 +994,36 @@
       gl.activeTexture(gl.TEXTURE0 + i)
       gl.bindTexture(gl.TEXTURE_2D, blackTex)
     }
-    set3('iResolution', canvas.width, canvas.height, 1)
-    set1('iTime', state.time)
-    set1('iTimeDelta', state.dt)
-    set1i('iFrame', state.frame)
+    set3('iResolution', width, height, 1)
+    set1('iTime', state.time); set1('iTimeDelta', state.dt); set1i('iFrame', state.frame)
     for (let i = 0; i < 4; i++) set1i(`iChannel${i}`, i)
-    const mx = mouse.x, my = mouse.y
-    set4('iMouse',
-      mx, my,
-      mouse.down ? mouse.anchorX : -Math.abs(mouse.anchorX),
-      mouse.down ? mouse.anchorY : -Math.abs(mouse.anchorY))
+    const sx = width / canvas.width, sy = height / canvas.height
+    set4('iMouse', mouse.x * sx, mouse.y * sy, (mouse.down ? mouse.anchorX : -Math.abs(mouse.anchorX)) * sx, (mouse.down ? mouse.anchorY : -Math.abs(mouse.anchorY)) * sy)
     const date = nowDate()
-    set4('iDate', date[0], date[1], date[2], date[3])
+    set4('iDate', ...date)
     set1('iSampleRate', audio.sampleRate || 44100)
     if (locs['iChannelResolution[4]']) gl.uniform3fv(locs['iChannelResolution[4]'], zeroChannelResolution)
     if (locs['iChannelTime[4]']) gl.uniform1fv(locs['iChannelTime[4]'], zeroChannelTime)
-    set1('uDim', params.dim)
-    set3('uTint', TINT[0], TINT[1], TINT[2])
-    set1('uTintMix', params.tintMix)
+    pipeline?.channels(role, locs, state.time)
+    set1('uDim', role === 'image' ? params.dim : 1)
+    set3('uTint', ...TINT)
+    set1('uTintMix', role === 'image' ? params.tintMix : 0)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
+    locs = previousLocations
+  }
+
+  function draw() {
+    if (DEBUG_BG) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      gl.viewport(0, 0, canvas.width, canvas.height)
+      gl.clearColor(1, 0, 1, 1)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      return
+    }
+    if (!program) return
+    const t0 = performance.now()
+    pipeline?.render(state.time, drawPass)
+    drawPass(program, locs, null, canvas.width, canvas.height, 'image')
     state.drawMs = state.drawMs * 0.9 + (performance.now() - t0) * 0.1
   }
 
@@ -999,7 +1034,7 @@
     requestAnimationFrame(frame)
     if (params.paused || document.hidden) { state.last = now; return }
     if (now - lastFrameStamp < frameInterval - 1) return
-    const dt = state.last ? Math.min((now - state.last) / 1000, 0.1) : 0
+    const dt = state.last ? Math.min((now - state.last) / 1000, 1) : 0
     lastFrameStamp = now
     state.last = now
     state.dt = dt * Math.max(params.speed, 0)
@@ -1034,8 +1069,8 @@
 
   // ---------- shader loading
 
-  function setShader(source, presetName) {
-    const built = buildProgram(source)
+  function setShader(source, presetName, channels = []) {
+    const built = buildProgram(source, channels)
     if (!built.program) {
       fail('compile', built.error)
       return false
@@ -1049,7 +1084,7 @@
     diag.stage = 'running'
     errBox.classList.remove('open')
     errBox.textContent = ''
-    state.time = 0
+    state.time = STANDALONE ? clamp(q.get('time') ?? 0, 0, 86400, 0) : 0
     state.frame = 0
     state.last = 0
     playback.duration = sourceDuration(source, 'iTime')
@@ -1059,6 +1094,31 @@
     locs = collectLocations()
     report(`running · ${es3 ? 'es3' : 'es1'} · shader=${diag.preset}`)
     return true
+  }
+
+  async function setProject(rawCode, name) {
+    const request = ++projectRequest
+    state.pendingSound = true
+    let candidate
+    try {
+      const code = normalizeCode(rawCode)
+      candidate = await createPipeline(gl, code, (source, id) => {
+        const built = buildProgram(source, code.channels?.[id], 'buffer')
+        if (built.program) built.locs = collectLocations(built.program)
+        return built
+      })
+      if (request !== projectRequest) { candidate.dispose(); return false }
+      candidate.resize(canvas.width, canvas.height)
+      if (!setShader(sourceFor(code, 'image'), name, code.channels?.image)) { candidate.dispose(); return false }
+      pipeline?.dispose()
+      pipeline = candidate
+      setSound(sourceFor(code, 'sound'))
+      return true
+    } catch (error) {
+      candidate?.dispose()
+      if (request === projectRequest) fail('init', error.message)
+      return false
+    } finally { if (request === projectRequest) { state.pendingSound = false; publishAudio() } }
   }
 
   async function fetchText(url) {
@@ -1072,18 +1132,18 @@
     // from $DSH_HOME/shader-skin/presets (served by the Host / dev server at /local/)
     if (id.startsWith('local/')) {
       const file = id.slice('local/'.length)
-      return { entry: { id, name: file.replace(/\.[^.]+$/, '') }, source: await fetchText(`local/${file}`) }
+      const text = await fetchText(`local/${file}`)
+      const code = /\.json$/i.test(file) ? parseDocument(text) : { image: text, sound: /\bmainSound\s*\(/.test(text) ? text : undefined }
+      return { entry: { id, name: code?.name || file.replace(/\.[^.]+$/, '') }, code }
     }
     let list = []
     try { list = await (await fetch('presets/index.json', { cache: 'no-store' })).json() } catch { /* manifest optional */ }
     const hit = Array.isArray(list) ? list.find(item => item.id === id) : undefined
     if (hit) {
-      const source = await fetchText(`presets/${hit.file}`)
-      const sound = hit.soundFile ? await fetchText(`presets/${hit.soundFile}`).catch(() => undefined) : undefined
-      return { entry: hit, source, sound }
+      return { entry: hit, code: await loadBuiltin(hit, file => fetchText(`presets/${file}`)) }
     }
     // unknown id: try presets/<id>.glsl directly (dev fixtures), otherwise the first manifest entry
-    try { return { entry: { id, name: id }, source: await fetchText(`presets/${id}.glsl`) } } catch { /* not a fixture */ }
+    try { return { entry: { id, name: id }, code: { image: await fetchText(`presets/${id}.glsl`), sound: await fetchText(`presets/${id}-sound.glsl`).catch(() => undefined) } } } catch { /* not a fixture */ }
     const first = Array.isArray(list) ? list[0] : undefined
     if (first) throw new Error(`preset "${id}" not found (manifest has ${list.length} entries)`)
     throw new Error(`preset "${id}" not found and presets/index.json is unavailable`)
@@ -1123,7 +1183,7 @@
     else if (audio.program && !params.paused && audio.ctx && audio.ctx.state === 'running') startAudioScheduler()
   })
 
-  if (!STANDALONE) {
+  {
     window.addEventListener('message', event => {
       if (event.origin !== location.origin || event.source !== parent) return
       const message = event.data
@@ -1135,10 +1195,7 @@
             const preset = message.preset
             const image = preset.code?.image ?? preset.image
             if (typeof image === 'string' && image.trim()) {
-              if (setShader(image, preset.name || preset.id)) {
-                const sound = preset.code?.sound
-                setSound(typeof sound === 'string' && sound.trim() ? sound : null)
-              }
+              void setProject(preset.code ?? { image }, preset.name || preset.id)
             } else {
               fail('init', 'init 消息里没有 image 代码')
             }
@@ -1178,6 +1235,7 @@
           state.frame = 0
           state.last = 0
           resetDetection()
+          pipeline?.clear()
           if (audio.program) {
             stopAudioScheduler('reset')
             audio.time = 0
@@ -1189,8 +1247,13 @@
         default: break
       }
     })
-  } else {
+  }
+  if (STANDALONE) {
     bindPointer()
+    window.addEventListener('pointerdown', () => { if (audio.state === 'suspended') void resumeAudio() }, { passive: true })
+    window.addEventListener('keydown', event => { if (!event.repeat) pipeline?.key(event.keyCode, true); if (audio.state === 'suspended') void resumeAudio() })
+    window.addEventListener('keyup', event => pipeline?.key(event.keyCode, false))
+    window.addEventListener('blur', () => pipeline?.releaseKeys())
   }
 
   // ---------- boot
@@ -1228,13 +1291,8 @@
     // or a manifest `soundFile` entry. presets/index.json itself is never modified.
     state.pendingSound = true
     loadPreset(PRESET)
-      .then(async ({ entry, source }) => {
-        const presetId = entry.id || PRESET
-        if (setShader(source, entry.name || entry.id)) {
-          await loadSoundForEntry(entry, presetId)
-        } else {
-          setSound(null)
-        }
+      .then(async ({ entry, code }) => {
+        await setProject(code, entry.name || entry.id)
         state.pendingSound = false
         publishAudio()
       })

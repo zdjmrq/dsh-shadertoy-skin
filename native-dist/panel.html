@@ -361,6 +361,14 @@
   @media (max-width: 740px) { .wallpaper-preview { position: static; margin-top: 14px; } }
   @media (max-width: 540px) { body.mode-main .panel { padding-top: 22px; } .settings-card { padding: 18px; } .item .tools { width: 100%; justify-content: flex-end; } .settings-footer { align-items: stretch; flex-direction: column; } }
   @media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; } }
+  .project-filebar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:18px 0; }
+  .project-filebar [aria-selected=true] { border-color:var(--fg); font-weight:700; }
+  #project-tabs { display:flex; gap:5px; overflow-x:auto; max-width:100%; padding:4px 0; }
+  #project-tabs button { white-space:nowrap; }
+  #project-channels { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  #project-channels label { display:grid; gap:4px; min-width:130px; flex:1; font-size:12px; }
+  #project-channels select { max-width:100%; color:var(--fg); background:var(--field); color-scheme:inherit; }
+  #project-staging .form-row { gap:12px; }
 </style>
 </head>
 <body>
@@ -496,6 +504,14 @@
     </div>
 
     <div class="import-box">
+      <h2>导入多文件项目</h2>
+      <p class="note">选择整个文件夹，或一次选择项目的代码和图片。确认每个文件的角色后作为一个背景导入。</p>
+      <label>文件夹 <input type="file" id="project-folder" webkitdirectory multiple></label>
+      <label>多个文件 <input type="file" id="project-input" accept=".glsl,.txt,.json,.png,.jpg,.jpeg,.webp" multiple></label>
+      <div id="project-staging"></div>
+    </div>
+
+    <div class="import-box">
       <h2>从本地目录导入</h2>
       <div id="local-list"><p class="note">正在读取…</p></div>
     </div>
@@ -506,6 +522,9 @@
   <div id="view-code" hidden>
     <div class="head"><label>当前运行的作品</label><output id="code-title"></output></div>
     <div class="hint" id="code-hint">内置作品只读：保存会另存为「我的副本」并立刻运行。改动只存在本机。</div>
+    <div class="project-filebar"><div id="project-tabs" role="tablist" aria-label="项目文件"></div><button type="button" class="btn tiny" id="project-new">＋ 新建文件</button><button type="button" class="btn tiny" id="project-delete">删除文件</button></div>
+    <div class="project-filebar" id="project-new-form" hidden><input id="project-filename" type="text" aria-label="新文件名" placeholder="Common.glsl / Buffer A.glsl / helper.glsl"><button type="button" class="btn tiny" id="project-create">创建文件</button><button type="button" class="btn tiny" id="project-cancel">取消</button></div>
+    <div id="project-channels"></div>
 
     <div class="row">
       <div class="head"><label for="code-image">Image 代码</label><output id="code-image-info"></output></div>
@@ -519,6 +538,7 @@
       <div class="code-grip" data-code="code-sound" role="separator" aria-orientation="horizontal" aria-label="拖动调整 Sound 代码框高度（上下方向键也可以）" tabindex="0" title="拖动调整高度"></div>
     </div>
 
+    <div id="code-extra-files"></div>
     <div class="actions">
       <button class="btn primary" id="code-save" type="button">保存并运行</button>
       <button class="btn" id="code-revert" type="button">放弃修改</button>
@@ -527,7 +547,8 @@
   </div>
 </section>
 
-<script>
+<script type="module">
+import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER_IDS } from './project.js'
 (() => {
   'use strict'
   const STANDALONE = window.parent === window
@@ -554,9 +575,13 @@
   let stateConflict = false
   let pendingWrites = 0
   let recoveredState = false
+  let libraryBusy = false
   const JOURNAL_KEY = 'shadertoy-skin.pending-state'
   const journalOwner = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
   const snapshot = () => ({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides, settings: state.settings })
+  const validStateShape = value => value && typeof value === 'object' && !Array.isArray(value)
+    && (value.entries === undefined || Array.isArray(value.entries) && value.entries.every(entry => entry && typeof entry.id === 'string' && typeof entry.code?.image === 'string'))
+    && ['settings', 'overrides', 'params'].every(key => value[key] === undefined || value[key] && typeof value[key] === 'object' && !Array.isArray(value[key]))
   const rememberPending = () => {
     if (!stateLoaded || stateConflict) return
     try { localStorage.setItem(JOURNAL_KEY, JSON.stringify({ owner: journalOwner, etag: stateEtag, state: snapshot() })) } catch { /* optional recovery */ }
@@ -738,8 +763,14 @@
     }
     const activeId = state.activeId
     const body = JSON.stringify(snapshot())
+    const encoder = new TextEncoder()
+    if (encoder.encode(body).length > 2 * 1024 * 1024 || state.entries.reduce((sum, entry) => sum + codeBytes(entry.code), 0) > 1_500_000) {
+      setNote('配置超过 2 MB 或代码总量超过 1.5 MB，修改仍保留在当前页面，请缩小代码后重试。', true)
+      return Promise.resolve(false)
+    }
     rememberPending()
     const revision = ++saveRevision
+    setNote('正在保存…')
     let requestEtag
     pendingWrites++
     const result = saveQueue.then(() => {
@@ -748,7 +779,7 @@
       if (stateEtag) headers['if-match'] = stateEtag
       return fetch(`${BASE}/state`, { method: 'PUT', headers, body, keepalive: new TextEncoder().encode(body).length < 60000 })
     })
-      .then(response => {
+      .then(async response => {
         if (response.status === 409) stateConflict = true
         if (response.ok) stateEtag = response.headers.get('etag')
         if (response.ok) persistedActiveId = activeId
@@ -759,7 +790,8 @@
             else if (pending?.owner === journalOwner && pending.etag === requestEtag) { pending.etag = stateEtag; localStorage.setItem(JOURNAL_KEY, JSON.stringify(pending)) }
           } catch { /* recovery is best effort */ }
         }
-        if (revision === saveRevision) setNote(response.ok ? '已保存' : stateConflict ? '配置已在其他页面更新，请重新加载。' : `保存失败（HTTP ${response.status}），请重试。`, !response.ok)
+        const detail = response.ok ? '' : (await response.text()).slice(0, 180)
+        if (revision === saveRevision) setNote(response.ok ? '已保存' : stateConflict ? '配置已在其他页面更新，请重新加载。' : `保存失败（HTTP ${response.status}）：${detail}`, !response.ok)
         return response.ok
       }).finally(() => { pendingWrites-- })
       .catch(() => {
@@ -771,6 +803,7 @@
   }
 
   function scheduleSave() {
+    rememberPending()
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => { saveTimer = 0; void saveState() }, 320)
   }
@@ -790,7 +823,6 @@
       const retry = el('button', { type: 'button', className: 'btn tiny', textContent: !stateLoaded || stateConflict ? '重新加载' : '重试' })
       retry.addEventListener('click', () => {
         if (!stateLoaded || stateConflict) location.reload()
-        else if (!$('view-code').hidden) void saveCode()
         else void saveNow()
       })
       note.append(' ', retry)
@@ -805,7 +837,7 @@
   }
 
   async function setActive(id) {
-    if (!id) return false
+    if (!id || libraryBusy) return false
     const revision = ++activeRevision
     const previousId = state.activeId
     state.activeId = id
@@ -818,6 +850,7 @@
     if (revision !== activeRevision) return false
     if (!saved) {
       state.activeId = persistedActiveId ?? previousId
+      rememberPending()
       sync()
       renderLibrary()
       toParent({ type: 'preset', id: state.activeId })
@@ -1121,51 +1154,25 @@
   }
 
   // ------------------------------------------------------------- library UI
-  function parseShaderDocument(text) {
-    let raw
-    try { raw = JSON.parse(text) } catch { return undefined }
-    const shader = raw?.Shader ?? raw?.shader ?? raw
-    const passes = shader?.renderpass ?? shader?.passes
-    let image = ''
-    let sound = ''
-    let common = ''
-    if (Array.isArray(passes)) {
-      if (passes.some(pass => /^(buffer|cubemap)$/i.test(pass?.type) || pass?.inputs?.length)) throw new Error('暂不支持 Buffer、多通道纹理或 Cubemap 作品，请导入独立的 Image / Sound 代码。')
-      for (const pass of passes) {
-        const type = String(pass?.type ?? 'image').toLowerCase()
-        const source = typeof pass?.code === 'string' ? pass.code : ''
-        if (source === '') continue
-        if (type === 'common') common += `${source}\n`
-        else if (type === 'sound') sound = source
-        else if (type === 'image') image = source
-      }
-    }
-    if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
-    if (image === '' && typeof shader?.image === 'string') image = shader.image
-    if (image === '' && typeof raw?.image === 'string') image = raw.image
-    if (sound === '' && typeof shader?.code?.sound === 'string') sound = shader.code.sound
-    if (sound === '' && typeof shader?.sound === 'string') sound = shader.sound
-    if (image === '') return undefined
-    const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
-    return { image: common + image, sound: sound ? common + sound : undefined, name: name || undefined }
-  }
+  const parseShaderDocument = parseDocument
 
   const looksLikeImage = code => /\bmainImage\s*\(/.test(code) || /\bvoid\s+main\s*\(/.test(code)
   const looksLikeSound = code => /\bmainSound\s*\(/.test(code)
 
-  function addEntry({ name, image, sound, source, origin }) {
+  function addEntry({ name, image, sound, source, origin, ...metadata }) {
+    if (libraryBusy) throw new Error('背景库正在保存，请稍后重试')
     if (!stateLoaded || stateConflict) throw new Error('请先重新加载配置')
-    if (!looksLikeImage(image)) throw new Error('Image 代码里找不到 mainImage() 或 main()')
-    if (sound?.trim() && !looksLikeSound(sound)) throw new Error('Sound 代码里找不到 mainSound()')
     const id = `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
-    const entry = { id, name: (name || '我的背景').slice(0, 120), source: source || 'paste', code: { image } }
+    const entry = { id, name: (name || '我的背景').slice(0, 120), source: source || 'paste', code: normalizeCode({ image, sound, ...Object.fromEntries(['common', 'buffers', 'includes', 'assets', 'channels', 'duration', 'bufferSettings'].filter(key => key in metadata).map(key => [key, metadata[key]])) }) }
+    if (!looksLikeImage(sourceFor(entry.code, 'image'))) throw new Error('Image 代码里找不到 mainImage() 或 main()')
+    if (entry.code.sound && !looksLikeSound(sourceFor(entry.code, 'sound'))) throw new Error('Sound 代码里找不到 mainSound()')
     if (origin) entry.origin = origin
-    if (sound && looksLikeSound(sound)) entry.code.sound = sound
+    for (const key of ['license', 'author', 'sourceUrl', 'licenseUrl']) if (typeof metadata[key] === 'string') entry[key] = metadata[key].slice(0, key === 'license' ? 80 : 300)
     if (state.entries.length >= 200) throw new Error('背景库最多保存 200 个作品')
     const bytes = new TextEncoder()
-    const total = [...state.entries, entry].reduce((sum, item) => sum + bytes.encode(item.code.image).length + bytes.encode(item.code.sound || '').length, 0)
+    const total = [...state.entries, entry].reduce((sum, item) => sum + codeBytes(item.code), 0)
     if (total > 1_500_000) throw new Error('背景库代码总量超过 1.5 MB')
-    const payload = JSON.stringify({ version: 2, activeId: state.activeId, entries: [...state.entries, entry], overrides: state.overrides })
+    const payload = JSON.stringify({ ...snapshot(), entries: [...state.entries, entry] })
     if (bytes.encode(payload).length > 2 * 1024 * 1024) throw new Error('导入后配置大小超过 2 MB')
     state.entries.push(entry)
     scheduleSave()
@@ -1188,9 +1195,9 @@
       // Third-party presets must not look MIT: flag the licence on the row.
       const foreign = Boolean(row.license && row.license !== 'MIT')
       const licence = el('span', { className: 'badge nc' })
-      licence.textContent = foreign ? 'CC BY-NC-SA' : ''
+      licence.textContent = foreign ? row.license : ''
       licence.hidden = !foreign
-      licence.title = foreign ? `第三方作品：${row.license}（署名 / 非商业 / 相同方式共享），不是 MIT` : ''
+      licence.title = foreign ? `许可证：${row.license}` : ''
       const sound = el('span', { className: 'badge sound' })
       sound.textContent = row.sound ? '有声' : ''
       sound.hidden = !row.sound
@@ -1198,29 +1205,53 @@
       use.textContent = state.activeId === row.id ? '使用中' : '使用'
       use.addEventListener('click', () => setActive(row.id))
       const tools = el('div', { className: 'tools' }, use)
+      const download = el('button', { type: 'button', className: 'btn tiny', textContent: '导出' })
+      download.addEventListener('click', async () => {
+        download.disabled = true
+        try {
+          const preset = row.entry ?? builtinById(row.id)
+          const code = row.entry?.code ?? await loadBuiltin(preset, file => fetchText(`${BASE}/presets/${file}`))
+          const data = { name: row.name, code }
+          for (const key of ['license', 'author', 'origin', 'sourceUrl', 'licenseUrl']) if (typeof preset[key] === 'string') data[key] = preset[key]
+          const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }))
+          const link = el('a', { href: url, download: `shader-${row.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.json` })
+          document.body.append(link)
+          link.click()
+          link.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 30000)
+          setNote(`已导出「${row.name}」，可通过 JSON 文件重新导入。`)
+        } catch (error) { setNote(`导出失败：${error.message}`, true) }
+        finally { download.disabled = false }
+      })
+      tools.append(download)
       if (row.entry) {
         const rename = el('button', { type: 'button', className: 'btn tiny' })
         rename.textContent = '改名'
         rename.addEventListener('click', () => {
-          const next = window.prompt('新的名字', row.entry.name)
-          if (next === null) return
-          const trimmed = next.trim()
-          if (trimmed === '') return
-          row.entry.name = trimmed.slice(0, 120)
-          scheduleSave()
-          renderLibrary()
-          sync()
+          if (name.querySelector('input')) return
+          const input = el('input', { type: 'text', value: row.entry.name, maxLength: 120 })
+          input.setAttribute('aria-label', '新的背景名字')
+          const confirm = el('button', { type: 'button', className: 'btn tiny', textContent: '确认改名' })
+          const finish = () => { if (input.value.trim()) row.entry.name = input.value.trim().slice(0, 120); scheduleSave(); renderLibrary(); sync() }
+          confirm.addEventListener('click', finish)
+          input.addEventListener('keydown', event => { if (event.key === 'Enter') finish(); if (event.key === 'Escape') renderLibrary() })
+          name.replaceChildren(input, confirm); input.focus(); input.select()
         })
         const remove = el('button', { type: 'button', className: 'btn tiny danger' })
         remove.textContent = '删除'
         remove.addEventListener('click', async () => {
+          if (libraryBusy || codeSaving) return
           if (!window.confirm(`删除「${row.entry.name}」？此操作不可恢复。`)) return
+          libraryBusy = true
+          panel.inert = true
+          activeRevision++ // cancel an older activation waiting for its save
+          try {
           const previous = { entries: [...state.entries], overrides: { ...state.overrides }, activeId: state.activeId }
           const wasActive = state.activeId === row.id
           state.entries = state.entries.filter(item => item.id !== row.id)
           delete state.overrides[row.id]
           if (wasActive) state.activeId = manifest[0]?.id ?? null
-          if (!await saveNow()) { Object.assign(state, previous); renderLibrary(); sync(); return }
+          if (!await saveNow()) { Object.assign(state, previous); rememberPending(); renderLibrary(); sync(); return }
           if (wasActive) {
             toParent({ type: 'preset', id: state.activeId })
             toParent({ type: 'params', params: effective() })
@@ -1228,6 +1259,7 @@
           }
           renderLibrary()
           sync()
+          } finally { libraryBusy = false; panel.inert = false }
         })
         tools.append(rename, remove)
       }
@@ -1269,8 +1301,9 @@
           const text = await fetchText(`${BASE}/local/${encodeURIComponent(item.file)}`)
           const parsed = item.kind === 'shadertoy' ? parseShaderDocument(text) : { image: text, sound: looksLikeSound(text) ? text : undefined }
           if (!parsed) throw new Error('无法解析这个文件')
-          addEntry({ name: parsed.name || item.name, image: parsed.image, sound: parsed.sound, source: 'local', origin: item.file })
-          setNote(`已导入「${parsed.name || item.name}」，可在列表里使用。`)
+          addEntry({ ...parsed, name: parsed.name || item.name, source: 'local', origin: parsed.origin || item.file })
+          if (!await saveNow()) throw new Error('保存未完成，作品暂留在当前列表中，请重试保存')
+          setNote(`已导入「${parsed.name || item.name}」（已保存）。`)
         } catch (error) {
           setNote(`导入失败：${error.message}`, true)
         } finally {
@@ -1283,9 +1316,99 @@
   }
 
   function bindLibrary() {
-    $('paste-add').addEventListener('click', () => {
+    let stagedFiles = []
+    const roles = [['image', 'Image'], ['sound', 'Sound'], ['common', 'Common'], ...BUFFER_IDS.map(id => [id, `Buffer ${id}`]), ['include', 'Include 文件'], ['asset', '图片资源'], ['ignore', '不导入']]
+    const showStaging = () => {
+      const name = el('input', { id: 'project-name', type: 'text', value: $('project-name')?.value || stagedFiles[0]?.folder || '我的多文件背景' })
+      name.setAttribute('aria-label', '项目名字')
+      const resources = [['', '无输入'], ...stagedFiles.filter(file => BUFFER_IDS.includes(file.role)).map(file => [`buffer:${file.role}`, `Buffer ${file.role}`]), ...stagedFiles.filter(file => file.role === 'asset').map(file => [`asset:${file.name}`, file.name]), ['font', '字体'], ['noise', '2D 噪声'], ['noise3d', '3D 噪声'], ['scene', '窗外城市'], ['keyboard', '键盘（独立预览）']]
+      const rows = stagedFiles.map(file => {
+        const role = el('select')
+        role.setAttribute('aria-label', `${file.name} 文件角色`)
+        role.append(...roles.map(([value, textContent]) => el('option', { value, textContent })))
+        role.value = file.role
+        role.addEventListener('change', () => { file.role = role.value; showStaging() })
+        const row = el('div', { className: 'row' }, el('div', { className: 'head' }, el('label', { textContent: file.name }), role))
+        if (['image', 'sound', ...BUFFER_IDS].includes(file.role)) {
+          const inputs = el('div', { className: 'project-filebar' })
+          for (let i = 0; i < 4; i++) {
+            const select = el('select')
+            select.setAttribute('aria-label', `${file.name} iChannel${i}`)
+            select.append(...resources.map(([value, textContent]) => el('option', { value, textContent: `iChannel${i} · ${textContent}` })))
+            select.value = file.channels?.[i] ?? ''
+            select.addEventListener('change', () => { (file.channels ??= [null, null, null, null])[i] = select.value || null })
+            inputs.append(select)
+          }
+          row.append(inputs)
+        }
+        return row
+      })
+      const add = el('button', { type: 'button', className: 'btn primary', textContent: '作为一个项目导入并运行', id: 'project-import' })
+      add.addEventListener('click', async () => {
+        add.disabled = true
+        try {
+          const code = { image: '', buffers: {}, includes: {}, assets: {}, channels: {} }
+          const used = new Set()
+          for (const file of stagedFiles) {
+            if (file.role === 'ignore') continue
+            if (!['include', 'asset'].includes(file.role) && used.has(file.role)) throw new Error(`文件角色重复：${file.role}`)
+            used.add(file.role)
+            if (file.role === 'asset') code.assets[file.name] = file.text
+            else if (file.role === 'include') code.includes[file.name] = file.text
+            else if (BUFFER_IDS.includes(file.role)) code.buffers[file.role] = file.text
+            else code[file.role] = file.text
+            if (file.channels && ['image', 'sound', ...BUFFER_IDS].includes(file.role)) code.channels[file.role] = file.channels
+          }
+          const entry = addEntry({ ...normalizeCode(code), name: name.value.trim() || '我的多文件背景', source: 'file', license: stagedFiles.some(file => /CC BY-NC-SA 3\.0|Attribution-NonCommercial-ShareAlike 3\.0/.test(file.text)) ? 'CC BY-NC-SA 3.0' : undefined })
+          if (!await setActive(entry.id)) throw new Error('保存未完成，文件仍保留，请重试保存')
+          stagedFiles = []; $('project-staging').replaceChildren(); setTab('code')
+          setNote(`已导入「${entry.name}」（已保存）。`)
+        } catch (error) { setNote(`项目导入失败：${error.message}`, true) }
+        finally { add.disabled = false }
+      })
+      $('project-staging').replaceChildren(el('div', { className: 'form-row' }, el('label', { textContent: '项目名字' }), name), ...rows, add)
+    }
+    const stageProject = async event => {
+      try {
+        const files = [...event.target.files].filter(file => /\.(glsl|txt|png|jpe?g|webp)$/i.test(file.name))
+        event.target.value = ''
+        if (files.reduce((sum, file) => sum + file.size, 0) > 2 * 1024 * 1024 || files.length > 32) throw new Error('项目最多 32 个文件、总计 2 MB')
+        const names = new Set()
+        stagedFiles = []
+        for (const file of files.sort((a, b) => (Number(a.name.match(/\((\d+)\)/)?.[1]) || 1) - (Number(b.name.match(/\((\d+)\)/)?.[1]) || 1))) {
+          const name = file.webkitRelativePath?.split('/').slice(1).join('/') || file.name
+          if (names.has(name)) throw new Error(`文件重名：${name}`)
+          names.add(name)
+          const image = /\.(png|jpe?g|webp)$/i.test(file.name)
+          const text = image ? await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file) }) : await file.text()
+          const source = image ? '' : text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+          stagedFiles.push({ name, folder: file.webkitRelativePath?.split('/')[0], text, role: image ? 'asset' : /\bmainSound\s*\(/.test(source) ? 'sound' : /\bmainImage\s*\(|\bvoid\s+main\s*\(/.test(source) ? 'visual' : /^common/i.test(file.name) ? 'common' : 'include' })
+        }
+        const shared = stagedFiles.filter(file => file.role === 'include')
+        if (shared.length === 1 && !stagedFiles.some(file => file.text.includes(`#include "${shared[0].name}"`) || file.text.includes(`#include <${shared[0].name}>`))) shared[0].role = 'common'
+        const visuals = stagedFiles.filter(file => file.role === 'visual')
+        for (const [index, file] of visuals.entries()) file.role = index === visuals.length - 1 ? 'image' : BUFFER_IDS[index] || 'ignore'
+        for (const file of stagedFiles) {
+          if (!['image', 'sound', ...BUFFER_IDS].includes(file.role)) continue
+          file.channels = [null, null, null, null]
+          if (/\biChannel0\b/.test(file.text)) {
+            const buffers = stagedFiles.filter(item => BUFFER_IDS.includes(item.role))
+            if (buffers.length) file.channels[0] = `buffer:${file.role === 'image' ? buffers.at(-1).role : buffers.find(item => item.role !== file.role)?.role || file.role}`
+            else if (stagedFiles.some(item => item.role === 'asset')) file.channels[0] = `asset:${stagedFiles.find(item => item.role === 'asset').name}`
+          }
+          if (/\biChannel1\b/.test(file.text) && /font|glyph/i.test(file.text)) file.channels[1] = 'font'
+        }
+        if (!stagedFiles.length) throw new Error('没有可导入的代码或图片文件')
+        showStaging()
+      } catch (error) { setNote(`读取项目失败：${error.message}`, true) }
+    }
+    $('project-input').addEventListener('change', stageProject)
+    $('project-folder').addEventListener('change', stageProject)
+    $('paste-add').addEventListener('click', async () => {
       const error = $('paste-error')
       error.hidden = true
+      const input = { name: $('paste-name').value, image: $('paste-image').value, sound: $('paste-sound').value }
+      $('paste-add').disabled = true
       try {
         const entry = addEntry({
           name: $('paste-name').value.trim() || '我的背景',
@@ -1293,16 +1416,14 @@
           sound: $('paste-sound').value,
           source: 'paste',
         })
-        $('paste-name').value = ''
-        $('paste-image').value = ''
-        $('paste-sound').value = ''
+        if (!await setActive(entry.id)) throw new Error('保存未完成，输入内容已保留，请重试保存')
+        for (const key of ['name', 'image', 'sound']) if ($(`paste-${key}`).value === input[key]) $(`paste-${key}`).value = ''
         setTab('params')
-        void setActive(entry.id)
         setNote(`已加入「${entry.name}」。`)
       } catch (err) {
         error.textContent = err.message
         error.hidden = false
-      }
+      } finally { $('paste-add').disabled = false }
     })
 
     $('file-input').addEventListener('change', async event => {
@@ -1310,14 +1431,17 @@
       event.target.value = ''
       for (const file of files) {
         try {
+          if (file.size > 2 * 1024 * 1024) throw new Error('文件超过 2 MB')
           const text = await file.text()
           const parsed = /\.json$/i.test(file.name) ? parseShaderDocument(text) : { image: text, sound: looksLikeSound(text) ? text : undefined }
           if (!parsed) throw new Error('不是可识别的 ShaderToy JSON')
           addEntry({
+            ...parsed,
             name: parsed.name || file.name.replace(/\.[^.]+$/, ''),
-            image: parsed.image, sound: parsed.sound, source: 'file', origin: file.name,
+            source: 'file', origin: parsed.origin || file.name,
           })
-          setNote(`已导入「${parsed.name || file.name}」。`)
+          if (!await saveNow()) throw new Error('保存未完成，作品暂留在当前列表中，请重试保存')
+          setNote(`已导入「${parsed.name || file.name}」（已保存）。`)
         } catch (error) {
           setNote(`导入 ${file.name} 失败：${error.message}`, true)
         }
@@ -1331,6 +1455,76 @@
   let codeLoadToken = 0
   let codeLoadedId = null
   let codeBaseline = { image: '', sound: '' }
+  let codeExtras = {}, codeExtrasBaseline = '{}', selectedFile = 'all'
+  let decorateCodeArea, updateEditorPreferences
+  const clone = value => JSON.parse(JSON.stringify(value))
+  function readExtraCode() {
+    const extra = clone(codeExtras)
+    for (const area of document.querySelectorAll('[data-project-file]')) {
+      const [kind, ...rest] = area.dataset.projectFile.split(':')
+      if (kind === 'common') extra.common = area.value
+      else (extra[kind] ??= {})[rest.join(':')] = area.value
+    }
+    return extra
+  }
+  function renderProjectFiles() {
+    $('code-extra-files').replaceChildren()
+    const files = [{ key: 'image', label: 'Image.glsl', area: $('code-image') }, { key: 'sound', label: 'Sound.glsl', area: $('code-sound') }]
+    const extraFiles = [
+      ...(codeExtras.common !== undefined ? [{ key: 'common', label: 'Common.glsl', text: codeExtras.common }] : []),
+      ...Object.entries(codeExtras.buffers ?? {}).map(([id, text]) => ({ key: `buffers:${id}`, label: `Buffer ${id}.glsl`, text })),
+      ...Object.entries(codeExtras.includes ?? {}).map(([name, text]) => ({ key: `includes:${name}`, label: name, text })),
+    ]
+    for (const [index, file] of extraFiles.entries()) {
+      const id = `code-extra-${index}`
+      const area = el('textarea', { id, className: 'code-area', value: file.text, spellcheck: false, wrap: 'off' })
+      area.dataset.projectFile = file.key
+      area.dataset.fileLabel = file.label
+      const row = el('div', { className: 'row' }, el('div', { className: 'head' }, el('label', { textContent: file.label, htmlFor: id })), area,
+        el('div', { className: 'code-grip', tabIndex: 0 }))
+      const grip = row.querySelector('.code-grip')
+      grip.dataset.code = id; grip.setAttribute('role', 'separator'); grip.setAttribute('aria-label', `调整 ${file.label} 高度`)
+      $('code-extra-files').append(row)
+      decorateCodeArea?.(id)
+      area.addEventListener('input', () => { updateCodeInfo(); rememberDrafts() })
+      files.push({ ...file, area })
+    }
+    if (!files.some(file => file.key === selectedFile)) selectedFile = 'all'
+    const select = key => {
+      selectedFile = key
+      for (const file of files) file.area.closest('.code-card').hidden = key !== 'all' && key !== file.key
+      for (const button of $('project-tabs').children) button.setAttribute('aria-selected', String(button.dataset.file === key))
+      for (const button of $('project-tabs').children) button.tabIndex = button.dataset.file === key ? 0 : -1
+      $('project-delete').disabled = ['all', 'image'].includes(key)
+      renderChannels()
+    }
+    $('project-tabs').replaceChildren(...[{ key: 'all', label: '全部文件' }, ...files].map(file => {
+      const button = el('button', { type: 'button', className: 'btn tiny', role: 'tab', textContent: file.label })
+      button.dataset.file = file.key
+      button.addEventListener('click', () => select(file.key))
+      return button
+    }))
+    bindCodeGrips()
+    updateEditorPreferences?.()
+    select(selectedFile)
+  }
+  function renderChannels() {
+    const role = selectedFile === 'all' ? 'image' : selectedFile.startsWith('buffers:') ? selectedFile.slice(8) : selectedFile
+    if (!['image', 'sound', ...BUFFER_IDS].includes(role)) { $('project-channels').replaceChildren(); return }
+    const options = [['', '无输入'], ...Object.keys(codeExtras.buffers ?? {}).map(id => [`buffer:${id}`, `Buffer ${id}`]), ['font', '字体'], ['noise', '2D 噪声'], ['noise3d', '3D 噪声'], ['scene', '窗外城市'], ['keyboard', '键盘（独立预览）'], ...Object.keys(codeExtras.assets ?? {}).map(name => [`asset:${name}`, name])]
+    $('project-channels').replaceChildren(...Array.from({ length: 4 }, (_, index) => {
+      const select = el('select', { 'aria-label': `${role} iChannel${index}` })
+      select.setAttribute('aria-label', `${role} iChannel${index}`)
+      select.append(...options.map(([value, textContent]) => el('option', { value, textContent })))
+      select.value = codeExtras.channels?.[role]?.[index] ?? ''
+      select.addEventListener('change', () => {
+        codeExtras = readExtraCode()
+        ;((codeExtras.channels ??= {})[role] ??= [null, null, null, null])[index] = select.value || null
+        updateCodeInfo(); rememberDrafts()
+      })
+      return el('label', { textContent: `${role === 'image' ? 'Image' : role} · iChannel${index}` }, select)
+    }))
+  }
   let codeSaving = false
   const codeDrafts = new Map()
   const CODE_HEIGHTS_KEY = 'shadertoy-skin.codeHeights'
@@ -1338,8 +1532,8 @@
   const CODE_DRAFTS_KEY = 'shadertoy-skin.codeDrafts'
   function rememberDrafts() {
     if (codeLoadedId) {
-      const draft = { image: $('code-image').value, sound: $('code-sound').value }
-      if (draft.image !== codeBaseline.image || draft.sound !== codeBaseline.sound) codeDrafts.set(codeLoadedId, draft)
+      const draft = { image: $('code-image').value, sound: $('code-sound').value, project: readExtraCode() }
+      if (draft.image !== codeBaseline.image || draft.sound !== codeBaseline.sound || JSON.stringify(draft.project) !== codeExtrasBaseline) codeDrafts.set(codeLoadedId, draft)
       else codeDrafts.delete(codeLoadedId)
     }
     try { sessionStorage.setItem(CODE_DRAFTS_KEY, JSON.stringify([...codeDrafts])) } catch { /* storage full: current editor still holds the draft */ }
@@ -1369,9 +1563,7 @@
   }
 
   async function loadCode(discard = false) {
-    if (codeLoadedId && ($('code-image').value !== codeBaseline.image || $('code-sound').value !== codeBaseline.sound)) {
-      codeDrafts.set(codeLoadedId, { image: $('code-image').value, sound: $('code-sound').value })
-    }
+    rememberDrafts()
     if (discard) codeDrafts.delete(state.activeId)
     try { sessionStorage.setItem(CODE_DRAFTS_KEY, JSON.stringify([...codeDrafts])) } catch { /* optional recovery */ }
     const token = ++codeLoadToken
@@ -1382,30 +1574,27 @@
     let name = '没有选中作品'
     let image = ''
     let sound = ''
+    let fullCode = {}
     if (entry) {
       name = entry.name
-      image = entry.code?.image ?? ''
-      sound = entry.code?.sound ?? ''
+      fullCode = entry.code
     } else if (builtin) {
       name = builtin.name || builtin.id
-      try { image = await fetchText(`${BASE}/presets/${builtin.file}`) } catch {
+      try { fullCode = await loadBuiltin(builtin, file => fetchText(`${BASE}/presets/${file}`)) } catch {
         if (token === codeLoadToken) setCodeNote('代码读取失败，请重新打开代码页重试。', true)
         return
-      }
-      const soundFile = builtin.soundFile ?? `${builtin.id}-sound.glsl`
-      if (builtin.hasSound || builtin.soundFile) {
-        try { sound = await fetchText(`${BASE}/presets/${soundFile}`) } catch {
-          if (token === codeLoadToken) setCodeNote('声音代码读取失败，请重试。', true)
-          return
-        }
       }
     }
     if (token !== codeLoadToken || id !== state.activeId) return
     codeLoadedId = id
+    ;({ image = '', sound = '', ...codeExtras } = fullCode)
     codeBaseline = { image, sound }
+    codeExtrasBaseline = JSON.stringify(codeExtras)
     const draft = codeDrafts.get(id)
+    if (draft?.project) codeExtras = clone(draft.project)
     $('code-image').value = draft?.image ?? image
     $('code-sound').value = draft?.sound ?? sound
+    renderProjectFiles()
     $('code-title').textContent = name
     $('code-hint').textContent = editable ? '正在编辑 · 本地作品' : '内置作品只读 · 保存为副本'
     updateCodeInfo()
@@ -1414,10 +1603,10 @@
 
   function updateCodeInfo() {
     const image = $('code-image').value
-    const dirty = image !== codeBaseline.image || $('code-sound').value !== codeBaseline.sound
+    const dirty = image !== codeBaseline.image || $('code-sound').value !== codeBaseline.sound || JSON.stringify(readExtraCode()) !== codeExtrasBaseline
     $('code-image-info').textContent = `${image.split('\n').length} 行 · ${image.length} 字符${dirty ? ' · 未保存' : ''}`
     $('code-sound-info').textContent = $('code-sound').value.trim() ? 'mainSound' : ''
-    for (const id of ['code-image', 'code-sound']) {
+    for (const { id } of document.querySelectorAll('.code-area')) {
       const gutter = $(`${id}-lines`)
       if (gutter) gutter.textContent = Array.from({ length: $(id).value.split('\n').length }, (_, i) => i + 1).join('\n')
     }
@@ -1427,21 +1616,29 @@
     const note = $('code-note')
     note.textContent = text
     note.classList.toggle('error', isError)
+    if (isError && text.startsWith('保存失败')) {
+      const retry = el('button', { type: 'button', className: 'btn tiny', textContent: '重试保存代码' })
+      retry.addEventListener('click', () => { void saveCode() })
+      note.append(' ', retry)
+    }
   }
 
   async function saveCode() {
-    if (codeSaving) return
+    if (codeSaving || libraryBusy) return
     if (codeLoadedId !== state.activeId) {
       setCodeNote('作品正在加载或切换，请加载完成后再保存。', true)
       return
     }
     const image = $('code-image').value
     const sound = $('code-sound').value.trim()
-    if (!looksLikeImage(image)) {
+    let project
+    try { project = normalizeCode({ image, sound, ...readExtraCode() }); sourceFor(project, 'image'); sourceFor(project, 'sound') }
+    catch (error) { setCodeNote(`保存失败：${error.message}`, true); return }
+    if (!looksLikeImage(sourceFor(project, 'image'))) {
       setCodeNote('Image 代码里找不到 mainImage() 或 main()，没有保存。', true)
       return
     }
-    if (sound !== '' && !looksLikeSound(sound)) {
+    if (sound !== '' && !looksLikeSound(sourceFor(project, 'sound'))) {
       setCodeNote('Sound 代码里找不到 mainSound()（不需要就清空它）。', true)
       return
     }
@@ -1449,13 +1646,12 @@
     const builtin = builtinById(state.activeId)
     codeSaving = true
     $('code-save').disabled = true
+    setCodeNote('正在保存…')
     try {
       if (entry) {
         const previousCode = entry.code
         const previousSource = entry.source
-        entry.code = { ...(entry.code ?? {}), image }
-        if (sound !== '') entry.code.sound = sound
-        else delete entry.code.sound
+        entry.code = project
         entry.source = 'edit'
         sync()
         renderLibrary()
@@ -1470,6 +1666,7 @@
         toParent({ type: 'params', params: effective() })
         updateCodeInfo()
         codeBaseline = { image, sound }
+        codeExtrasBaseline = JSON.stringify(readExtraCode())
         updateCodeInfo()
         codeDrafts.delete(entry.id)
         rememberDrafts()
@@ -1481,8 +1678,8 @@
         return
       }
       // built-ins are read-only package files -> save the edit as a copy
-      const copy = addEntry({ name: `${builtin.name || builtin.id}（我的副本）`, image, sound, source: 'edit', origin: builtin.id })
-      if (builtin.license) copy.license = builtin.license
+      const copy = addEntry({ name: `${builtin.name || builtin.id}（我的副本）`, image, sound, ...readExtraCode(), source: 'edit', origin: builtin.id })
+      for (const key of ['license', 'author', 'sourceUrl', 'licenseUrl']) if (typeof builtin[key] === 'string') copy[key] = builtin[key]
       if (state.overrides[builtin.id]) state.overrides[copy.id] = { ...state.overrides[builtin.id] }
       if (!await setActive(copy.id)) {
         if (state.activeId !== builtin.id && state.activeId !== copy.id) return
@@ -1510,6 +1707,8 @@
   /** Visible drag grips under the code boxes (the native textarea resizer is off). */
   function bindCodeGrips() {
     for (const grip of document.querySelectorAll('.code-grip')) {
+      if (grip.dataset.bound) continue
+      grip.dataset.bound = 'true'
       const area = $(grip.dataset.code)
       if (!area) continue
       const minHeight = 160
@@ -1586,6 +1785,54 @@
 
   function bindCode() {
     buildCodeWorkspace()
+    $('project-new').addEventListener('click', () => {
+      $('project-new-form').hidden = false
+      $('project-filename').value = ''; $('project-filename').focus()
+    })
+    $('project-cancel').addEventListener('click', () => { $('project-new-form').hidden = true })
+    $('project-tabs').addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+      const buttons = [...$('project-tabs').children]
+      const current = buttons.indexOf(document.activeElement)
+      if (current < 0) return
+      event.preventDefault()
+      const index = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+      buttons[index].click(); buttons[index].focus()
+    })
+    $('project-filename').addEventListener('keydown', event => { if (event.key === 'Enter') $('project-create').click(); if (event.key === 'Escape') $('project-new-form').hidden = true })
+    $('project-create').addEventListener('click', () => {
+      if (!codeLoadedId || codeSaving) return
+      const name = $('project-filename').value.trim()
+      if (!name) return
+      codeExtras = readExtraCode()
+      if (/^(image|sound)(?:\.glsl)?$/i.test(name)) { selectedFile = name.toLowerCase().split('.')[0]; if (selectedFile === 'sound' && !$('code-sound').value.trim()) $('code-sound').value = 'vec2 mainSound(float time) { return vec2(0.0); }' }
+      else if (/^common(?:\.glsl)?$/i.test(name)) { if (codeExtras.common !== undefined) return; codeExtras.common = '// Shared declarations\n'; selectedFile = 'common' }
+      else if (/^buffer[ _-]?([a-d])(?:\.glsl)?$/i.test(name)) {
+        const id = name.match(/^buffer[ _-]?([a-d])/i)[1].toUpperCase()
+        if (codeExtras.buffers?.[id] !== undefined) return
+        ;(codeExtras.buffers ??= {})[id] = 'void mainImage(out vec4 color, in vec2 pixel) { color = vec4(0.0, 0.0, 0.0, 1.0); }'
+        selectedFile = `buffers:${id}`
+      } else {
+        try { normalizeCode({ image: $('code-image').value, includes: { [name]: '// Include\n' } }) } catch (error) { setCodeNote(error.message, true); return }
+        if (Object.hasOwn(codeExtras.includes ?? {}, name)) return
+        ;(codeExtras.includes ??= {})[name] = '// Include\n'; selectedFile = `includes:${name}`
+      }
+      renderProjectFiles(); updateCodeInfo(); rememberDrafts()
+      $('project-new-form').hidden = true
+    })
+    $('project-delete').addEventListener('click', () => {
+      if (['all', 'image'].includes(selectedFile) || !window.confirm('删除当前文件？保存并运行后生效。')) return
+      codeExtras = readExtraCode()
+      if (selectedFile === 'sound') $('code-sound').value = ''
+      else if (selectedFile === 'common') delete codeExtras.common
+      else {
+        const [kind, ...name] = selectedFile.split(':')
+        delete codeExtras[kind]?.[name.join(':')]
+        if (kind === 'buffers') delete codeExtras.bufferSettings?.[name[0]]
+        if (kind === 'buffers') for (const channels of Object.values(codeExtras.channels ?? {})) for (let i = 0; i < channels.length; i++) if (channels[i] === `buffer:${name[0]}`) channels[i] = null
+      }
+      selectedFile = 'all'; renderProjectFiles(); updateCodeInfo(); rememberDrafts()
+    })
     $('code-save').addEventListener('click', () => { void saveCode() })
     $('code-revert').addEventListener('click', () => {
       void loadCode(true).then(() => setCodeNote('已重新读取当前运行的作品。'))
@@ -1633,7 +1880,7 @@
       focused.removeAttribute('aria-modal')
       lastFocused?.focus({ preventScroll: true })
     }
-    for (const id of ['code-image', 'code-sound']) {
+    decorateCodeArea = id => {
       const area = $(id)
       const card = area.closest('.row')
       card.classList.add('code-card')
@@ -1644,7 +1891,8 @@
       collapse.setAttribute('aria-controls', `${id}-frame`)
       const focus = el('button', { type: 'button', className: 'btn tiny', textContent: '专注编辑' })
       focus.dataset.focus = id
-      focus.setAttribute('aria-label', `专注编辑 ${id === 'code-image' ? 'Image' : 'Sound'}`)
+      const fileLabel = area.dataset.fileLabel || (id === 'code-image' ? 'Image' : 'Sound')
+      focus.setAttribute('aria-label', `专注编辑 ${fileLabel}`)
       focus.setAttribute('aria-pressed', 'false')
       const save = el('button', { type: 'button', className: 'btn tiny primary editor-focus-save', textContent: '保存并运行' })
       save.addEventListener('click', () => $('code-save').click())
@@ -1672,7 +1920,7 @@
         card.classList.add('focused')
         card.setAttribute('role', 'dialog')
         card.setAttribute('aria-modal', 'true')
-        card.setAttribute('aria-label', id === 'code-image' ? 'Image 专注编辑' : 'Sound 专注编辑')
+        card.setAttribute('aria-label', `${fileLabel} 专注编辑`)
         document.body.classList.add('editor-focus')
         focus.textContent = '退出专注 · Esc'
         focus.setAttribute('aria-pressed', 'true')
@@ -1691,15 +1939,17 @@
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
       })
     }
+    for (const id of ['code-image', 'code-sound']) decorateCodeArea(id)
     const applyPreferences = () => {
       $('view-code').classList.toggle('wrap-code', wrap.checked)
-      for (const id of ['code-image', 'code-sound']) {
+      for (const { id } of document.querySelectorAll('.code-area')) {
         $(id).wrap = wrap.checked ? 'soft' : 'off'
         $(id).style.fontSize = `${size.value}px`
         $(`${id}-lines`).style.fontSize = `${size.value}px`
       }
       try { localStorage.setItem('shadertoy-skin.codeView', JSON.stringify({ wrap: wrap.checked, size: Number(size.value) })) } catch { /* optional preference */ }
     }
+    updateEditorPreferences = applyPreferences
     try {
       const saved = JSON.parse(localStorage.getItem('shadertoy-skin.codeView') || 'null')
       if (saved) { wrap.checked = saved.wrap === true; if ([12, 14, 16, 18, 20].includes(saved.size)) size.value = String(saved.size) }
@@ -1755,21 +2005,21 @@
         const response = await fetch(`${BASE}/state`, { cache: 'no-store' })
         if (!response.ok) throw new Error('state unavailable')
         const remote = await response.json()
-        if (!remote || typeof remote !== 'object' || (remote.entries !== undefined && !Array.isArray(remote.entries))) throw new Error('invalid state')
-        if (remote.entries?.some(entry => !entry || typeof entry.id !== 'string' || typeof entry.code?.image !== 'string')) throw new Error('invalid entries')
+        if (!validStateShape(remote)) throw new Error('invalid state')
         if (remote && typeof remote === 'object') {
           state.activeId = typeof remote.activeId === 'string' ? remote.activeId : null
           state.entries = Array.isArray(remote.entries) ? remote.entries : []
           if (remote.overrides && typeof remote.overrides === 'object') state.overrides = remote.overrides
           else if (remote.params && typeof remote.params === 'object' && state.activeId) state.overrides[state.activeId] = remote.params
           const legacy = state.overrides[state.activeId] ?? {}
-          state.settings = Object.fromEntries(GLOBAL_KEYS.filter(key => key in (remote.settings ?? legacy)).map(key => [key, (remote.settings ?? legacy)[key]]))
+          const preferences = { ...legacy, ...remote.settings }
+          state.settings = Object.fromEntries(GLOBAL_KEYS.filter(key => key in preferences).map(key => [key, preferences[key]]))
         }
         stateEtag = response.headers.get('etag')
         stateLoaded = true
         try {
           const pending = JSON.parse(localStorage.getItem(JOURNAL_KEY) || 'null')
-          if (pending?.state) {
+          if (validStateShape(pending?.state)) {
             const same = JSON.stringify(snapshot()) === JSON.stringify(pending.state)
             if (same) localStorage.removeItem(JOURNAL_KEY)
             else if (pending.etag === stateEtag) { Object.assign(state, pending.state); recoveredState = true }
@@ -1778,7 +2028,7 @@
         } catch { /* invalid recovery record */ }
       } catch { stateLoaded = false }
     }
-    if (!state.activeId) state.activeId = manifest[0]?.id ?? 'aurora'
+    if (!entryById(state.activeId) && !builtinById(state.activeId)) state.activeId = manifest[0]?.id ?? 'aurora'
     persistedActiveId = state.activeId
     arrangeSettings()
     bindParams()
