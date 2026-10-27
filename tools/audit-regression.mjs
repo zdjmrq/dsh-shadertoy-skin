@@ -46,9 +46,7 @@ try {
 
   await page.evaluate(() => document.body.removeAttribute('data-ds-dark-theme'))
   await getPlayer().waitForFunction(() => document.querySelector('#diag').textContent.includes('look=1.00/0.60'))
-  const lightLook = await getPlayer().evaluate(() => document.querySelector('canvas').getContext('webgl2').getUniform(
-    document.querySelector('canvas').getContext('webgl2').getParameter(document.querySelector('canvas').getContext('webgl2').CURRENT_PROGRAM),
-    document.querySelector('canvas').getContext('webgl2').getUniformLocation(document.querySelector('canvas').getContext('webgl2').getParameter(document.querySelector('canvas').getContext('webgl2').CURRENT_PROGRAM), 'uTint')))
+  const lightLook = await getPlayer().evaluate(() => window.__player.inspect('look'))
   assert.ok(lightLook[0] > .95 && lightLook[1] > .95)
   console.log('ok    switching to light mode updates the actual shader tint uniform')
 
@@ -147,16 +145,10 @@ try {
   console.log('ok    a failed initial state read never replaces the saved background library')
 
   const activePlayer = getPlayer()
-  const navigated = page.waitForEvent('framenavigated', {predicate:f => f === activePlayer})
-  await activePlayer.evaluate(() => {
-    const ext = document.querySelector('canvas').getContext('webgl2').getExtension('WEBGL_lose_context')
-    if (!ext) throw Error('WebGL context-loss fixture unavailable')
-    ext.loseContext()
-    setTimeout(() => ext.restoreContext(), 150)
-  })
-  await navigated
-  await getPlayer().waitForFunction(() => document.querySelector('#diag').textContent.includes('running'))
-  console.log('ok    simulated GPU context loss reloads and reinitializes the current background')
+  const beforeGeneration = await activePlayer.evaluate(() => window.__player.workerGeneration)
+  await activePlayer.evaluate(() => window.__player.inspect('lose-context'))
+  await activePlayer.waitForFunction(previous => window.__player?.ready && window.__player.workerGeneration > previous, beforeGeneration)
+  console.log('ok    simulated GPU context loss replaces and reinitializes the worker without navigating DSH')
   assert.deepEqual(errors, [])
   console.log('extended audit regressions ok')
 } finally { await browser?.close(); await h.close() }

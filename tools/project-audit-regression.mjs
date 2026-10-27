@@ -20,6 +20,7 @@ try {
     await page.waitForSelector('iframe[title="ShaderToy 背景设置"]')
     const panel = page.frames().find(frame => frame.url().includes('panel.html'))
     await panel.waitForSelector('#preset-dd .dd-trigger')
+    await page.frames().find(frame => frame.url().includes('player.html')).waitForFunction(() => window.__player?.ready)
     return panel
   }
   let panel = await load()
@@ -29,17 +30,7 @@ try {
     await post({ type: 'init', preset: { name, code: { image, sound } }, params: { loop: false, speed: 1, fps: 30, dim: 1, tint: '#000000', tintMix: 0, muted: true, audioMode: 'loop', audioDurationMode: 'auto', paused: false, ...params } })
     await player().waitForFunction(name => window.__player?.ready && window.__player.preset === name, name)
   }
-  const pixel = () => player().evaluate(() => new Promise(resolve => {
-    let remaining = 120
-    const sample = () => {
-    const gl = document.querySelector('canvas').getContext('webgl2')
-    const bytes = new Uint8Array(4)
-    gl.readPixels(1, 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, bytes)
-    if (bytes[0] || bytes[1] || bytes[2] || --remaining <= 0) resolve([...bytes])
-    else requestAnimationFrame(sample)
-    }
-    requestAnimationFrame(sample)
-  }))
+  const pixel = () => player().evaluate(() => window.__player.inspect('pixel'))
   for (const [name, source] of [
     ['legacy-main', '\uFEFF// void main() {}\nvoid main();\nvoid main(){gl_FragColor=vec4(1);}'],
     ['modern-main', '#version 300 es\nuniform highp float iTime;\nout vec4 color;\nvoid mainImage(out vec4 c,in vec2 p){c=vec4(1);}\nvoid main(void){mainImage(color,gl_FragCoord.xy);}'],
@@ -134,6 +125,13 @@ try {
   await panel.evaluate(() => localStorage.setItem('shadertoy-skin.pending-state', JSON.stringify({ etag: null, state: { entries: null } })))
   panel = await load()
   assert.equal(await panel.locator('#preset-dd .dd-trigger').count(), 1)
+  const unsafeBase = await browser.newPage()
+  const externalRequests = []
+  unsafeBase.on('request', request => { if (!request.url().startsWith(h.url)) externalRequests.push(request.url()) })
+  await unsafeBase.goto(`${h.url}/shader-skin/panel.html?mode=main&base=${encodeURIComponent('https://example.invalid')}`)
+  await unsafeBase.waitForSelector('#preset-dd .dd-trigger')
+  assert.deepEqual(externalRequests, [], 'base cannot redirect state or recovery writes to an external server')
+  await unsafeBase.close()
 
   // The dev preview now shares the production import/path guard, and cannot
   // accidentally read or overwrite the real profile's state by default.

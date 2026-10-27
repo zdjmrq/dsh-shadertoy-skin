@@ -38,6 +38,9 @@
     "locale/*.json",
     "icon.svg",
     "native-dist/player.html",
+    "native-dist/player-controller.js",
+    "native-dist/player-runtime.js",
+    "native-dist/render-worker.js",
     "native-dist/panel.html",
     "native-dist/defaults.json",
     "native-dist/project.js",
@@ -109,7 +112,8 @@
     "pack:check": "npm pack --dry-run --json",
     "test:core": "node tools/core-regression.mjs",
     "test:project": "node tools/project-audit-regression.mjs",
-    "test:multi": "node tools/multipass-regression.mjs"
+    "test:multi": "node tools/multipass-regression.mjs",
+    "test:worker": "node tools/worker-regression.mjs"
   },
   "devDependencies": {
     "playwright": "^1.55.0"

@@ -85,6 +85,8 @@ export async function createPipeline(gl, code, compile) {
         if (pass.mipmaps) gl.generateMipmap(gl.TEXTURE_2D)
         pass.front = next; pass.time = time
       }
+    },
+    endFrame() {
       const keyboard = textures.get('keyboard')
       if (keyboard) { keyboard.data.fill(0, 256 * 4, 512 * 4); keyboardDirty = true }
     },

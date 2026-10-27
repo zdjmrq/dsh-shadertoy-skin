@@ -40,9 +40,13 @@ jobs:
           node --check tools/core-regression.mjs
           node --check tools/project-audit-regression.mjs
           node --check tools/multipass-regression.mjs
+          node --check tools/worker-regression.mjs
           node --check native-dist/project.js
           node --check native-dist/pipeline.js
           node --check native-dist/textures.js
+          node --check native-dist/player-controller.js
+          node --check native-dist/player-runtime.js
+          node --check native-dist/render-worker.js
           node --check tools/panel-surfaces-regression.mjs
           node --check tools/unified-transparency-regression.mjs
       - name: Bundle checks (manifest, files, licence hygiene, npm pack content)
@@ -99,5 +103,10 @@ jobs:
 
       - name: Multi-file projects and bundled shaders
         run: npm run test:multi
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+
+      - name: Worker isolation and crash containment
+        run: npm run test:worker
         env:
           PLAYWRIGHT_CHANNEL: chrome

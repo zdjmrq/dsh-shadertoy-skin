@@ -20,6 +20,7 @@ assert.throws(() => normalizeCode({ image, assets: { x: 'https://example.com/pri
 assert.throws(() => normalizeCode({ image, includes: { '../escape': '' } }), /文件名/)
 assert.throws(() => sourceFor({ image: '#include "a.glsl"', includes: { 'a.glsl': '#include "a.glsl"' } }, 'image'), /循环/)
 assert.ok(codeBytes(parsed) > Buffer.byteLength(image))
+assert.equal(normalizeCode({ image: '\uFEFF' + image + '\r\n', common: common + '\r\n' }).common, common + '\n')
 console.log('ok    shared project format validates channels, file boundaries, include cycles and aggregate source bytes')
 
 const h = await startHarness()
@@ -43,6 +44,7 @@ try {
   await panel.fill('#project-name', 'Multi-file test')
   await panel.click('#project-import')
   await panel.waitForSelector('#project-tabs button[data-file="buffers:A"]')
+  assert.ok(!(await panel.textContent('#code-image-info')).includes('未保存'), 'freshly imported projects must start clean')
   await panel.click('#project-tabs button[data-file="common"]')
   await panel.locator('[data-project-file="common"]').fill('float sharedValue(){return .75;}')
   await panel.click('#project-tabs button[data-file="buffers:A"]')
@@ -64,6 +66,13 @@ try {
   await panel.waitForFunction(() => document.querySelector('#code-note').textContent.includes('已保存'))
   const updated = JSON.parse(await readFile(join(h.home, 'shader-skin.json'), 'utf8')).entries[0]
   assert.ok(updated.code.includes['helper.glsl'].includes('extraValue'))
+  await page.evaluate(() => document.querySelector('#shadertoy-skin-bg').contentWindow.postMessage({ type: 'init', preset: { name: 'packed-state', code: {
+    image: 'void mainImage(out vec4 c,in vec2 p){vec4 v=texelFetch(iChannel0,ivec2(0),0);bool ok=v.x==-2.&&v.y==4.&&v.w==-12345678.;c=ok?vec4(0,1,0,1):vec4(1,0,0,1);}',
+    buffers: { A: 'void mainImage(out vec4 c,in vec2 p){c=vec4(-2,4,16,-12345678.);}' }, channels: { image: ['buffer:A'] },
+  } }, params: { dim: 1, tintMix: 0 } }, location.origin))
+  await player.waitForFunction(() => window.__player?.preset === 'packed-state' && window.__player.ready)
+  const packedPixel = await player.evaluate(() => window.__player.inspect('pixel'))
+  assert.ok(packedPixel[0] < 5 && packedPixel[1] > 250, `float state must retain signed/HDR/24-bit values: ${packedPixel}`)
   assert.deepEqual(errors, [])
   console.log('ok    grouped file import, Common/Buffer tabs, channel wiring, file creation and saving reach the real player and disk')
   await page.close()
@@ -83,6 +92,7 @@ try {
     const info = await p.evaluate(() => window.__player)
     assert.equal(info.sound, item.hasSound, id)
     assert.equal(info.project.buffers.length, Object.keys(item.bufferFiles ?? {}).length, id)
+    if (id === 'take-on-me') assert.equal(info.project.passes[0].format, 'float32', 'packed depth needs all 24 mantissa bits')
     assert.ok(info.project.bufferBytes <= 96 * 1024 * 1024 + 1024, id)
     if (item.hasSound) assert.equal(info.audio.state, 'running', id)
     await p.screenshot({ path: join(shots, `${id}.png`) })
@@ -94,14 +104,7 @@ try {
       code.channels.image = ['buffer:A']
       await p.evaluate(code => window.postMessage({ type: 'init', preset: { name: 'voxel-state-check', code }, params: { speed: 1, dim: 1, tintMix: 0 } }, location.origin), code)
       await p.waitForFunction(() => window.__player.preset === 'voxel-state-check' && window.__player.frames > 10)
-      const value = await p.evaluate(() => new Promise(resolve => {
-        const read = () => {
-          const gl = document.querySelector('canvas').getContext('webgl2'), bytes = new Uint8Array(4)
-          gl.readPixels(10, 10, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, bytes)
-          if (bytes[0] || bytes[1]) resolve([...bytes]); else requestAnimationFrame(read)
-        }
-        requestAnimationFrame(read)
-      }))
+      const value = await p.evaluate(() => window.__player.inspect('pixel'))
       assert.ok(value[0] < 5 && value[1] > 250, `persistent position must stay finite and unclamped: ${value}`)
     }
     console.log(`ok    ${item.name}: ${info.project.buffers.length} buffers, sound=${info.sound}, ${(info.project.bufferBytes / 1048576).toFixed(1)} MB, ${Math.round(info.render.submissionMs)} ms submission`)

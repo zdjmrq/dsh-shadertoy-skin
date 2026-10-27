@@ -84,10 +84,10 @@ try {
   // --- renderer + settings page
   const player = await get('/shader-skin/player.html')
   check('player.html is served', player.status === 200 && String(player.headers.get('content-type')).includes('text/html'))
-  check('player.html has the runtime', (await player.text()).includes('ShaderSkin player'))
+  check('player.html has the runtime', (await player.text()).includes('player-controller.js'))
   check('player.html is not cached', /no-store/.test(String(player.headers.get('cache-control'))))
   const root = await get('/shader-skin/')
-  check('route root serves the player', root.status === 200 && (await root.text()).includes('ShaderSkin player'))
+  check('route root serves the player', root.status === 200 && (await root.text()).includes('player-controller.js'))
   const panel = await get('/shader-skin/panel.html')
   check('panel.html is served', panel.status === 200 && (await panel.text()).includes('Shader 背景'))
   const defaults = await json('/shader-skin/defaults.json')

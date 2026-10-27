@@ -76,7 +76,7 @@
     },
     "bufferSettings": {
       "A": {
-        "format": "float16",
+        "format": "float32",
         "filter": "linear",
         "mipmaps": false
       }

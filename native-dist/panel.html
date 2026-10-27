@@ -548,12 +548,13 @@
 </section>
 
 <script type="module">
-import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER_IDS } from './project.js'
+import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER_IDS, renderSize } from './project.js'
 (() => {
   'use strict'
   const STANDALONE = window.parent === window
   const query = new URLSearchParams(location.search)
-  const BASE = query.get('base') ?? '/shader-skin'
+  const requestedBase = query.get('base') ?? '/shader-skin'
+  const BASE = requestedBase === '' || /^\/(?!\/)/.test(requestedBase) && !/[\\?#\s]/.test(requestedBase) ? requestedBase.replace(/\/+$/, '') : '/shader-skin'
   const MODE = query.get('mode') === 'main' ? 'main' : 'popup'
   const $ = id => document.getElementById(id)
   const panel = $('panel')
@@ -1036,7 +1037,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     if (fpsDd) fpsDd.setValue(String(p.fps))
     if (panelsDd) panelsDd.setValue(p.panels ?? 'opaque')
     if (audioModeDd) audioModeDd.setValue(p.audioMode === 'once' ? 'once' : 'loop')
-    $('scale-hint').textContent = `实际渲染缓冲：${bufferSizeFor(p.scale)}（窗口 ${viewportBasePixels().cssW} × ${viewportBasePixels().cssH}，DPR 上限 1.5；换窗口大小这里的数字会跟着变）`
+    $('scale-hint').textContent = `实际渲染缓冲：${bufferSizeFor(p.scale)}（窗口 ${viewportBasePixels().cssW} × ${viewportBasePixels().cssH}，DPR 上限 1.5，总像素上限 800 万；换窗口大小这里的数字会跟着变）`
     $('preset-kind').textContent = state.activeId ? (entryById(state.activeId) ? '我的' : '内置') : ''
     for (const range of document.querySelectorAll('input[type=range]')) {
       range.style.setProperty('--range-fill', `${100 * (Number(range.value) - Number(range.min)) / (Number(range.max) - Number(range.min))}%`)
@@ -1063,7 +1064,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   function bufferSizeFor(scale) {
     const base = viewportBasePixels()
     const factor = Math.min(2, Math.max(0.25, Number(scale) || 1))
-    return `${Math.round(base.w * factor)} × ${Math.round(base.h * factor)}`
+    const size = renderSize(base.cssW, base.cssH, base.dpr, factor)
+    return `${size.width} × ${size.height}`
   }
 
   function scaleOptions() {
@@ -1577,7 +1579,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     let fullCode = {}
     if (entry) {
       name = entry.name
-      fullCode = entry.code
+      fullCode = normalizeCode(entry.code)
     } else if (builtin) {
       name = builtin.name || builtin.id
       try { fullCode = await loadBuiltin(builtin, file => fetchText(`${BASE}/presets/${file}`)) } catch {
@@ -1630,7 +1632,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       return
     }
     const image = $('code-image').value
-    const sound = $('code-sound').value.trim()
+    const sound = $('code-sound').value
     let project
     try { project = normalizeCode({ image, sound, ...readExtraCode() }); sourceFor(project, 'image'); sourceFor(project, 'sound') }
     catch (error) { setCodeNote(`保存失败：${error.message}`, true); return }
@@ -1638,7 +1640,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       setCodeNote('Image 代码里找不到 mainImage() 或 main()，没有保存。', true)
       return
     }
-    if (sound !== '' && !looksLikeSound(sourceFor(project, 'sound'))) {
+    if (project.sound && !looksLikeSound(sourceFor(project, 'sound'))) {
       setCodeNote('Sound 代码里找不到 mainSound()（不需要就清空它）。', true)
       return
     }

@@ -682,7 +682,7 @@ window.__ModuleLoader__.load({
           // ------------------------------------------------------------ sidebar entry
           //
           // Escape hatch: create `$DSH_HOME/shader-skin.safe` and reload the page to
-          // skip the sidebar entry / main panel entirely (background keeps working).
+          // skip rendering and settings entirely without changing saved preferences.
           // Useful while iterating on UI that lives inside #root.
           function registerSidebar() {
             const slots = service('slots')
@@ -769,6 +769,12 @@ window.__ModuleLoader__.load({
             await reloadState()
             if (disposed) return
             if (!store.activeId) store.activeId = FALLBACK_PRESET
+            const safeMode = await fetchJson(`${BASE}/safe-mode`).catch(() => ({ on: false }))
+            if (disposed) return
+            if (safeMode?.on === true) {
+              console.warn('[shadertoy-skin] safe mode: rendering and settings disabled ($DSH_HOME/shader-skin.safe exists)')
+              return
+            }
             booted = true
             syncEnabled()
             // Start the bounded checks first so a slow service never delays them.
@@ -777,17 +783,12 @@ window.__ModuleLoader__.load({
             // the glass, otherwise the overrides are lost for this whole page life.
             await waitForService('theme')
             applyGlass()
-            const safeMode = await fetchJson(`${BASE}/safe-mode`).catch(() => ({ on: false }))
-            if (safeMode?.on === true) {
-              console.warn('[shadertoy-skin] safe mode: sidebar entry disabled ($DSH_HOME/shader-skin.safe exists)')
-            } else {
-              sidebarAllowed = ENABLE_SIDEBAR_ENTRY
-              if (booted && !sidebarRegistered) {
-                await waitForService('slots')
-                if (disposed) return
-                try { sidebarRegistered = registerSidebar() } catch (error) { console.warn('[shadertoy-skin] sidebar registration skipped:', error) }
-                if (!sidebarRegistered) scheduleVerify()
-              }
+            sidebarAllowed = ENABLE_SIDEBAR_ENTRY
+            if (booted && !sidebarRegistered) {
+              await waitForService('slots')
+              if (disposed) return
+              try { sidebarRegistered = registerSidebar() } catch (error) { console.warn('[shadertoy-skin] sidebar registration skipped:', error) }
+              if (!sidebarRegistered) scheduleVerify()
             }
           })()
 

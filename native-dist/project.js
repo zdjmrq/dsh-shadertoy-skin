@@ -1,12 +1,13 @@
 // Shared project format for the Host, importer, editor and both player modes.
 export const BUFFER_IDS = ['A', 'B', 'C', 'D']
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+const sourceText = text => text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
 const safeName = name => typeof name === 'string' && name.length > 0 && name.length <= 160 && !/^(?:\/|[A-Za-z]:)|\\|(?:^|\/)\.\.?(?:\/|$)/.test(name) && !['__proto__', 'constructor', 'prototype'].includes(name)
 
 export function normalizeCode(raw) {
   if (!object(raw) || typeof raw.image !== 'string' || !raw.image.trim()) throw new Error('项目需要 Image 代码')
-  const code = { image: raw.image }
-  for (const role of ['sound', 'common']) if (typeof raw[role] === 'string' && raw[role].trim()) code[role] = raw[role]
+  const code = { image: sourceText(raw.image) }
+  for (const role of ['sound', 'common']) if (typeof raw[role] === 'string' && raw[role].trim()) code[role] = sourceText(raw[role])
   for (const key of ['buffers', 'includes', 'assets']) {
     if (raw[key] === undefined) continue
     if (!object(raw[key])) throw new Error(`${key} 必须是对象`)
@@ -17,7 +18,7 @@ export function normalizeCode(raw) {
       if (key === 'buffers' ? !BUFFER_IDS.includes(name) : !safeName(name)) throw new Error(`无效文件名：${name}`)
       if (typeof text !== 'string') throw new Error(`文件 ${name} 需要文本内容`)
       if (key === 'assets' && !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(text)) throw new Error(`图片 ${name} 需要内嵌 PNG / JPEG / WebP`)
-      code[key][name] = text
+      code[key][name] = key === 'assets' ? text : sourceText(text)
     }
   }
   if (raw.channels !== undefined) {
@@ -129,4 +130,13 @@ export function parseDocument(text) {
   if (!metadata.author && typeof shader.info?.username === 'string') metadata.author = shader.info.username
   const name = String(shader.info?.name ?? shader.name ?? '').trim()
   return { ...normalizeCode(code), name: name || undefined, ...metadata }
+}
+
+// Match the advertised resolution to the runtime budget on high-DPI displays.
+export function renderSize(cssWidth, cssHeight, dpr, scale, maxSide = 8192) {
+  let width = Math.min(maxSide, Math.max(1, Math.round(cssWidth * Math.min(dpr || 1, 1.5) * scale)))
+  let height = Math.min(maxSide, Math.max(1, Math.round(cssHeight * Math.min(dpr || 1, 1.5) * scale)))
+  const factor = Math.min(1, Math.sqrt(8 * 1024 * 1024 / (width * height)))
+  width = Math.max(1, Math.floor(width * factor)); height = Math.max(1, Math.floor(height * factor))
+  return { width, height }
 }

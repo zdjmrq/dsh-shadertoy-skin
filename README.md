@@ -118,7 +118,7 @@ $DSH_HOME/shader-skin/presets/        （Windows 默认 C:\Users\<你>\.dsh\shad
 | `brightness` | `100` (%) | 30–180 | 背景亮度（着色器输出乘数）。黄昏、夜景类作品看着太暗就调高 |
 | `panels` | `half` | opaque / half / clear | 不透明保留原生底色；半透明使用 `glass / 100`；透明移除表面底色（alpha 为 0）。新会话按钮、代码块顶部栏、输入框和插件设置页遵循同一规则 |
 | `blur` | `0` px | 0–12 | 只在 > 0 时启用 CSS `filter` |
-| `scale` | `1`× | 0.25 / 0.35 / 0.4 / 0.5 / 0.6 / 0.75 / 1 / 1.25 / 1.5 / 1.75 / 2 | 渲染分辨率倍率（DPR 上限 1.5）。下拉里**直接写实际分辨率**，例如 `1280 × 810（1×）`、`320 × 203（0.25×）`，窗口变大后这些数字会跟着刷新；显卡弱/想省电选 0.25–0.5×，追求锐利选 1.5–2× |
+| `scale` | `1`× | 0.25 / 0.35 / 0.4 / 0.5 / 0.6 / 0.75 / 1 / 1.25 / 1.5 / 1.75 / 2 | 渲染分辨率倍率（DPR 上限 1.5，总像素上限 800 万）。下拉里**直接写实际分辨率**，例如 `1280 × 810（1×）`、`320 × 203（0.25×）`，窗口变大后这些数字会跟着刷新；显卡弱/想省电选 0.25–0.5×，追求锐利选 1.5–2× |
 | `fps` | `30` | 15 / 20 / 30 / 60 | 渲染帧率上限；聊天时 30 足够 |
 | `speed` | `1`× | 0–2 | 时间轴倍速 |
 | `loop` / `loopMode` | `true` / `auto` | 开/关 · auto / manual | **自动画面循环**：优先识别代码中的结束淡出；否则低频检测动画停止变化，确认后重播。持续动画与初始静态画面保持播放。重播同时重置 `iTime` 和 `iFrame`，音乐独立运行 |
@@ -133,12 +133,18 @@ $DSH_HOME/shader-skin/presets/        （Windows 默认 C:\Users\<你>\.dsh\shad
 
 Shader 没有通用的“播完”事件，因此自动模式是一种保守判断：支持字面量 `1.0 - smoothstep(start, end, iTime)`（声音为 `time` / `t`）或代码首部的 `// @duration 60` 秒数声明；其他画面只在观测到动画后持续静止 5 个着色器秒、且运行至少 8 秒时重播。包含长暂停、很小区域变化或极慢变化的作品可能误判，音乐中间长静音也可能被当成结束；这类作品可关闭画面循环或切换指定周期 / 时长。自动画面检测只在 GPU 缩小后每秒读取两次 1 KB 像素。
 
+## 卡死与崩溃保护
+
+着色器编译、Buffer 渲染、自动结束检测和声音 GPU 采样全部在独立 Worker 中执行。渲染线程正常运行时每 500 毫秒报告心跳；编译最长允许 30 秒，运行中无响应 12 秒便终止线程和音频队列，并报告错误，可切换背景重试。后台冻结不计为超时。快速切换会取消旧编译，重复初始化合并；GPU 上下文恢复可重建一次，一分钟内再次崩溃则停止背景，避免无限重载。
+
+主画面上限为 800 万像素，离屏 Buffer 合计约 96 MiB；高分屏和高倍率超预算时按比例缩小。需支持 Worker、OffscreenCanvas 和 WebGL2 的浏览器。驱动/GPU 进程本身的故障仍受浏览器与系统约束，插件无法承诺任何 GLSL 都不会触发驱动异常。
+
 ## 状态
 
 渲染器、插件骨架、设置页、背景库、音频都已完成，剩下的是增强项：
 
 - [x] WebGL2 ShaderToy 兼容运行时：`mainImage` / 旧式 `void main` / GLSL ES 3.00 + ES 1.00 回落 / uniform 自动补齐 / 行号可读的编译错误
-- [x] 零依赖单文件播放器，`/shader-skin/player.html` 由 Host 半从磁盘实读（改代码刷新即可，无需重启）
+- [x] 零运行时依赖的 Worker 播放器，`/shader-skin/player.html` 由 Host 半从磁盘实读（改代码刷新即可，无需重启）
 - [x] Host 半：静态路由 + `$DSH_HOME/shader-skin.json` 原子状态存取 + `$DSH_HOME/shader-skin/presets/` 本地预设目录
 - [x] Client 半：把播放器挂成 body 首子节点、转发 iMouse / 主题 / 可见性，全部资源走 `ctx.effect` 清理
 - [x] 玻璃壳：外壳表面（AppFrame / 侧栏 / 页面容器）全透明，**暗色滤镜只由播放器画一层**（`tintMix`），不再靠多层半透明 token 叠出来（叠 N 层会把背景压到几乎全黑，旧版就栽在这）
@@ -189,7 +195,7 @@ dsh plugin --profile web add dsh-shadertoy-skin
 
 安装后左侧栏会多一行 **「Shader 背景」**，点开在主区域就是整页设置（参数 / 背景库）；默认背景是「极光」。升级到新版看下面「[更新](#更新)」。
 
-**开发期的安全阀**：如果界面出现卡死等异常，新建一个空文件 `$DSH_HOME/shader-skin.safe` 再刷新页面——客户端会跳过侧边栏入口与整页设置（只保留背景层），界面立刻可用；删掉该文件再重启即恢复。
+**开发期的安全阀**：如果界面出现卡死等异常，新建一个空文件 `$DSH_HOME/shader-skin.safe` 再刷新页面——客户端会跳过背景渲染、玻璃样式和设置入口，不修改已保存偏好；删掉该文件再重启即恢复。
 
 ## 更新
 
@@ -284,6 +290,7 @@ npm run test:renderer    # 真浏览器 WebGL2 渲染 + 设置页冒烟（需 pl
 npm run test:audio       # mainSound → readPixels → WebAudio 真实出声验证（需 playwright）
 npm run test:core        # 自动结束/重播、设置恢复、字号与鼠标隔离回归
 npm run test:project     # 项目整体审查、音频暂停、导出与文件边界
+npm run test:worker       # 线程卡死、超时恢复、GPU 熔断与安全模式
 npm run test:multi       # 多文件导入/编辑与六个新增内置项目的真实 WebGL 验证
 ```
 
@@ -308,7 +315,10 @@ index.js              Host 半：/shader-skin 路由 + 状态文件 + 本地预�
 client.js             Client 半：背景 iframe + 玻璃 token + 设置页注册 + 事件转发
 cordis.patch.yml      bundle patch（插入 shadertoy-skin 行）
 native-dist/
-  player.html         零依赖 WebGL2 播放器（渲染 + 滤镜 + mainSound 音频）
+  player.html         播放器页面与界面桥接
+  player-controller.js  Worker 生命周期、超时保护与 WebAudio 设备
+  render-worker.js      OffscreenCanvas 与声音桥接
+  player-runtime.js     WebGL2 渲染、滤镜、mainSound 合成与播放时钟
   panel.html          设置页（参数 / 背景库 / 代码，深浅色自适应）
   defaults.json       全部默认参数（改这里就改默认值）
   presets/*.glsl      随包预设：3 个自写 MIT + 8 个第三方 CC BY-NC-SA 3.0（`seascape` / `mario`）
