@@ -333,9 +333,7 @@
 
 <section class="panel" id="panel" role="dialog" aria-modal="false" aria-label="Shader 背景设置">
   <div class="page-head">
-    <div class="eyebrow">SHADERTOY / WORKSPACE</div>
     <h2>ShaderToy 背景</h2>
-    <p>为聊天空间调一张喜欢的背景。参数即时预览，自动保存在本机。</p>
   </div>
 
   <header>
@@ -363,19 +361,16 @@
     <div class="row">
       <div class="head"><label for="glass">玻璃不透明度</label><output id="glass-out"></output></div>
       <input type="range" id="glass" min="20" max="95" step="1">
-      <div class="hint">界面压住背景的程度：越高文字越清晰、背景越淡；越低背景越透亮。它只影响这一层暗色滤镜，不会叠出第二层。</div>
     </div>
 
     <div class="row">
       <div class="head"><label for="brightness">背景亮度</label><output id="brightness-out"></output></div>
       <input type="range" id="brightness" min="30" max="180" step="5">
-      <div class="hint">画面本身太暗（尤其是黄昏、夜景类着色器）就调高；过高会发白、过曝。</div>
     </div>
 
     <div class="row">
       <div class="head"><label>卡片 / 弹层</label><output id="panels-out"></output></div>
       <div id="panels-dd"></div>
-      <div class="hint">卡片、代码块、弹层、输入框的底色：不透明最清楚；半透明 / 透明让背景透出来（文字可读性会下降）。</div>
     </div>
 
     <div class="row">
@@ -392,7 +387,6 @@
     <div class="row">
       <div class="head"><label>帧率上限</label><output id="fps-out"></output></div>
       <div id="fps-dd"></div>
-      <div class="hint">聊天时 30fps 足够；60fps 更顺滑但更耗电</div>
     </div>
 
     <div class="row">
@@ -407,18 +401,15 @@
     <div class="row" id="loop-seconds-row">
       <div class="head"><label for="loop-seconds">循环周期</label><output id="loop-seconds-out"></output></div>
       <input type="range" id="loop-seconds" min="5" max="120" step="1">
-      <div class="hint">有的作品播一次就停住了：打开后每到「循环周期」就把画面时间轴（iTime）归零重播，适合一次性的开场动画。带淡入淡出的作品（比如马里奥）每轮会看到它重新淡入，这是着色器本身的效果，不是没循环。只重置画面，不影响声音。</div>
     </div>
 
     <div class="row" id="audio-mode-row">
       <div class="head"><label>音乐播放</label><output id="audio-mode-out"></output></div>
       <div id="audio-mode-dd"></div>
-      <div class="hint">ShaderToy 的音乐通常是一段有长度的曲子（放完就静音），所以「循环重放」要配合下面的「音乐时长」：每到这个时长就把音乐时间轴归零再来一遍，接缝处做了 40ms 淡入淡出。「只播一次」= 放完就停，画面继续常驻。</div>
     </div>
     <div class="row" id="audio-seconds-row">
       <div class="head"><label for="audio-seconds">音乐时长</label><output id="audio-seconds-out"></output></div>
       <input type="range" id="audio-seconds" min="10" max="600" step="5">
-      <div class="hint">这首曲子有多长：循环重放时按它从头再来，只播一次时按它停止。从切到这个背景开始计时；开「画面循环」也建议把它设成和循环周期一致的时长。</div>
     </div>
 
     <div class="row" id="volume-row">
