@@ -303,7 +303,7 @@
   .settings-footer { margin-top: 20px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .settings-footer .actions { margin: 0; }
   .settings-footer .note { margin: 0; }
-  #note { margin: -12px 0 20px; color: var(--muted); }
+  #note { position: fixed; right: 24px; bottom: 18px; z-index: 60; max-width: min(480px, calc(100vw - 40px)); margin: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface); box-shadow: var(--shadow); }
   #note:empty { display: none; }
   #note.error { color: var(--danger); }
   .item { padding: 14px 12px; margin-bottom: 8px; border: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
@@ -390,7 +390,7 @@
     </div>
 
     <div class="row">
-      <div class="head"><label for="speed">播放速度</label><output id="speed-out"></output></div>
+      <div class="head"><label for="speed">画面速度</label><output id="speed-out"></output></div>
       <input type="range" id="speed" min="0" max="2" step="0.05">
     </div>
 
