@@ -103,6 +103,13 @@ try {
       if (glass) assert.deepEqual(await backdropPixel(), [190, 75, 50])
       await page.evaluate(() => { document.querySelector('#main').style.background = '' })
       if (dark && mode === 'half') await screenshot('settings-dark-half')
+      if (!dark && mode === 'clear') {
+        await panel.fill('#glass', '20')
+        const player = page.frames().find(frame => frame.url().includes('player.html'))
+        await player.waitForFunction(() => document.querySelector('#diag').textContent.includes('/0.18'))
+        await screenshot('settings-light-clear')
+        await panel.fill('#glass', '60')
+      }
       await panel.click('#tab-library')
       assert.equal(await alpha('.import-box'), glass ? (mode === 'half' ? .6 : 0) : 1)
       assert.equal(await alpha('.item'), glass ? (mode === 'half' ? .6 : 0) : 1)
