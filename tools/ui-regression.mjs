@@ -16,6 +16,18 @@ try {
   await page.waitForSelector('iframe[title="ShaderToy 背景设置"]')
   const frame = page.frames().find(frame => frame.url().includes('panel.html'))
   await frame.waitForSelector('.settings-card')
+  const neutral = async () => {
+    const values = await frame.evaluate(() => ['--canvas','--surface','--accent'].map(name => getComputedStyle(document.documentElement).getPropertyValue(name).trim()))
+    for (const value of values) {
+      const raw = value.replace('#','')
+      const hex = raw.length === 3 ? [...raw].map(x => x+x).join('') : raw
+      const channels = [0,2,4].map(i => parseInt(hex.slice(i,i+2),16))
+      assert.ok(Math.max(...channels) - Math.min(...channels) <= 3, `native surfaces must stay neutral: ${value}`)
+    }
+  }
+  await neutral()
+  assert.equal(await frame.locator('.eyebrow').count(), 0)
+  assert.ok(!await frame.locator('#view-params').textContent().then(text => text.includes('界面压住背景的程度')))
   const shot = name => page.screenshot({ path: new URL(name + '.png', output).pathname.replace(/^\/([A-Za-z]:)/, '$1') })
   const noOverflow = async () => assert.ok(await frame.evaluate(() => document.body.scrollWidth <= innerWidth), 'page must not overflow horizontally')
   assert.equal(await frame.locator('.settings-card').count(), 4)
@@ -32,13 +44,14 @@ try {
 
   await page.evaluate(() => document.body.removeAttribute('data-ds-dark-theme'))
   await frame.waitForFunction(() => document.documentElement.dataset.theme === 'light')
+  await neutral()
   await shot('settings-light')
   await page.evaluate(() => document.body.setAttribute('data-ds-dark-theme', ''))
   await frame.waitForFunction(() => document.documentElement.dataset.theme === 'dark')
   await frame.focus('#tab-params')
   await page.keyboard.press('ArrowRight')
   assert.equal(await frame.getAttribute('#tab-library', 'aria-selected'), 'true')
-  assert.ok(await frame.locator('#note').isVisible(), 'status remains visible on the library tab')
+  assert.equal(await frame.locator('#note[role=status]').count(), 1, 'all tabs share an operational status region')
   await shot('library-dark')
   console.log('ok    parent theme changes and keyboard tab navigation')
 

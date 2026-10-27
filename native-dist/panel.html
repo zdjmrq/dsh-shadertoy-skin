@@ -892,11 +892,11 @@
     $('muted').checked = p.muted === true
     $('volume-hint').textContent = sound
       ? (p.muted ? '已静音'
-        : audioState === 'running' ? '有声播放中'
-          : audioState === 'suspended' ? '浏览器拦截了自动播放：点「开声音」，或点一下界面任意位置解锁'
-            : audioState === 'ended' ? '音乐已播完（「只播一次」），画面照常'
-              : '该作品带声音')
-      : '这个背景没有声音代码'
+        : audioState === 'running' ? '播放中'
+          : audioState === 'suspended' ? '点击「开声音」播放'
+            : audioState === 'ended' ? '已播完'
+              : '')
+      : '无声音'
     $('audio').hidden = !(sound && audioState === 'suspended')
     if (presetDd) presetDd.setOptions(presetOptions(), state.activeId ?? '')
     if (scaleDd) scaleDd.setValue(String(p.scale))
