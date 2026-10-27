@@ -217,6 +217,64 @@
   .form-row label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
   .local-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
   .local-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Settings are a reading surface even when the wallpaper is bright or busy. */
+  :root { --surface: #fff; --canvas: #f3f5fa; --muted: #526078; --faint: #647086; --field: #f4f6fa; --field-hover: #e9edf5; --line: #dbe1ec; }
+  html[data-theme="dark"] { --surface: #1a2230; --canvas: #111722; --muted: #b2bed1; --faint: #98a7bd; --field: #121a27; --field-hover: #253247; --line: #344156; }
+  body { font-size: 13px; line-height: 1.6; }
+  body.mode-main { background: var(--canvas); }
+  body.mode-main .panel, body.mode-main .panel.wide { max-width: 1140px; padding: 32px clamp(16px, 4vw, 48px) 48px; }
+  body.mode-main .page-head { margin-bottom: 24px; }
+  .page-head .eyebrow { color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .16em; margin-bottom: 6px; }
+  body.mode-main .page-head h2 { font-size: 25px; letter-spacing: -.03em; margin-bottom: 8px; }
+  body.mode-main .page-head p { color: var(--muted); font-size: 13px; }
+  body.mode-main .tabs { max-width: none; width: fit-content; min-width: min(100%, 320px); margin: 0 0 24px; padding: 4px; border: 1px solid var(--line); background: var(--field); }
+  .tabs button { padding: 9px 22px; font-size: 13px; letter-spacing: 0; white-space: nowrap; }
+  body.mode-main .tabs button.active { background: var(--surface); color: var(--accent); box-shadow: 0 1px 4px #0001; }
+  button, input, textarea { transition: border-color .15s, background-color .15s; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .settings-grid { display: grid; gap: 18px; align-items: start; }
+  body.mode-main .sub { max-width: none; }
+  .settings-card { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+  .settings-card h3 { margin: 0; font-size: 15px; font-weight: 650; }
+  .settings-card > p { margin: 4px 0 20px; color: var(--faint); font-size: 12px; }
+  .settings-card .row { margin-top: 20px; }
+  .settings-card .row.switch { padding: 0 0 14px; border-bottom: 1px solid var(--line); }
+  .head label, .form-row label, .lib-head span { font-size: 13px; letter-spacing: 0; color: var(--muted); }
+  .head output { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .hint, .note { font-size: 12px; color: var(--faint); line-height: 1.7; }
+  .hint { margin-top: 8px; }
+  .dd-trigger, input[type=text], input[type=file] { min-height: 40px; padding: 9px 12px; font-size: 13px; }
+  .dd-trigger { gap: 16px; }
+  .dd-trigger::after { flex: 0 0 6px; }
+  .dd-item { padding: 9px 10px; font-size: 13px; }
+  .dd-menu { max-height: min(280px, 45vh); }
+  input[type=range] { height: 28px; }
+  input[type=range]::-webkit-slider-runnable-track { height: 5px; background: linear-gradient(to right, var(--accent) var(--range-fill, 0%), var(--line) var(--range-fill, 0%)); }
+  input[type=range]::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -6.5px; border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--accent); }
+  .switch input { appearance: none; position: relative; width: 36px; height: 22px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--field-hover); }
+  .switch input::after { content: ''; position: absolute; width: 16px; height: 16px; top: 2px; left: 2px; border-radius: 50%; background: var(--muted); transition: transform .15s; }
+  .switch input:checked { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked::after { transform: translateX(14px); background: var(--canvas); }
+  .dim { opacity: .6; }
+  .btn { min-height: 38px; padding: 8px 14px; font-size: 13px; }
+  .btn.primary { background: var(--accent); color: var(--canvas); font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .settings-footer { margin-top: 20px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .settings-footer .actions { margin: 0; }
+  .settings-footer .note { margin: 0; }
+  .item { padding: 14px 12px; margin-bottom: 8px; border: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+  .item .name { flex-basis: 160px; font-weight: 600; }
+  .item .badge { font-size: 10px; padding: 2px 7px; }
+  .btn.tiny { min-height: 30px; font-size: 12px; padding: 4px 10px; }
+  .import-box { background: var(--surface); border-style: solid; border-radius: 14px; padding: 20px; margin-top: 18px; }
+  .import-box h2 { font-size: 14px; letter-spacing: 0; color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
+  .local-item { padding: 8px 0; }
+  .note.error, .hint.error { color: var(--danger); }
+  [hidden] { display: none !important; }
+  @media (min-width: 860px) { body.mode-main .settings-grid { grid-template-columns: 1.15fr 1fr; } .settings-card.appearance { grid-row: span 2; } }
+  @media (max-width: 540px) { body.mode-main .panel { padding-top: 22px; } .settings-card { padding: 18px; } .item .tools { width: 100%; justify-content: flex-end; } .settings-footer { align-items: stretch; flex-direction: column; } }
+  @media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; } }
 </style>
 </head>
 <body>
@@ -230,8 +288,9 @@
 
 <section class="panel" id="panel" role="dialog" aria-modal="false" aria-label="Shader 背景设置">
   <div class="page-head">
+    <div class="eyebrow">SHADERTOY / WORKSPACE</div>
     <h2>ShaderToy 背景</h2>
-    <p>用实时着色器当聊天背景。改动即时生效，并自动保存到本机（<code>$DSH_HOME/shader-skin.json</code>）。</p>
+    <p>为聊天空间调一张喜欢的背景。参数即时预览，自动保存在本机。</p>
   </div>
 
   <header>
@@ -638,6 +697,10 @@
     $('view-params').hidden = next !== 'params'
     $('view-library').hidden = next !== 'library'
     $('view-code').hidden = next !== 'code'
+    for (const name of ['params', 'library', 'code']) {
+      $(`tab-${name}`).setAttribute('aria-selected', String(name === next))
+      $(`tab-${name}`).tabIndex = name === next ? 0 : -1
+    }
     panel.classList.toggle('wide', next === 'library')
     if (next === 'library') void loadLocalPresets()
     if (next === 'code') void loadCode()
@@ -645,6 +708,39 @@
   }
 
   // ---------------------------------------------------------------- params UI
+  function arrangeSettings() {
+    const view = $('view-params')
+    const grid = el('div', { className: 'settings-grid' })
+    const groups = [
+      ['appearance', '背景与外观', '选择作品，调整背景与界面的视觉平衡。', ['enabled', 'preset-dd', 'glass', 'brightness', 'panels-dd', 'blur']],
+      ['performance', '渲染与性能', '在画质、流畅度和耗电之间找到平衡。', ['scale-dd', 'fps-dd']],
+      ['playback', '画面播放', '控制时间流速与画面的循环方式。', ['speed', 'loop', 'loop-seconds']],
+      ['sound', '声音', '有声音代码的作品可独立调整音乐。', ['volume', 'muted', 'audio-mode-dd', 'audio-seconds']],
+    ]
+    for (const [kind, title, description, ids] of groups) {
+      const card = el('section', { className: `settings-card ${kind}` }, el('h3', { textContent: title }), el('p', { textContent: description }))
+      for (const id of ids) card.append($(id).closest('.row'))
+      grid.append(card)
+    }
+    const footer = el('div', { className: 'settings-footer' }, $('note'), $('reset').closest('.actions'))
+    view.replaceChildren(grid, footer)
+    $('note').setAttribute('role', 'status')
+    for (const name of ['params', 'library', 'code']) {
+      $(`tab-${name}`).setAttribute('aria-controls', `view-${name}`)
+      $(`view-${name}`).setAttribute('role', 'tabpanel')
+      $(`view-${name}`).setAttribute('aria-labelledby', `tab-${name}`)
+    }
+    document.querySelector('.tabs').addEventListener('keydown', event => {
+      const names = ['params', 'library', 'code']
+      const index = names.findIndex(name => $(`tab-${name}`) === event.target)
+      if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+      event.preventDefault()
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (index + (event.key === 'ArrowRight' ? 1 : 2)) % 3
+      setTab(names[next])
+      $(`tab-${names[next]}`).focus()
+    })
+    setTab('params')
+  }
   let presetDd
   let scaleDd
   let fpsDd
@@ -700,6 +796,11 @@
     if (audioModeDd) audioModeDd.setValue(p.audioMode === 'once' ? 'once' : 'loop')
     $('scale-hint').textContent = `实际渲染缓冲：${bufferSizeFor(p.scale)}（窗口 ${viewportBasePixels().cssW} × ${viewportBasePixels().cssH}，DPR 上限 1.5；换窗口大小这里的数字会跟着变）`
     $('preset-kind').textContent = state.activeId ? (entryById(state.activeId) ? '我的' : '内置') : ''
+    for (const range of document.querySelectorAll('input[type=range]')) {
+      range.style.setProperty('--range-fill', `${100 * (Number(range.value) - Number(range.min)) / (Number(range.max) - Number(range.min))}%`)
+    }
+    $('audio-seconds').disabled = !sound
+    $('audio-mode-dd').querySelector('button').disabled = !sound
   }
 
   /**
@@ -1210,6 +1311,7 @@
       } catch { /* first run */ }
     }
     if (!state.activeId) state.activeId = manifest[0]?.id ?? 'aurora'
+    arrangeSettings()
     bindParams()
     bindLibrary()
     bindCode()
