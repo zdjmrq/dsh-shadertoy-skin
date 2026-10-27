@@ -157,6 +157,37 @@
   body.dragging-code { cursor: ns-resize; }
   #code-title { color: var(--accent); font-size: 11px; }
   #code-hint { margin: -2px 0 4px; }
+  .editor-toolbar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 12px 0; margin: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .editor-wrap { display: flex; gap: 7px; align-items: center; }
+  .editor-wrap input { accent-color: var(--accent); }
+  .editor-toolbar select { padding: 4px 8px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+  .editor-shortcut { margin-left: auto; color: var(--faint); }
+  .code-card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+  .code-card > .head { align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .code-card > .head label { font-size: 13px; letter-spacing: 0; color: var(--fg); }
+  .code-card > .head output { margin-left: auto; }
+  .editor-controls { display: flex; gap: 6px; }
+  .editor-controls .btn { margin: 0; padding: 5px 10px; min-height: 30px; font-size: 12px; }
+  .code-frame { position: relative; padding-left: 48px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--field); }
+  .code-frame:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .code-frame .code-area { display: block; width: 100%; min-height: 160px; border: 0; border-radius: 0; padding: 12px; background: transparent; font: 14px/1.7 ui-monospace, Consolas, monospace; outline: none; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+  .code-frame .code-area.sound { min-height: 90px; }
+  .code-lines { position: absolute; inset: 0 auto 0 0; width: 48px; margin: 0; padding: 12px 10px 12px 0; overflow: hidden; text-align: right; color: var(--muted); border-right: 1px solid var(--line); font: 14px/1.7 ui-monospace, Consolas, monospace; user-select: none; pointer-events: none; }
+  .wrap-code .code-lines { display: none; }
+  .wrap-code .code-frame { padding-left: 0; }
+  .wrap-code .code-area { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .code-grip { height: 30px; margin: 4px 0 -8px; font-size: 11px; color: var(--muted); border: 1px dashed transparent; }
+  .code-grip::before, .code-grip::after { display: none; }
+  .code-grip:hover, body.dragging-code .code-grip { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .code-card.collapsed .code-frame, .code-card.collapsed .code-grip { display: none; }
+  .code-card.collapsed > .head { margin-bottom: 0; }
+  body.editor-focus { overflow: hidden !important; }
+  .code-card.focused { position: fixed; inset: 12px; z-index: 100; margin: 0; display: flex; flex-direction: column; background: var(--pop); box-shadow: var(--shadow); }
+  .code-card.focused .code-frame { flex: 1; min-height: 0; }
+  .code-card.focused .code-area { height: 100% !important; min-height: 0; }
+  .code-card.focused .code-grip, .code-card.focused .editor-controls button:first-child { display: none; }
+  #view-code > .actions { position: sticky; bottom: 0; z-index: 5; padding: 12px 0; background: var(--pop); border-top: 1px solid var(--line); }
+  @media (max-width: 540px) { .editor-shortcut { display: none; } .editor-toolbar { gap: 12px; } .code-card { padding: 10px; } .code-card > .head output { font-size: 10px; } .editor-controls { width: 100%; justify-content: flex-end; } .code-card.focused { inset: 4px; } }
 
   /* custom dropdown: the native <select> popup ignores our palette */
   .dd { position: relative; }
@@ -999,12 +1030,13 @@
     try {
       const saved = JSON.parse(localStorage.getItem(CODE_HEIGHTS_KEY) ?? 'null')
       if (!saved || typeof saved !== 'object') return
-      if (Number.isFinite(saved.image)) $('code-image').style.height = `${saved.image}px`
-      if (Number.isFinite(saved.sound)) $('code-sound').style.height = `${saved.sound}px`
+      if (Number.isFinite(saved.image)) $('code-image').style.height = `${clamp(saved.image, 160, 4000, 360)}px`
+      if (Number.isFinite(saved.sound)) $('code-sound').style.height = `${clamp(saved.sound, 90, 4000, 180)}px`
     } catch { /* storage may be blocked */ }
   }
 
   function saveCodeHeights() {
+    if (document.querySelector('.code-card.focused')) return
     try {
       const heights = { image: $('code-image').offsetHeight, sound: $('code-sound').offsetHeight }
       localStorage.setItem(CODE_HEIGHTS_KEY, JSON.stringify(heights))
@@ -1046,6 +1078,10 @@
     const image = $('code-image').value
     $('code-image-info').textContent = `${image.split('\n').length} 行 · ${image.length} 字符`
     $('code-sound-info').textContent = $('code-sound').value.trim() ? 'mainSound' : ''
+    for (const id of ['code-image', 'code-sound']) {
+      const gutter = $(`${id}-lines`)
+      if (gutter) gutter.textContent = Array.from({ length: $(id).value.split('\n').length }, (_, i) => i + 1).join('\n')
+    }
   }
 
   function setCodeNote(text, isError = false) {
@@ -1102,15 +1138,26 @@
       const area = $(grip.dataset.code)
       if (!area) continue
       const isSound = area.classList.contains('sound')
-      const minHeight = isSound ? 80 : 160
-      const maxHeight = () => Math.max(minHeight + 80, Math.round(window.innerHeight * 0.72))
+      const minHeight = isSound ? 90 : 160
+      const maxHeight = () => 4000
       const setHeight = (height) => {
         const clamped = Math.min(maxHeight(), Math.max(minHeight, Math.round(height)))
         area.style.height = `${clamped}px`
+        grip.setAttribute('aria-valuenow', String(clamped))
+        grip.setAttribute('aria-valuetext', `${clamped} 像素`)
       }
       let startY = 0
       let startHeight = 0
+      let startScroll = 0
+      let pointerY = 0
+      let animation = 0
+      let pointerId = null
       const stop = () => {
+        cancelAnimationFrame(animation)
+        if (pointerId !== null) {
+          try { grip.releasePointerCapture(pointerId) } catch { /* already released */ }
+          pointerId = null
+        }
         document.body.classList.remove('dragging-code')
         window.removeEventListener('pointermove', onMove)
         window.removeEventListener('pointerup', stop)
@@ -1120,29 +1167,50 @@
       const onMove = (event) => {
         if (typeof event.clientY !== 'number') return
         event.preventDefault()
-        setHeight(startHeight + (event.clientY - startY))
+        pointerY = event.clientY
+        setHeight(startHeight + pointerY - startY + document.body.scrollTop - startScroll)
       }
+      const autoScroll = () => {
+        const delta = pointerY > innerHeight - 56 ? 12 : pointerY < 56 ? -12 : 0
+        if (delta) {
+          document.body.scrollTop += delta
+          setHeight(startHeight + pointerY - startY + document.body.scrollTop - startScroll)
+        }
+        animation = requestAnimationFrame(autoScroll)
+      }
+      grip.setAttribute('aria-controls', area.id)
+      grip.setAttribute('aria-valuemin', String(minHeight))
+      grip.setAttribute('aria-valuemax', '4000')
+      grip.setAttribute('aria-valuenow', String(parseInt(area.style.height) || (isSound ? 180 : 360)))
+      grip.textContent = '↕ 拖动调整高度 · 双击还原'
       grip.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return
         event.preventDefault()
         startY = event.clientY
+        pointerY = event.clientY
+        startScroll = document.body.scrollTop
         startHeight = area.offsetHeight
+        pointerId = event.pointerId
         document.body.classList.add('dragging-code')
         try { grip.setPointerCapture(event.pointerId) } catch { /* older engines */ }
         window.addEventListener('pointermove', onMove)
         window.addEventListener('pointerup', stop)
         window.addEventListener('pointercancel', stop)
+        animation = requestAnimationFrame(autoScroll)
       })
+      grip.addEventListener('lostpointercapture', () => { if (pointerId !== null) stop() })
+      grip.addEventListener('dblclick', () => { setHeight(isSound ? 180 : 360); saveCodeHeights() })
       grip.addEventListener('keydown', (event) => {
-        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+        if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
         event.preventDefault()
-        setHeight(area.offsetHeight + (event.key === 'ArrowDown' ? (event.shiftKey ? 64 : 16) : (event.shiftKey ? -64 : -16)))
+        setHeight(event.key === 'Home' ? minHeight : event.key === 'End' ? 1200 : area.offsetHeight + (event.key === 'ArrowDown' ? (event.shiftKey ? 64 : 16) : (event.shiftKey ? -64 : -16)))
         saveCodeHeights()
       })
     }
   }
 
   function bindCode() {
+    buildCodeWorkspace()
     $('code-save').addEventListener('click', () => { void saveCode() })
     $('code-revert').addEventListener('click', () => {
       void loadCode().then(() => setCodeNote('已重新读取当前运行的作品。'))
@@ -1158,6 +1226,91 @@
         void saveCode()
       }
     })
+  }
+
+  function buildCodeWorkspace() {
+    const toolbar = el('div', { className: 'editor-toolbar' })
+    const wrapLabel = el('label', { className: 'editor-wrap' })
+    const wrap = el('input', { type: 'checkbox', id: 'code-wrap' })
+    wrapLabel.append(wrap, document.createTextNode('自动换行'))
+    const size = el('select', { id: 'code-font', 'aria-label': '代码字号' })
+    size.setAttribute('aria-label', '代码字号')
+    for (const value of [12, 14, 16, 18, 20]) size.append(el('option', { value: String(value), textContent: `${value} px` }))
+    size.value = '14'
+    const sizeLabel = el('label', { textContent: '字号 ' }, size)
+    const shortcut = el('span', { className: 'editor-shortcut', textContent: 'Ctrl / ⌘ + S 保存并运行' })
+    toolbar.append(wrapLabel, sizeLabel, shortcut)
+    $('code-hint').after(toolbar)
+    let lastFocused = null
+    const exitFocus = () => {
+      const focused = document.querySelector('.code-card.focused')
+      if (!focused) return
+      focused.classList.remove('focused')
+      document.body.classList.remove('editor-focus')
+      const button = focused.querySelector('[data-focus]')
+      button.textContent = '专注编辑'
+      button.setAttribute('aria-pressed', 'false')
+      lastFocused?.focus()
+    }
+    for (const id of ['code-image', 'code-sound']) {
+      const area = $(id)
+      const card = area.closest('.row')
+      card.classList.add('code-card')
+      const head = card.querySelector('.head')
+      const controls = el('div', { className: 'editor-controls' })
+      const collapse = el('button', { type: 'button', className: 'btn tiny', textContent: '收起' })
+      collapse.setAttribute('aria-expanded', 'true')
+      collapse.setAttribute('aria-controls', `${id}-frame`)
+      const focus = el('button', { type: 'button', className: 'btn tiny', textContent: '专注编辑' })
+      focus.dataset.focus = id
+      focus.setAttribute('aria-label', `专注编辑 ${id === 'code-image' ? 'Image' : 'Sound'}`)
+      focus.setAttribute('aria-pressed', 'false')
+      controls.append(collapse, focus)
+      head.append(controls)
+      const frame = el('div', { className: 'code-frame', id: `${id}-frame` })
+      const gutter = el('pre', { className: 'code-lines', id: `${id}-lines` })
+      gutter.setAttribute('aria-hidden', 'true')
+      area.before(frame)
+      frame.append(gutter, area)
+      area.style.height = id === 'code-image' ? '360px' : '180px'
+      area.addEventListener('scroll', () => { gutter.scrollTop = area.scrollTop })
+      collapse.addEventListener('click', () => {
+        const collapsed = card.classList.toggle('collapsed')
+        collapse.textContent = collapsed ? '展开' : '收起'
+        collapse.setAttribute('aria-expanded', String(!collapsed))
+      })
+      focus.addEventListener('click', () => {
+        if (card.classList.contains('focused')) return exitFocus()
+        exitFocus()
+        lastFocused = focus
+        card.classList.remove('collapsed')
+        collapse.textContent = '收起'
+        collapse.setAttribute('aria-expanded', 'true')
+        card.classList.add('focused')
+        document.body.classList.add('editor-focus')
+        focus.textContent = '退出专注 · Esc'
+        focus.setAttribute('aria-pressed', 'true')
+        area.focus()
+      })
+    }
+    const applyPreferences = () => {
+      $('view-code').classList.toggle('wrap-code', wrap.checked)
+      for (const id of ['code-image', 'code-sound']) {
+        $(id).wrap = wrap.checked ? 'soft' : 'off'
+        $(id).style.fontSize = `${size.value}px`
+        $(`${id}-lines`).style.fontSize = `${size.value}px`
+      }
+      try { localStorage.setItem('shadertoy-skin.codeView', JSON.stringify({ wrap: wrap.checked, size: Number(size.value) })) } catch { /* optional preference */ }
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem('shadertoy-skin.codeView') || 'null')
+      if (saved) { wrap.checked = saved.wrap === true; if ([12, 14, 16, 18, 20].includes(saved.size)) size.value = String(saved.size) }
+    } catch { /* default view */ }
+    wrap.addEventListener('change', applyPreferences)
+    size.addEventListener('change', applyPreferences)
+    applyPreferences()
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && document.body.classList.contains('editor-focus')) { event.preventDefault(); exitFocus() } })
+    $('code-note').setAttribute('role', 'status')
   }
 
   // ---------------------------------------------------------------- messages
