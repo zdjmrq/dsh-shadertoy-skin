@@ -20,7 +20,8 @@ window.__ModuleLoader__.load({
   factory(require) {
     const BASE = '/shader-skin'
     const BG_ID = 'shadertoy-skin-bg'
-    const FALLBACK_DEFAULTS = { enabled: true, glass: 60, brightness: 100, blur: 0, scale: 1, fps: 30, speed: 1, volume: 60, muted: false }
+    const FALLBACK_DEFAULTS = { enabled: true, glass: 60, brightness: 100, panels: 'half', blur: 0, scale: 1, fps: 30, speed: 1, loop: true, loopMode: 'auto', audioDurationMode: 'auto', volume: 60, muted: false }
+    const GLOBAL_KEYS = ['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted']
     const FALLBACK_PRESET = 'aurora'
     // ⚠️ Keep off while the sidebar route is unstable: registering into
     // `sidebar.panellist` + `main` has frozen the frontend on panel switch.
@@ -131,7 +132,7 @@ window.__ModuleLoader__.load({
             listeners.push(() => target.removeEventListener(event, handler, options))
           }
 
-          const store = { activeId: null, entries: [], overrides: {}, defaults: FALLBACK_DEFAULTS }
+          const store = { activeId: null, entries: [], overrides: {}, settings: {}, defaults: FALLBACK_DEFAULTS }
           // Resolve client services on every use. Capturing `ctx.get('theme')` once at
           // effect setup was a real startup bug: client plugin rows activate
           // concurrently with the theme/slots providers, so at that moment the service
@@ -283,7 +284,8 @@ window.__ModuleLoader__.load({
           function tokensIntact(tokens) {
             const style = document.body?.style
             if (!style) return false
-            return Object.keys(tokens).every(name => style.getPropertyValue(name) !== '')
+            const mode = isDark() ? 'dark' : 'light'
+            return Object.entries(tokens).every(([name, value]) => style.getPropertyValue(name).trim() === value[mode])
           }
 
           let glassSignature = null
@@ -322,7 +324,7 @@ window.__ModuleLoader__.load({
 
           // ------------------------------------------------------------ parameters
           function effective() {
-            return { ...store.defaults, ...(store.overrides[store.activeId] ?? {}) }
+            return { ...store.defaults, ...(store.overrides[store.activeId] ?? {}), ...store.settings }
           }
 
           /**
@@ -342,7 +344,7 @@ window.__ModuleLoader__.load({
           }
 
           function normalizeState(raw) {
-            const state = { version: 2, activeId: null, entries: [], overrides: {} }
+            const state = { version: 2, activeId: null, entries: [], overrides: {}, settings: {} }
             if (!raw || typeof raw !== 'object') return state
             state.activeId = typeof raw.activeId === 'string' ? raw.activeId : null
             if (Array.isArray(raw.entries)) {
@@ -353,17 +355,21 @@ window.__ModuleLoader__.load({
             } else if (raw.params && typeof raw.params === 'object' && state.activeId) {
               state.overrides[state.activeId] = raw.params // v1 migration
             }
+            const legacy = state.overrides[state.activeId] ?? {}
+            state.settings = Object.fromEntries(GLOBAL_KEYS.filter(key => key in (raw.settings ?? legacy)).map(key => [key, (raw.settings ?? legacy)[key]]))
             return state
           }
 
           async function reloadState() {
             const request = ++stateRequest
-            const raw = await fetchJson(`${BASE}/state`).catch(() => null)
+            const raw = await fetchJson(`${BASE}/state`).catch(() => undefined)
             if (request !== stateRequest) return store
+            if (raw === undefined) return store
             const next = normalizeState(raw)
             store.activeId = next.activeId
             store.entries = next.entries
             store.overrides = next.overrides
+            store.settings = next.settings
             return store
           }
 
@@ -464,8 +470,10 @@ window.__ModuleLoader__.load({
             if (!message || typeof message !== 'object') return
             switch (message.type) {
               case 'params': {
+                stateRequest++ // Invalidate a pending read that predates this edit.
                 const id = typeof message.id === 'string' ? message.id : store.activeId
                 store.overrides[id] = { ...(message.params ?? {}) }
+                for (const key of GLOBAL_KEYS) if (key in (message.params ?? {})) store.settings[key] = message.params[key]
                 if (id !== store.activeId) return
                 applyGlass()
                 syncEnabled()
@@ -522,10 +530,12 @@ window.__ModuleLoader__.load({
           // flag, which is how ShaderToy shaders detect `iMouse.z < 0.0`.
           const UI_SELECTOR = [
             'button', 'a', 'input', 'textarea', 'select', 'summary', 'label',
-            '[contenteditable="true"]', '[role="button"]', '[role="tab"]',
+            '[contenteditable]:not([contenteditable="false"])', '[role="button"]', '[role="tab"]',
             '[role="menuitem"]', '[role="option"]', '[role="dialog"]',
             '[role="listbox"]', '[data-shell-overlay]', '[data-rightbar-col]',
             '[data-shell-bottom]', '[data-shell-leading]', '[data-shortcut-modal]',
+            '[role="textbox"]', '[role="slider"]', '[role="separator"]', '[role="menu"]',
+            '[draggable="true"]', 'pre', 'code', 'p', 'table', '.md-code-block',
           ].join(',')
 
           function selectionIsRange() {
@@ -536,9 +546,10 @@ window.__ModuleLoader__.load({
           function isUiTarget(target) {
             if (!(target instanceof Element)) return true
             if (target.closest(UI_SELECTOR)) return true
-            // Selectable text (chat replies, code blocks, tables): the drag is a
-            // copy/select gesture. Checked by computed style because DSH has no
-            // stable class for "selectable content".
+            // user-select:auto also selects normal chat text. Only explicit blank
+            // surfaces are eligible; text descendants and scrollbars belong to DSH.
+            if ([...target.childNodes].some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim())
+              && getComputedStyle(target).userSelect !== 'none') return true
             let node = target
             for (let depth = 0; node !== null && node !== document.body && depth < 6; depth += 1) {
               if (getComputedStyle(node).userSelect === 'text') return true
@@ -557,7 +568,7 @@ window.__ModuleLoader__.load({
             pending = null
             // a text selection appeared between the event and the frame: copying,
             // not steering
-            if (selectionIsRange()) { drag = null; return }
+            if (message[2] > 0 && selectionIsRange()) { release(); return }
             postTo(background, { type: 'mouse', mouse: message })
           }
           const queuePointer = (x, y, down) => {
@@ -567,19 +578,25 @@ window.__ModuleLoader__.load({
             if (scheduled === 0) scheduled = requestAnimationFrame(flushPointer)
           }
           on(window, 'pointermove', event => {
-            if (drag === null || !document.hasFocus() || !background) return
-            if (selectionIsRange()) { drag = null; return }
+            if (drag === null || !background || event.pointerId !== drag.pointerId) return
+            if (!document.hasFocus() || !(event.buttons & 1) || selectionIsRange() || isUiTarget(event.target)) { release(); return }
             drag.x = event.clientX
             drag.y = window.innerHeight - event.clientY
             drag.live = true
             queuePointer(drag.x, drag.y, true)
           }, { passive: true })
           on(window, 'pointerdown', event => {
-            if (event.button !== 0 || !background || !document.hasFocus()) return
-            if (isUiTarget(event.target)) { drag = null; return }
-            const x = event.clientX
-            const y = window.innerHeight - event.clientY
-            drag = { anchorX: x, anchorY: y, x, y, live: false }
+            if (event.button !== 0 || event.isPrimary === false || !background || !document.hasFocus()) return
+            release()
+            if (isUiTarget(event.target) || isUiTarget(document.activeElement)) return
+            const root = document.documentElement
+            if (event.clientX >= root.clientWidth || event.clientY >= root.clientHeight) return
+            const rect = event.target.getBoundingClientRect()
+            if ((event.target.offsetWidth > event.target.clientWidth && event.clientX >= rect.left + event.target.clientWidth)
+              || (event.target.offsetHeight > event.target.clientHeight && event.clientY >= rect.top + event.target.clientHeight)) return
+            const x = Math.max(0.001, event.clientX)
+            const y = Math.max(0.001, window.innerHeight - event.clientY)
+            drag = { pointerId: event.pointerId, anchorX: x, anchorY: y, x, y, live: false }
           }, { passive: true })
           const release = () => {
             if (drag === null) return
@@ -593,6 +610,11 @@ window.__ModuleLoader__.load({
           on(window, 'pointerup', release, { passive: true })
           on(window, 'pointercancel', release, { passive: true })
           on(window, 'blur', release)
+          on(window, 'pointerout', event => {
+            if (event.relatedTarget === null || event.relatedTarget instanceof HTMLIFrameElement) release()
+          }, { passive: true })
+          on(document, 'selectionchange', () => { if (selectionIsRange()) release() })
+          on(document, 'visibilitychange', () => { if (document.hidden) release() })
 
           // Autoplay policy: an iframe's AudioContext may stay suspended until the
           // page gets a real gesture. Any click / keypress in the app unlocks it, so
@@ -649,6 +671,16 @@ window.__ModuleLoader__.load({
           })
           if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
           listeners.push(() => themeObserver.disconnect())
+          // A page or a late theme presenter can overwrite styles long after boot.
+          // Compare values and repair once per animation frame, never synchronously
+          // inside the theme/change path (which would recurse).
+          let glassRepairFrame = 0
+          const glassObserver = new MutationObserver(() => {
+            if (glassRepairFrame || !booted || effective().enabled === false) return
+            glassRepairFrame = requestAnimationFrame(() => { glassRepairFrame = 0; if (booted) applyGlass() })
+          })
+          if (document.body) glassObserver.observe(document.body, { attributes: true, attributeFilter: ['style'] })
+          listeners.push(() => { glassObserver.disconnect(); if (glassRepairFrame) cancelAnimationFrame(glassRepairFrame) })
 
           // ------------------------------------------------------------ sidebar entry
           //

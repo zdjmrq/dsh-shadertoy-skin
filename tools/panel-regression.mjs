@@ -65,7 +65,7 @@ try {
   await frame.fill('#glass', '63')
   await page.waitForTimeout(1300)
   assert.equal(maximumWrites, 1)
-  assert.equal(JSON.parse(await readFile(join(harness.home, 'shader-skin.json'), 'utf8')).overrides.aurora.glass, 63)
+  assert.equal(JSON.parse(await readFile(join(harness.home, 'shader-skin.json'), 'utf8')).settings.glass, 63)
   await page.unroute('**/shader-skin/state', delayedWrite)
   console.log('ok    overlapping autosaves are serialized and the last value reaches disk')
 

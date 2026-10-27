@@ -93,7 +93,7 @@ try {
   const defaults = await json('/shader-skin/defaults.json')
   check('defaults.json exposes fps + scale defaults', defaults.params?.fps === 30 && defaults.params?.scale === 1)
   check('defaults.json exposes the glass and brightness look', defaults.params?.glass === 60 && defaults.params?.brightness === 100)
-  check('defaults.json exposes the card transparency level', defaults.params?.panels === 'opaque')
+  check('defaults.json exposes the card transparency level', defaults.params?.panels === 'half')
   check('defaults.json exposes selectable fps/scale values', Array.isArray(defaults.limits?.fps?.values) && Array.isArray(defaults.limits?.scale?.values))
 
   // --- built-in presets
@@ -134,12 +134,18 @@ try {
   check('state round-trips activeId', stored.activeId === 'user-1')
   check('state round-trips entries', stored.entries?.[0]?.id === 'user-1' && stored.entries?.[0]?.code?.image === entryCode)
   check('state round-trips overrides', stored.overrides?.['user-1']?.glass === 62 && stored.overrides?.flow?.blur === 2)
+  check('legacy active artwork settings migrate into global preferences', stored.settings?.glass === 62 && stored.settings?.panels === 'half')
   check('state persists brightness and card transparency', stored.overrides?.['user-1']?.brightness === 135 && stored.overrides?.['user-1']?.panels === 'half', JSON.stringify(stored.overrides?.['user-1']))
   check('state persists loop + audio playback mode',
     stored.overrides?.['user-1']?.loop === true && stored.overrides?.['user-1']?.loopSeconds === 12
     && stored.overrides?.['user-1']?.audioMode === 'once' && stored.overrides?.['user-1']?.audioSeconds === 30,
     JSON.stringify(stored.overrides?.['user-1']))
   check('state stamps updatedAt', typeof stored.updatedAt === 'number')
+  const globalPut = await putState({ ...next, activeId: 'flow', settings: { enabled: false, glass: 42, panels: 'clear', speed: 2, fps: 30 }, overrides: { flow: { loopMode: 'auto', audioDurationMode: 'manual' } } })
+  const globalState = await json('/shader-skin/state')
+  check('global settings persist and exclude artwork playback keys', globalPut.ok && globalState.settings.glass === 42 && globalState.settings.panels === 'clear' && globalState.settings.enabled === false && !('speed' in globalState.settings))
+  check('automatic playback modes survive host roundtrip', globalState.overrides.flow.loopMode === 'auto' && globalState.overrides.flow.audioDurationMode === 'manual')
+  await putState(next)
   check('state drops unknown override keys', stored.overrides?.['user-1']?.nonsense === undefined)
   const onDisk = JSON.parse(await readFile(join(home, 'shader-skin.json'), 'utf8'))
   check('state is written to $DSH_HOME/shader-skin.json', onDisk.version === 2 && onDisk.activeId === 'user-1')

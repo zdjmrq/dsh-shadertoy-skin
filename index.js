@@ -229,7 +229,8 @@ async function readJsonBody(req, limit = MAX_STATE_BYTES) {
 }
 
 /** Accept only the shape the client half writes; unknown keys are dropped. */
-const PARAM_KEYS = new Set(['enabled', 'glass', 'brightness', 'panels', 'blur', 'scale', 'fps', 'speed', 'loop', 'loopSeconds', 'audioMode', 'audioSeconds', 'volume', 'muted'])
+const GLOBAL_KEYS = new Set(['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted'])
+const PARAM_KEYS = new Set([...GLOBAL_KEYS, 'brightness', 'speed', 'loop', 'loopMode', 'loopSeconds', 'audioMode', 'audioDurationMode', 'audioSeconds'])
 const PANEL_LEVELS = new Set(['opaque', 'half', 'clear'])
 const AUDIO_MODES = new Set(['loop', 'once'])
 
@@ -248,6 +249,10 @@ function sanitizeParams(raw) {
     }
     if (key === 'audioMode') {
       if (AUDIO_MODES.has(value)) out[key] = value
+      continue
+    }
+    if (key === 'loopMode' || key === 'audioDurationMode') {
+      if (value === 'auto' || value === 'manual') out[key] = value
       continue
     }
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -300,7 +305,10 @@ function sanitizeState(raw) {
     if (Object.keys(legacy).length > 0) overrides[activeId] = { ...legacy, ...(overrides[activeId] ?? {}) }
   }
 
-  return { version: 2, activeId, overrides, entries, updatedAt: Date.now() }
+  // Migrate appearance from the active artwork once. Explicit saved choices,
+  // including opaque, survive upgrades; changing artwork no longer changes them.
+  const settings = Object.fromEntries(Object.entries(sanitizeParams(raw.settings ?? overrides[activeId])).filter(([key]) => GLOBAL_KEYS.has(key)))
+  return { version: 2, activeId, settings, overrides, entries, updatedAt: Date.now() }
 }
 
 async function handleState(req, res) {

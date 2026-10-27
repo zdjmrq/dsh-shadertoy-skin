@@ -62,9 +62,11 @@
     tintMix: 0,    // 0..1   mix toward tint colour (this is the "glass" veil)
     tint: '#ececec',
     paused: false,
-    loop: false,        // wrap iTime every `loopSeconds` (shaders that only play once)
+    loop: true,
+    loopMode: 'auto',
     loopSeconds: 20,    // 5..120 loop period
     audioMode: 'loop',  // 'loop' = music keeps playing | 'once' = stop after `audioSeconds`
+    audioDurationMode: 'auto',
     audioSeconds: 60,   // 10..600 duration used by audioMode 'once'
     volume: 60,    // 0..100 mainSound output level
     muted: true,   // default muted; parent UI unmutes
@@ -83,6 +85,7 @@
 
   function applyParams(next) {
     if (!next || typeof next !== 'object') return
+    const resetProbe = ['loop', 'loopMode', 'speed', 'dim', 'tintMix', 'tint'].some(key => key in next && next[key] !== params[key])
     const wasPaused = params.paused
     if ('speed' in next) params.speed = clamp(next.speed, 0, 2, 1)
     if ('scale' in next) params.scale = clamp(next.scale, 0.25, 2, 1)
@@ -91,12 +94,15 @@
     if ('dim' in next) { params.dim = clamp(next.dim, 0, 2, 1); lookExplicit = true }
     if ('tintMix' in next) { params.tintMix = clamp(next.tintMix, 0, 1, 0); lookExplicit = true }
     if ('loop' in next) params.loop = Boolean(next.loop)
+    if (next.loopMode === 'auto' || next.loopMode === 'manual') params.loopMode = next.loopMode
     if ('loopSeconds' in next) params.loopSeconds = clamp(next.loopSeconds, 5, 120, 20)
     const previousAudioMode = params.audioMode
     const previousAudioSeconds = params.audioSeconds
+    const previousDurationMode = params.audioDurationMode
     if (next.audioMode === 'loop' || next.audioMode === 'once') params.audioMode = next.audioMode
+    if (next.audioDurationMode === 'auto' || next.audioDurationMode === 'manual') params.audioDurationMode = next.audioDurationMode
     if ('audioSeconds' in next) params.audioSeconds = clamp(next.audioSeconds, 1, 600, 60)
-    const audioModeChanged = previousAudioMode !== params.audioMode || previousAudioSeconds !== params.audioSeconds
+    const audioModeChanged = previousAudioMode !== params.audioMode || previousAudioSeconds !== params.audioSeconds || previousDurationMode !== params.audioDurationMode
     if ('volume' in next) params.volume = clamp(next.volume, 0, 100, 60)
     if ('muted' in next) params.muted = Boolean(next.muted)
     if (typeof next.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(next.tint)) {
@@ -117,10 +123,10 @@
     // Switching between "music loops" and "music plays once" while running:
     // re-evaluate immediately instead of waiting for the next preset switch.
     if (audioModeChanged && audio.program && audio.ctx && audio.ctx.state === 'running' && !params.paused) {
-      if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
+      if (params.audioMode === 'once' && audio.time >= musicDuration()) {
         stopAudioScheduler('once')
         setAudioState('ended', 'music played once')
-      } else if (params.audioMode === 'loop' && audioLoopPeriod() > 0 && audio.time >= params.audioSeconds) {
+      } else if (params.audioMode === 'loop' && audioLoopPeriod() > 0 && audio.time >= musicDuration()) {
         // once → loop after the piece already ended: play it again from the top
         audio.time = 0
         audio.chunks = 0
@@ -130,6 +136,7 @@
       }
     }
     resize()
+    if (resetProbe) resetDetection()
   }
 
   // ---------- diagnostics
@@ -139,7 +146,7 @@
   function line() {
     const mode = DEBUG_BG ? 'debug-bg' : (program ? 'running' : 'idle')
     const note = diag.note ? ` · ${diag.note}` : ''
-    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · audio=${audioStateLabel} · look=${params.dim.toFixed(2)}/${params.tintMix.toFixed(2)} · loop=${params.loop ? `${params.loopSeconds.toFixed(0)}s` : 'off'} · music=${params.audioMode === 'once' ? `once/${params.audioSeconds.toFixed(0)}s` : `loop/${params.audioSeconds.toFixed(0)}s`} · shader=${diag.preset}${note}`
+    return `${mode} · gl=${diag.gl} · ${es3 ? 'es3' : 'es1'} · ${canvas.width}x${canvas.height} · ${state.fps}fps · frames=${state.frame} · audio=${audioStateLabel} · look=${params.dim.toFixed(2)}/${params.tintMix.toFixed(2)} · loop=${params.loop ? params.loopMode === 'manual' ? `${params.loopSeconds.toFixed(0)}s` : `auto/${playback.duration || 'detecting'}` : 'off'} · music=${params.audioMode}/${Number.isFinite(musicDuration()) ? musicDuration().toFixed(1) + 's' : 'auto'} · shader=${diag.preset}${note}`
   }
   function refreshDiag() {
     diagBox.textContent = line()
@@ -466,6 +473,22 @@
     peak: 0, rms: 0,
   }
 
+  // GLSL has no ended event. Only recognize an explicit duration annotation or
+  // the simple terminal fade idiom; arbitrary GLSL is never evaluated as JS.
+  function sourceDuration(source, clock) {
+    const hint = source.match(/^\s*\/\/\s*@duration\s+([\d.]+)\s*$/m)
+    if (hint && Number(hint[1]) > 0 && Number(hint[1]) <= 86400) return Number(hint[1])
+    const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+    const number = '(\\d+(?:\\.\\d*)?|\\.\\d+)'
+    const re = new RegExp('1(?:\\.0*)?\\s*-\\s*smoothstep\\s*\\(\\s*' + number + '\\s*,\\s*' + number + '\\s*,\\s*' + clock + '\\s*\\)', 'g')
+    const ends = [...code.matchAll(re)].filter(m => Number(m[2]) > Number(m[1]) && Number(m[2]) <= 86400).map(m => Number(m[2]))
+    return ends.length ? Math.max(...ends) : 0
+  }
+  let soundDuration = 0
+  let soundSeen = false
+  let soundLastSignal = 0
+  function musicDuration() { return params.audioDurationMode === 'manual' ? params.audioSeconds : soundDuration || Infinity }
+
   function targetGain() { return params.muted ? 0 : clamp(params.volume, 0, 100, 60) / 100 }
 
   function applyGain() {
@@ -489,6 +512,7 @@
       state: audio.state, sampleRate: audio.sampleRate, chunks: audio.chunks,
       chunkSize: audio.chunkSize, peak: audio.peak, rms: audio.rms, gain: targetGain(),
     }
+    p.playback = { time: state.time, frame: state.frame, duration: playback.duration, repeats: playback.repeats, mode: params.loopMode, musicDuration: Number.isFinite(musicDuration()) ? musicDuration() : null, musicTime: audio.time }
     if (AUDIOPROBE) window.__audioProbe = { peak: audio.peak, rms: audio.rms, chunks: audio.chunks }
   }
 
@@ -574,7 +598,7 @@
    * t=60,70,… — it has to wrap the audio clock at the configured length.
    */
   function audioLoopPeriod() {
-    const period = Number(params.audioSeconds)
+    const period = musicDuration()
     return params.audioMode === 'loop' && Number.isFinite(period) && period > 0 ? period : 0
   }
 
@@ -587,7 +611,7 @@
       const left = period - time
       if (left < AUDIO_SEAM_FADE) gain = Math.min(gain, Math.max(0, left) / AUDIO_SEAM_FADE)
     } else if (params.audioMode === 'once') {
-      const left = params.audioSeconds - time
+      const left = musicDuration() - time
       if (left < AUDIO_SEAM_FADE) gain = Math.min(gain, Math.max(0, left) / AUDIO_SEAM_FADE)
     }
     return gain
@@ -658,15 +682,39 @@
     const period = audioLoopPeriod()
     let start = audio.time
     if (period > 0 && start >= period) start = start % period
-    if (params.audioMode === 'once' && start >= params.audioSeconds) return false
+    let duration = musicDuration()
+    if (params.audioMode === 'once' && start >= duration) return false
     if (!renderAudioChunk(start, chunkSeconds)) return false
+    if (params.audioDurationMode === 'auto' && !soundDuration) {
+      // The encoded zero level has ~1/65535 quantization noise. Detect the raw
+      // sound before the user's mute/volume gain; those must never end a song.
+      for (let i = 0; i < AUDIO_CHUNK; i++) {
+        if (Math.max(Math.abs(audio.left[i]), Math.abs(audio.right[i])) > 0.0002) {
+          soundSeen = true
+          soundLastSignal = start + i / audio.sampleRate
+        }
+      }
+      if (soundSeen && start + chunkSeconds - soundLastSignal >= 3) {
+        soundDuration = soundLastSignal + 0.1
+        if (params.audioMode === 'once') return false
+        // Detection includes a silence window; it is not part of the piece.
+        // Start at sample zero, not silenceTime % the newly learned duration.
+        start = 0
+        duration = musicDuration()
+        if (!renderAudioChunk(start, chunkSeconds)) return false
+      }
+    }
     // The speed control belongs to the image timeline. Sound chunks must remain
     // contiguous; scaling only chunk starts creates gaps, repeats and clicks.
     audio.time = start + chunkSeconds
     try {
-      const buffer = ctx.createBuffer(2, AUDIO_CHUNK, audio.sampleRate)
-      buffer.copyToChannel(audio.left, 0)
-      buffer.copyToChannel(audio.right, 1)
+      // Do not schedule a chunk beyond the exact boundary (or skip the first
+      // samples after wrapping). This also keeps once mode from leaking notes.
+      const count = Number.isFinite(duration) ? Math.min(AUDIO_CHUNK, Math.max(1, Math.round((duration - start) * audio.sampleRate))) : AUDIO_CHUNK
+      audio.time = start + count / audio.sampleRate
+      const buffer = ctx.createBuffer(2, count, audio.sampleRate)
+      buffer.copyToChannel(audio.left.subarray(0, count), 0)
+      buffer.copyToChannel(audio.right.subarray(0, count), 1)
       const source = ctx.createBufferSource()
       source.buffer = buffer
       source.connect(audio.gain)
@@ -674,7 +722,7 @@
       source.start(when)
       audio.sources.add(source)
       audio.chunks++
-      audio.scheduledUntil = when + chunkSeconds
+      audio.scheduledUntil = when + count / audio.sampleRate
       return true
     } catch (error) {
       setAudioState('error', `audio schedule: ${error.message}`)
@@ -686,7 +734,7 @@
     if (!audio.program || !audio.ctx || audio.ctx.state !== 'running' || audio.running) return
     if (params.paused || document.hidden || gl.isContextLost()) return
     // "music plays once": never resurrect the scheduler after the duration ran out
-    if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
+    if (params.audioMode === 'once' && audio.time >= musicDuration()) {
       setAudioState('ended', 'music played once')
       return
     }
@@ -726,7 +774,7 @@
     if (params.paused || document.hidden) { stopAudioScheduler('paused'); return }
     if (ctx.state !== 'running') { stopAudioScheduler('context'); return }
     // music-once: the timeline passed the configured duration → stop for good
-    if (params.audioMode === 'once' && audio.time >= params.audioSeconds) {
+    if (params.audioMode === 'once' && audio.time >= musicDuration()) {
       // The producer's clock includes the lookahead buffer. Drain it before
       // stopping, otherwise the final scheduled notes are cut off early.
       if (ctx.currentTime >= audio.scheduledUntil) {
@@ -758,6 +806,9 @@
   /** Install (or clear) the sound pass. Never fails the image pass. */
   function setSound(source) {
     stopAudio()
+    soundDuration = sourceDuration(typeof source === 'string' ? source : '', '(?:time|t)')
+    soundSeen = false
+    soundLastSignal = 0
     if (typeof source !== 'string' || !source.trim()) { setAudioState('none'); publishAudio(); return false }
     const built = buildSoundProgram(source)
     if (!built.program) {
@@ -814,6 +865,60 @@
   if (STANDALONE) window.__audioInternals = audio
 
   const state = { time: 0, dt: 0, frame: 0, last: 0, drawMs: 0, fps: 0, fpsAcc: 0, fpsFrames: 0, ready: false, pendingSound: false }
+  const playback = { duration: 0, repeats: 0, lastProbe: 0, stableSince: 0, motion: 0, sample: null, fbo: null, tex: null, bytes: new Uint8Array(16 * 16 * 4) }
+  function resetDetection() {
+    playback.lastProbe = 0
+    playback.stableSince = state.time
+    playback.motion = 0
+    playback.sample = null
+  }
+  function replayImage(period = 0) {
+    state.time = period > 0 ? state.time % period : 0
+    state.frame = 0
+    state.dt = 0
+    playback.repeats++
+    resetDetection()
+  }
+  function detectImageEnd(now) {
+    if (!params.loop || params.loopMode !== 'auto' || playback.duration || params.speed === 0 || !program) return
+    if (mouse.down) { resetDetection(); return }
+    if (now - playback.lastProbe < 500) return
+    playback.lastProbe = now
+    if (!playback.fbo) {
+      playback.tex = gl.createTexture()
+      gl.bindTexture(gl.TEXTURE_2D, playback.tex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 16, 16, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+      playback.fbo = gl.createFramebuffer()
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, playback.fbo)
+      gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, playback.tex, 0)
+      if (gl.checkFramebufferStatus(gl.DRAW_FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+        return
+      }
+    }
+    // Downsample the rendered frame on GPU. Read only 1 KB twice a second;
+    // no full-resolution readback and no second shader render.
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null)
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, playback.fbo)
+    gl.blitFramebuffer(0, 0, canvas.width, canvas.height, 0, 0, 16, 16, gl.COLOR_BUFFER_BIT, gl.NEAREST)
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, playback.fbo)
+    gl.readPixels(0, 0, 16, 16, gl.RGBA, gl.UNSIGNED_BYTE, playback.bytes)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    let delta = 0
+    if (playback.sample) for (let i = 0; i < playback.bytes.length; i++) delta = Math.max(delta, Math.abs(playback.sample[i] - playback.bytes[i]))
+    if (!playback.sample || delta > 2) {
+      if (playback.sample) playback.motion++
+      playback.sample = playback.bytes.slice()
+      playback.stableSince = state.time
+    } else if (playback.motion >= 3 && state.time >= 8 && state.time - playback.stableSince >= 5) {
+      // A still image from startup is not an ended animation. Require observed
+      // motion, then five shader-seconds of stability against the same baseline.
+      playback.duration = playback.stableSince + 0.5
+      replayImage()
+    }
+  }
   canvas.addEventListener('webglcontextlost', event => {
     event.preventDefault()
     params.paused = true
@@ -834,7 +939,7 @@
     const MAX_SIDE = Math.min(8192, gl.getParameter(gl.MAX_TEXTURE_SIZE), viewport[0], viewport[1])
     const w = Math.min(MAX_SIDE, Math.max(1, Math.round((canvas.clientWidth || window.innerWidth) * dpr * params.scale)))
     const h = Math.min(MAX_SIDE, Math.max(1, Math.round((canvas.clientHeight || window.innerHeight) * dpr * params.scale)))
-    if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h }
+    if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h; resetDetection() }
     diag.w = canvas.width
     diag.h = canvas.height
   }
@@ -897,14 +1002,16 @@
     const dt = state.last ? Math.min((now - state.last) / 1000, 0.1) : 0
     lastFrameStamp = now
     state.last = now
-    state.dt = dt
-    state.time += dt * Math.max(params.speed, 0)
+    state.dt = dt * Math.max(params.speed, 0)
+    state.time += state.dt
     // Loop mode: shaders that animate once (and then sit still) replay from 0.
     // Audio keeps its own realtime timeline, so looping is image-only.
-    if (params.loop && params.loopSeconds > 0 && state.time >= params.loopSeconds) {
-      state.time = state.time % params.loopSeconds
+    const period = params.loopMode === 'manual' ? params.loopSeconds : playback.duration
+    if (params.loop && period > 0 && state.time >= period) {
+      replayImage(period)
     }
     draw()
+    detectImageEnd(now)
     state.frame++
     diag.frames = state.frame
     state.fpsFrames++
@@ -915,6 +1022,7 @@
       state.fpsFrames = 0
       diag.fps = state.fps
       refreshDiag()
+      publishAudio()
       if (state.ready) post({ type: 'stats', fps: state.fps, ms: Math.round(state.drawMs * 100) / 100, w: canvas.width, h: canvas.height })
     }
     if (!state.ready && program && !state.pendingSound) {
@@ -943,6 +1051,10 @@
     errBox.textContent = ''
     state.time = 0
     state.frame = 0
+    state.last = 0
+    playback.duration = sourceDuration(source, 'iTime')
+    playback.repeats = 0
+    resetDetection()
     state.ready = false
     locs = collectLocations()
     report(`running · ${es3 ? 'es3' : 'es1'} · shader=${diag.preset}`)
@@ -988,14 +1100,15 @@
 
   function bindPointer() {
     const move = event => {
+      if (!mouse.down || !(event.buttons & 1)) { mouse.down = false; return }
       const [x, y] = toPixels(event.clientX, event.clientY)
       mouse.x = x; mouse.y = y
-      if (mouse.down) { mouse.anchorX = x; mouse.anchorY = y }
     }
     window.addEventListener('pointermove', move, { passive: true })
     window.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || event.isPrimary === false) return
       const [x, y] = toPixels(event.clientX, event.clientY)
-      mouse.x = x; mouse.y = y; mouse.anchorX = x; mouse.anchorY = y; mouse.down = true
+      mouse.x = x; mouse.y = y; mouse.anchorX = Math.max(0.001, x); mouse.anchorY = Math.max(0.001, y); mouse.down = true
     }, { passive: true })
     window.addEventListener('pointerup', () => { mouse.down = false }, { passive: true })
     window.addEventListener('pointercancel', () => { mouse.down = false }, { passive: true })
@@ -1063,6 +1176,8 @@
         case 'reset':
           state.time = 0
           state.frame = 0
+          state.last = 0
+          resetDetection()
           if (audio.program) {
             stopAudioScheduler('reset')
             audio.time = 0
@@ -1088,6 +1203,10 @@
     if (q.has(key)) overrides[key] = Number(q.get(key))
   }
   if (q.has('loop')) overrides.loop = q.get('loop') !== '0'
+  if (q.has('loopSeconds')) overrides.loopMode = 'manual'
+  if (q.has('audioSeconds')) overrides.audioDurationMode = 'manual'
+  if (q.get('loopMode') === 'auto') overrides.loopMode = 'auto'
+  if (q.get('audioDurationMode') === 'auto') overrides.audioDurationMode = 'auto'
   if (q.get('audioMode') === 'once' || q.get('audioMode') === 'loop') overrides.audioMode = q.get('audioMode')
   if (q.has('tint')) {
     const tint = q.get('tint').trim().replace(/^#/, '')

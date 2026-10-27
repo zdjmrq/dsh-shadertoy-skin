@@ -129,7 +129,7 @@ try {
   const conflict = second.waitForResponse(r => r.url().endsWith('/state') && r.status() === 409)
   await secondPanel.fill('#glass', '44')
   await conflict
-  assert.equal((await stored()).overrides.aurora.glass, 75)
+  assert.equal((await stored()).settings.glass, 75)
   assert.match(await secondPanel.textContent('#note'), /其他页面更新/)
   await second.close()
   console.log('ok    two settings windows cannot silently overwrite each other')

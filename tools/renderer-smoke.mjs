@@ -218,8 +218,8 @@ async function main() {
     check('resolution hint explains the DPR cap', /DPR 上限 1\.5/.test(initial.scaleHint ?? ''), String(initial.scaleHint))
     check('panel defaults to 60% glass', initial.glass === '60%', String(initial.glass))
     check('panel defaults to 100% brightness', initial.brightness === '100%', String(initial.brightness))
-    check('panel defaults to opaque cards', initial.panels === '不透明', String(initial.panels))
-    check('panel defaults to loop off', initial.loopChecked === false && initial.loopRowHidden === true)
+    check('panel defaults to translucent cards', initial.panels === '半透明', String(initial.panels))
+    check('panel defaults to automatic looping', initial.loopChecked === true && initial.loopRowHidden === true)
     check('panel defaults to looping music', /循环重放/.test(initial.audioMode ?? ''), String(initial.audioMode))
     check('music duration row is hidden without a sound pass', initial.audioSecondsRowHidden === true)
     check('code boxes have a visible drag grip instead of the native resizer',
@@ -256,10 +256,10 @@ async function main() {
     await page.setViewportSize({ width: 1024, height: 640 })
     await sleep(200)
 
-    // loop playback: toggle reveals the period slider
-    await page.click('#loop')
+    // Automatic playback hides the optional manual duration.
+    await page.check('#loop')
     let loopState = await panelState()
-    check('loop toggle turns on', loopState.loopChecked === true && loopState.loopRowHidden === false)
+    check('automatic loop keeps the manual duration hidden', loopState.loopChecked === true && loopState.loopRowHidden === true)
     await page.click('#loop')
 
     // Sound controls stay disabled when the selected work has no sound pass.

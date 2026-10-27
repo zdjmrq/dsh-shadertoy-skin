@@ -81,7 +81,8 @@
     "test:surfaces": "node tools/panel-surfaces-regression.mjs",
     "test:transparency": "node tools/unified-transparency-regression.mjs",
     "preview": "node tools/browser-harness.mjs 8735",
-    "pack:check": "npm pack --dry-run --json"
+    "pack:check": "npm pack --dry-run --json",
+    "test:core": "node tools/core-regression.mjs"
   },
   "devDependencies": {
     "playwright": "^1.55.0"
