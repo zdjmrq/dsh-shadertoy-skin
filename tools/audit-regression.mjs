@@ -62,20 +62,19 @@ try {
       await page.waitForTimeout(50)
       const tokens = await page.evaluate(() => window.__glassTokens)
       assert.ok(!Object.keys(tokens).some(k => k.startsWith('--dsw-static-')), 'static palette must never be overwritten')
-      const values = await page.evaluate(() => Object.fromEntries(['--dsw-specific-menu', '--dsw-specific-input-major', '--dsw-alias-markdown-code-block'].map(k => [k, document.body.style.getPropertyValue(k)])))
+      const values = await page.evaluate(() => Object.fromEntries(['--dsw-specific-menu', '--dsw-specific-input-major', '--dsw-alias-markdown-code-block', '--dsw-alias-markdown-code-block-banner', '--dsw-alias-button-elevated-fill'].map(k => [k, document.body.style.getPropertyValue(k)])))
       if (mode !== 'opaque') {
-        assert.match(values['--dsw-specific-menu'], /0\.97/)
-        assert.match(values['--dsw-specific-input-major'], /0\.85/)
-        assert.match(values['--dsw-alias-markdown-code-block'], /0\.84/)
+        for (const value of Object.values(values)) assert.equal(Number(value.match(/, ([0-9.]+)\)/)?.[1]), mode === 'clear' ? 0 : .65)
       }
       const dialog = await page.locator('.audit-fixture [role=dialog]').evaluate(node => getComputedStyle(node).backgroundColor)
-      assert.match(dialog, /^rgb\((255, 255, 255|35, 35, 36)\)$/)
+      if (mode === 'opaque') assert.match(dialog, /^rgb\((255, 255, 255|35, 35, 36)\)$/)
+      else assert.equal(Number(dialog.match(/, ([0-9.]+)\)/)?.[1]), mode === 'clear' ? 0 : .65)
       await page.screenshot({ path: join(shots.pathname.replace(/^\/([A-Za-z]:)/, '$1'), `${dark ? 'dark' : 'light'}-${mode}.png`) })
     }
   }
   await page.evaluate(() => document.querySelector('.audit-fixture').remove())
   await panel.fill('#glass', '20')
-  await page.waitForFunction(() => Number(/, ([0-9.]+)\)/.exec(document.body.style.getPropertyValue('--dsw-alias-bg-layer-1'))?.[1]) >= .56)
+  await page.waitForFunction(() => Number(/, ([0-9.]+)\)/.exec(document.body.style.getPropertyValue('--dsw-alias-bg-layer-1'))?.[1]) === 0)
   await panel.fill('#glass', '65')
   console.log('ok    both themes × three transparency levels preserve palette, menu, dialog, input and code readability')
 

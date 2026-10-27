@@ -80,7 +80,7 @@ try {
       const glass = mode !== 'opaque'
       assert.equal(await panel.getAttribute('html', 'data-panels'), mode)
       assert.equal(await alpha('body'), glass ? 0 : 1)
-      assert.equal(await alpha('.settings-card'), glass ? (mode === 'half' ? .72 : .38) : 1)
+      assert.equal(await alpha('.settings-card'), glass ? (mode === 'half' ? .6 : 0) : 1)
       await page.evaluate(() => {
         document.querySelector('#main').style.background = 'rgb(190, 75, 50)'
       })
@@ -97,21 +97,21 @@ try {
       await page.evaluate(() => { document.querySelector('#main').style.background = '' })
       if (dark && mode === 'half') await screenshot('settings-dark-half')
       await panel.click('#tab-library')
-      assert.equal(await alpha('.import-box'), glass ? (mode === 'half' ? .72 : .38) : 1)
-      assert.equal(await alpha('.item'), glass ? (mode === 'half' ? .72 : .38) : 1)
+      assert.equal(await alpha('.import-box'), glass ? (mode === 'half' ? .6 : 0) : 1)
+      assert.equal(await alpha('.item'), glass ? (mode === 'half' ? .6 : 0) : 1)
       if (!dark && mode === 'clear') await screenshot('library-light-clear')
       await panel.click('#tab-code')
       for (const id of ['image', 'sound']) {
         assert.equal(await alpha(`#code-${id}-frame`), glass ? 0 : 1, 'no double-stacked code fill')
         await panel.click(`[data-focus="code-${id}"]`)
-        assert.equal(await alpha('.code-card.focused'), glass ? (mode === 'half' ? .72 : .38) : 1)
+        assert.equal(await alpha('.code-card.focused'), glass ? (mode === 'half' ? .6 : 0) : 1)
         assert.equal(await panel.locator('#view-code > .head').evaluate(node => getComputedStyle(node).visibility), 'hidden', 'focus must not show underlying text')
         assert.ok(await panel.locator('.focused .editor-focus-save').isVisible())
         if (dark && mode === 'clear' && id === 'sound') await screenshot('sound-focus-dark-clear')
         await page.keyboard.press('Escape')
         assert.deepEqual(await heights(), [360, 360])
       }
-      assert.equal(await alpha('#view-code > .actions'), glass ? .85 : 1)
+      assert.equal(await alpha('#view-code > .actions'), glass ? (mode === 'half' ? .6 : 0) : 1)
       assert.equal(await panel.locator('#code-save').evaluate(node => getComputedStyle(node).color), dark ? 'rgb(21, 21, 23)' : 'rgb(255, 255, 255)', 'primary button text stays solid')
     }
   }
@@ -119,7 +119,10 @@ try {
 
   await panel.click('#tab-params')
   await panel.fill('#glass', '20')
-  assert.ok(await alpha('.settings-card') > .56, 'low veil keeps a readable minimum surface')
+  assert.equal(await alpha('.settings-card'), 0, 'clear remains fully transparent even at the lowest slider value')
+  await panel.click('#panels-dd .dd-trigger')
+  await panel.locator('#panels-dd .dd-item').nth(1).click()
+  assert.equal(await alpha('.settings-card'), .2, 'half opacity follows the slider exactly')
   await panel.uncheck('#enabled')
   assert.equal(await panel.getAttribute('html', 'data-panels'), 'opaque')
   assert.equal(await alpha('body'), 1)
@@ -141,7 +144,7 @@ try {
   await page.keyboard.press('Escape')
   assert.deepEqual(await heights(), [360, 360])
   assert.deepEqual(errors, [])
-  console.log('ok    low-veil readability, disabled background fallback and no uncaught errors')
+  console.log('ok    zero-fill clear mode, slider-linked half mode, disabled background fallback and no uncaught errors')
 } finally {
   await browser?.close()
   await harness.close()

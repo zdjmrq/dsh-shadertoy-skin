@@ -182,9 +182,8 @@ window.__ModuleLoader__.load({
           // So: the shell tokens go FULLY transparent (the shader is the only
           // background), and the single darkening/whitening veil is painted by the
           // player's own tint mix (`tint` + `tintMix`, see `playerLook()`), one
-          // composition layer, whatever the DOM depth. Sliding the glass slider then
-          // only sends a `params` message — it never touches the theme tokens, so it
-          // cannot emit `theme/change` or trigger a restyle storm.
+          // composition layer, whatever the DOM depth. In half mode the same
+          // slider also updates semantic surface fills; the shell stays clear.
           //
           // Deliberately NO `:has()` selectors here. Anchoring the whole `#root` with
           // `:has()` makes Chromium re-evaluate the entire tree on every panel switch;
@@ -197,6 +196,34 @@ window.__ModuleLoader__.load({
           const GLASS_CSS = `html, body { background: transparent !important; }
             [role="dialog"], [role="alertdialog"], [data-shortcut-modal="settings"] {
               background-color: var(--shader-skin-dialog-surface) !important;
+            }
+            /* These component-local fills shadow inherited theme tokens. Keep
+               the outer card's fill, but never stack a second fill in its head. */
+            html[data-shader-skin-panels] [class*="_card"] {
+              --changes-fill: transparent !important;
+              --changes-hover: transparent !important;
+              --plan-card-fill: var(--shader-skin-surface) !important;
+              --plan-card-hover: var(--shader-skin-surface) !important;
+            }
+            html[data-shader-skin-panels] [class*="_root"] {
+              --deliverable-fill: var(--shader-skin-surface) !important;
+              --deliverable-hover: var(--shader-skin-surface) !important;
+            }
+            /* Stable DSH Markdown attributes cover plain, highlighted and card
+               code blocks. Only the wrapper paints, including its sticky head. */
+            html[data-shader-skin-panels] .md-code-block {
+              background: var(--shader-skin-surface) !important;
+              --dsl-code-block-background: transparent !important;
+              --dsl-code-block-banner-background-color: transparent !important;
+            }
+            html[data-shader-skin-panels] .md-code-block [data-code-block-banner],
+            html[data-shader-skin-panels] .md-code-block [data-code-block-content],
+            html[data-shader-skin-panels] .md-code-block pre {
+              background: transparent !important;
+            }
+            /* macOS hardcodes this button's fill instead of using the token. */
+            html[data-shader-skin-panels] button[class*="_newSession"] {
+              background: var(--shader-skin-surface) !important;
             }`
           const CLEAR_TOKENS = {
             '--dsw-alias-bg-base': { light: 'transparent', dark: 'transparent' },
@@ -204,9 +231,7 @@ window.__ModuleLoader__.load({
             '--shader-skin-dialog-surface': { light: '#fff', dark: '#232324' },
           }
           // The boxes that follow the `panels` level: cards, nested panels, code
-          // blocks, the composer/editor surface (`bg-module-platform`) and the
-          // message input (`specific-input-major`). Popovers/menus get a higher
-          // alpha below so they stay readable.
+          // blocks and the composer/editor surface (`bg-module-platform`).
           const LAYER_TOKENS = [
             '--dsw-alias-bg-layer-1', '--dsw-alias-bg-layer-2',
             '--dsw-alias-bg-layer-3', '--dsw-alias-bg-layer-4',
@@ -215,22 +240,23 @@ window.__ModuleLoader__.load({
           const RAISED_TOKENS = [
             '--dsw-alias-bg-overlay', '--dsw-specific-menu', '--dsw-menu-surface-fill',
             '--dsw-alias-menu-group-header-fill', '--dsw-specific-selector',
+            '--dsw-specific-input-major',
+            '--dsw-alias-button-elevated-fill', '--dsw-alias-button-elevated-hover',
+            '--dsw-alias-button-floating-fill', '--dsw-alias-button-floating-hover',
           ]
           /**
            * Semantic content surfaces only. Never override a static palette:
            * the same neutral value may also be used for foreground text/icons.
-           * Each entry is [token, weight] relative to the selected card alpha.
+           * Every surface shares the selected opacity, without hidden floors.
            */
           const CONTENT_TOKENS = [
-            ['--dsw-alias-markdown-code-block', 1],
-            ['--dsw-alias-markdown-code-block-banner', 1],
-            ['--dsw-alias-markdown-inline-code', 0.7],
-            ['--dsw-specific-bubble', 1],
+            '--dsw-alias-markdown-code-block',
+            '--dsw-alias-markdown-code-block-banner',
+            '--dsw-alias-markdown-inline-code',
+            '--dsw-specific-bubble',
           ]
 
           /** `panels` = opaque (leave theme fills) | half | clear. */
-          const PANEL_ALPHA = { half: 0.72, clear: 0.38 }
-
           function ensureGlassStyle() {
             if (document.getElementById(STYLE_ID)) return
             const style = document.createElement('style')
@@ -245,23 +271,11 @@ window.__ModuleLoader__.load({
 
           function glassTokens() {
             const tokens = { ...CLEAR_TOKENS }
-            const selected = PANEL_ALPHA[effective().panels] ?? null
-            if (selected === null) return tokens
-            // Keep primary text readable even with the veil at 20% and a solid
-            // white/black shader. Low glass levels need a stronger card surface.
-            const glass = clamp(effective().glass, 20, 95, 60) / 100
-            const darkestLight = 255 * glass * 0.92
-            const brightestDark = 255 * (1 - glass) + 21 * glass
-            const darkFloor = Math.max(0, (brightestDark - 110) / Math.max(1, brightestDark - 35))
-            const lightFloor = Math.max(0, (140 - darkestLight) / Math.max(1, 255 - darkestLight))
-            const alpha = Math.min(0.96, Math.max(selected, darkFloor, lightFloor))
-            for (const token of LAYER_TOKENS) tokens[token] = rgba('35, 35, 36', alpha)
-            for (const token of RAISED_TOKENS) tokens[token] = rgba('44, 44, 46', 0.97)
-            tokens['--dsw-specific-input-major'] = rgba('44, 44, 46', Math.max(0.85, alpha))
-            for (const [token, weight] of CONTENT_TOKENS) {
-              const floor = token.includes('code-block') ? 0.84 : 0.38
-              tokens[token] = rgba('35, 35, 36', Math.max(floor, alpha * weight))
-            }
+            const params = effective()
+            if (!['half', 'clear'].includes(params.panels)) return tokens
+            const alpha = params.panels === 'clear' ? 0 : clamp(params.glass, 20, 95, 60) / 100
+            for (const token of [...LAYER_TOKENS, ...RAISED_TOKENS, ...CONTENT_TOKENS,
+              '--shader-skin-surface', '--shader-skin-dialog-surface']) tokens[token] = rgba('35, 35, 36', alpha)
             return tokens
           }
 
@@ -281,6 +295,9 @@ window.__ModuleLoader__.load({
           function applyGlass(force = false) {
             if (!booted) return false
             if (effective().enabled === false) { clearGlass(); return false }
+            const mode = effective().panels
+            if (['half', 'clear'].includes(mode)) document.documentElement.dataset.shaderSkinPanels = mode
+            else delete document.documentElement.dataset.shaderSkinPanels
             const theme = service('theme')
             if (theme === undefined) return false
             const tokens = glassTokens()
@@ -300,6 +317,7 @@ window.__ModuleLoader__.load({
             glassDispose = null
             glassSignature = null
             document.getElementById(STYLE_ID)?.remove()
+            delete document.documentElement.dataset.shaderSkinPanels
           }
 
           // ------------------------------------------------------------ parameters
