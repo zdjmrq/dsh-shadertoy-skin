@@ -533,7 +533,13 @@
   function applyTheme() {
     const dark = detectDark()
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-    document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+    let scheme = dark ? 'dark' : 'light'
+    // Chromium paints an opaque iframe canvas when parent/child color schemes
+    // differ. Match the parent while the settings surface is being previewed.
+    if (document.body.classList.contains('previewing')) {
+      try { scheme = parent.getComputedStyle(parent.document.documentElement).colorScheme } catch { /* same-origin in DSH */ }
+    }
+    document.documentElement.style.colorScheme = scheme
   }
   function watchParentTheme() {
     try {
@@ -817,6 +823,7 @@
       preview.setAttribute('aria-pressed', 'false')
       const setPreview = value => {
         document.body.classList.toggle('previewing', value)
+        applyTheme()
         preview.setAttribute('aria-pressed', String(value))
         preview.textContent = value ? '返回设置 · Esc' : '预览背景 ↗'
       }
