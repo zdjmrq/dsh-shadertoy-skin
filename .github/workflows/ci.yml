@@ -70,3 +70,7 @@ jobs:
         run: npm run test:ui
         env:
           PLAYWRIGHT_CHANNEL: chrome
+      - name: Extended plugin audit regressions
+        run: npm run test:audit
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
