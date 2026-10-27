@@ -15,18 +15,15 @@ Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Ha
 >
 > **Recommended: browse [shadertoy.com](https://www.shadertoy.com/)** — import any piece into the background library, tune it to your taste, and feel free to share screenshots, settings or improvements via Issues / PRs.
 
-https://github.com/user-attachments/assets/c8801ca1-e96e-4bfe-83bc-6e99b5551cf4
+https://github.com/user-attachments/assets/9697da1f-9dae-4b4e-9ceb-5c7fca90a605
 
-*演示 1 · 像素马里奥：静态画 + 一首歌 —— 音乐「只播一次」，放完画面常驻*
+*演示 1 · 像素马里奥（带音乐）：设置页 → 卡片透明档 → 代码页 → 聊天；音乐「只播一次」，放完画面常驻*
 
-https://github.com/user-attachments/assets/001acdf6-90e2-4b2c-85fc-e9d076678597
+https://github.com/user-attachments/assets/a3f43db3-5804-4a7a-aa0a-f3044abf8374
 
 *演示 2 · [Seascape](https://www.shadertoy.com/view/Ms2SD1)（© TDM，CC BY-NC-SA 3.0）的个人修改版：摄像机抬到近地轨道，只留海面 —— 已作为内置预设「海面（Seascape）」随插件提供*
 
-![马里奥像素画背景](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-mario.jpg)
-![代码页：查看 / 修改 / 保存并运行当前作品的着色器](https://raw.githubusercontent.com/zdjmrq/dsh-shadertoy-skin/main/docs/verify/readme-code.jpg)
-
-> 视频与截图里的 ShaderToy 作品版权归原作者：像素马里奥「Mario」（© Inigo Quilez）、Seascape（© Alexander Alekseev aka TDM），两者均以 **CC BY-NC-SA 3.0** 收录为内置预设（非 MIT，见文末许可证）。**视频与截图仅作效果展示**，插件自写代码仍是 MIT。
+> 视频里的 ShaderToy 作品版权归原作者：像素马里奥「Mario」（© Inigo Quilez）、Seascape（© Alexander Alekseev aka TDM），两者均以 **CC BY-NC-SA 3.0** 收录为内置预设（非 MIT，见文末许可证）。**视频仅作效果展示**，插件自写代码仍是 MIT。
 
 ## 名字 / 包名（认准这两个）
 
