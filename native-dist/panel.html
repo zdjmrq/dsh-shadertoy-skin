@@ -1075,6 +1075,8 @@
     const bytes = new TextEncoder()
     const total = [...state.entries, entry].reduce((sum, item) => sum + bytes.encode(item.code.image).length + bytes.encode(item.code.sound || '').length, 0)
     if (total > 1_500_000) throw new Error('背景库代码总量超过 1.5 MB')
+    const payload = JSON.stringify({ version: 2, activeId: state.activeId, entries: [...state.entries, entry], overrides: state.overrides })
+    if (bytes.encode(payload).length > 2 * 1024 * 1024) throw new Error('导入后配置大小超过 2 MB')
     state.entries.push(entry)
     scheduleSave()
     renderLibrary()

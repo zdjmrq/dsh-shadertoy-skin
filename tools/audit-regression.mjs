@@ -105,6 +105,10 @@ try {
   await panel.fill('#paste-sound', 'broken sound')
   await panel.click('#paste-add')
   assert.match(await panel.textContent('#paste-error'), /mainSound/)
+  const beforeLargeImport = (await stored()).entries.length
+  await panel.setInputFiles('#file-input', { name:'escaped-too-large.glsl', mimeType:'text/plain', buffer:Buffer.from(image + '\n//' + '\\'.repeat(1_100_000)) })
+  await panel.waitForFunction(() => document.querySelector('#note').textContent.includes('配置大小超过'))
+  assert.equal((await stored()).entries.length, beforeLargeImport)
   console.log('ok    own JSON and combined GLSL preserve sound; invalid sound is not silently discarded')
 
   await panel.click('#tab-params')
