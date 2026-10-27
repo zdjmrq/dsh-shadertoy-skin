@@ -14,10 +14,11 @@
  *
  * @module dsh-shadertoy-skin
  */
-import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { extname, join, normalize, resolve, sep } from 'node:path'
+import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'shadertoy-skin'
@@ -26,6 +27,7 @@ export const inject = ['webServer']
 const ROUTE = '/shader-skin'
 const DIST = resolve(fileURLToPath(new URL('./native-dist/', import.meta.url)))
 const MAX_STATE_BYTES = 2 * 1024 * 1024
+let stateWrites = Promise.resolve()
 
 const MIME = Object.freeze({
   '.html': 'text/html; charset=utf-8',
@@ -66,13 +68,16 @@ function parseShaderDocument(text) {
   const passes = shader?.renderpass ?? shader?.passes
   let image = ''
   let sound = ''
+  let common = ''
   if (Array.isArray(passes)) {
+    if (passes.some(pass => /^(buffer|cubemap)$/i.test(pass?.type) || pass?.inputs?.length)) return undefined
     for (const pass of passes) {
       const type = String(pass?.type ?? 'image').toLowerCase()
       const source = typeof pass?.code === 'string' ? pass.code : ''
       if (source === '') continue
-      if (type === 'sound') sound = source
-      else if (image === '') image = source
+      if (type === 'common') common += `${source}\n`
+      else if (type === 'sound') sound = source
+      else if (type === 'image') image = source
     }
   }
   if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
@@ -80,7 +85,7 @@ function parseShaderDocument(text) {
   if (image === '' && typeof raw?.image === 'string') image = raw.image
   if (image === '') return undefined
   const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
-  return { image, sound: sound || undefined, name: name || undefined }
+  return { image: common + image, sound: sound ? common + sound : undefined, name: name || undefined }
 }
 
 /** List the user-imported presets directory ($DSH_HOME/shader-skin/presets). */
@@ -262,7 +267,7 @@ function sanitizeState(raw) {
   const codeBytes = entries.reduce((total, entry) => total + entry.code.image.length + (entry.code.sound?.length ?? 0), 0)
   if (codeBytes > 1_500_000) throw new Error('shader code too large (max 1.5 MB in total)')
 
-  const overrides = {}
+  const overrides = Object.create(null)
   if (raw.overrides !== null && typeof raw.overrides === 'object' && !Array.isArray(raw.overrides)) {
     for (const [id, value] of Object.entries(raw.overrides)) {
       const params = sanitizeParams(value)
@@ -313,11 +318,21 @@ async function handleState(req, res) {
     return fail(res, 400, `invalid state: ${error instanceof Error ? error.message : String(error)}`)
   }
   const target = statePath()
-  const temp = `${target}.tmp`
+  const temp = `${target}.${randomUUID()}.tmp`
+  // A shared .tmp file lets concurrent PUTs rename or overwrite each other's
+  // data. Queue complete atomic replacements, and recover the queue on errors.
+  const write = stateWrites.then(async () => {
+    try {
+      await mkdir(join(dirname(target), 'shader-skin'), { recursive: true })
+      await writeFile(temp, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+      await rename(temp, target)
+    } finally {
+      await rm(temp, { force: true }).catch(() => {})
+    }
+  })
+  stateWrites = write.catch(() => {})
   try {
-    await mkdir(join(dshHome(), 'shader-skin'), { recursive: true })
-    await writeFile(temp, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
-    await rename(temp, target)
+    await write
   } catch {
     fail(res, 500, 'state write failed')
     return

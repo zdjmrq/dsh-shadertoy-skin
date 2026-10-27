@@ -160,6 +160,9 @@ window.__ModuleLoader__.load({
           let sidebarAllowed = false
           let playerReady = false
           let playerInitAttempts = 0
+          let initRequest = 0
+          let presetRequest = 0
+          let stateRequest = 0
           // WebAudio inside an iframe may start suspended until a real user gesture
           // (autoplay policy); the first click / keypress in the app is that gesture.
           let audioSuspended = false
@@ -328,7 +331,9 @@ window.__ModuleLoader__.load({
           }
 
           async function reloadState() {
+            const request = ++stateRequest
             const raw = await fetchJson(`${BASE}/state`).catch(() => null)
+            if (request !== stateRequest) return store
             const next = normalizeState(raw)
             store.activeId = next.activeId
             store.entries = next.entries
@@ -371,15 +376,18 @@ window.__ModuleLoader__.load({
 
           async function sendInit(frame) {
             if (frame === null || playerInitAttempts >= 4) return
+            const request = ++initRequest
+            const id = store.activeId
             playerInitAttempts += 1
             const retry = (delay) => {
               if (playerInitAttempts >= 4) return
               timers.push(setTimeout(() => {
-                if (booted && !playerReady && background === frame) void sendInit(frame)
+                if (request === initRequest && booted && !playerReady && background === frame) void sendInit(frame)
               }, delay))
             }
             try {
               const preset = await resolvePreset(store.activeId ?? FALLBACK_PRESET)
+              if (!booted || request !== initRequest || frame !== background || id !== store.activeId) return
               store.activeId = preset.id
               // theme first: the player keeps per-theme preview defaults only until
               // it receives an explicit look, and init carries that explicit look
@@ -413,6 +421,7 @@ window.__ModuleLoader__.load({
           }
 
           function removeBackground() {
+            initRequest++
             document.getElementById(BG_ID)?.remove()
             background = null
           }
@@ -425,7 +434,9 @@ window.__ModuleLoader__.load({
             if (!message || typeof message !== 'object') return
             switch (message.type) {
               case 'params': {
-                store.overrides[store.activeId] = { ...(message.params ?? {}) }
+                const id = typeof message.id === 'string' ? message.id : store.activeId
+                store.overrides[id] = { ...(message.params ?? {}) }
+                if (id !== store.activeId) return
                 applyGlass()
                 syncEnabled()
                 postTo(background, { type: 'params', params: { ...effective(), ...playerLook() } })
@@ -433,8 +444,13 @@ window.__ModuleLoader__.load({
               }
               case 'preset': {
                 if (typeof message.id === 'string' && message.id !== '') {
+                  const request = ++presetRequest
+                  initRequest++
                   await reloadState()
+                  if (!booted || request !== presetRequest) return
                   store.activeId = message.id
+                  playerInitAttempts = 0
+                  playerReady = false
                   if (background) await sendInit(background)
                   applyGlass()
                   syncEnabled()

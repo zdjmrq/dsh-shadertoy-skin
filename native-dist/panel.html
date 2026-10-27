@@ -497,6 +497,10 @@
   let open = MODE === 'main'
   let saveTimer = 0
   let audioState = 'none'
+  let saveQueue = Promise.resolve(true)
+  let saveRevision = 0
+  let activeRevision = 0
+  let persistedActiveId = null
 
   const clamp = (v, lo, hi, fb) => {
     const n = Number(v)
@@ -511,7 +515,7 @@
   // ---------------------------------------------------------------- theme
   function detectDark() {
     try {
-      if (parent.document?.body) return parent.document.body.hasAttribute('data-ds-dark-theme')
+      if (!STANDALONE && parent.document?.body) return parent.document.body.hasAttribute('data-ds-dark-theme')
     } catch { /* cross-origin fallback */ }
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true
   }
@@ -656,20 +660,26 @@
 
   function toParent(message) {
     if (STANDALONE) return
+    if (message.type === 'params') message.id = state.activeId
     try { parent.postMessage(message, location.origin) } catch { /* parent gone */ }
   }
 
   function saveState() {
+    const activeId = state.activeId
     const body = JSON.stringify({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides })
-    return fetch(`${BASE}/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body })
+    const revision = ++saveRevision
+    const result = saveQueue.then(() => fetch(`${BASE}/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body }))
       .then(response => {
-        setNote(response.ok ? '改动即时生效并已保存。' : `保存失败（HTTP ${response.status}）`, !response.ok)
+        if (response.ok) persistedActiveId = activeId
+        if (revision === saveRevision) setNote(response.ok ? '改动即时生效并已保存。' : `保存失败（HTTP ${response.status}），请重试。`, !response.ok)
         return response.ok
       })
       .catch(() => {
-        setNote('保存失败：Host 路由不可用。', true)
+        if (revision === saveRevision) setNote('保存失败：Host 路由不可用，请重试。', true)
         return false
       })
+    saveQueue = result
+    return result
   }
 
   function scheduleSave() {
@@ -695,22 +705,29 @@
   }
 
   async function setActive(id) {
-    if (!id) return
-    if (id === state.activeId) {
-      toParent({ type: 'preset', id })
-      toParent({ type: 'params', params: effective() })
-      return
-    }
+    if (!id) return false
+    const revision = ++activeRevision
+    const previousId = state.activeId
     state.activeId = id
     sync()
     renderLibrary()
     // Persist BEFORE the host reloads `/state` for the new preset: a brand-new
     // entry only exists on disk once this PUT succeeds, otherwise the host falls
     // back to the first built-in and shows the wrong shader.
-    await saveNow()
+    const saved = await saveNow()
+    if (revision !== activeRevision) return false
+    if (!saved) {
+      state.activeId = persistedActiveId ?? previousId
+      sync()
+      renderLibrary()
+      toParent({ type: 'preset', id: state.activeId })
+      toParent({ type: 'params', params: effective() })
+      return false
+    }
     toParent({ type: 'preset', id })
     toParent({ type: 'params', params: effective() })
     if (!$('view-code').hidden) void loadCode()
+    return true
   }
 
   function setParam(key, value) {
@@ -961,13 +978,16 @@
     const passes = shader?.renderpass ?? shader?.passes
     let image = ''
     let sound = ''
+    let common = ''
     if (Array.isArray(passes)) {
+      if (passes.some(pass => /^(buffer|cubemap)$/i.test(pass?.type) || pass?.inputs?.length)) throw new Error('暂不支持 Buffer、多通道纹理或 Cubemap 作品，请导入独立的 Image / Sound 代码。')
       for (const pass of passes) {
         const type = String(pass?.type ?? 'image').toLowerCase()
         const source = typeof pass?.code === 'string' ? pass.code : ''
         if (source === '') continue
-        if (type === 'sound') sound = source
-        else if (image === '') image = source
+        if (type === 'common') common += `${source}\n`
+        else if (type === 'sound') sound = source
+        else if (type === 'image') image = source
       }
     }
     if (image === '' && typeof shader?.code?.image === 'string') image = shader.code.image
@@ -975,7 +995,7 @@
     if (image === '' && typeof raw?.image === 'string') image = raw.image
     if (image === '') return undefined
     const name = String(shader?.info?.name ?? shader?.name ?? raw?.name ?? '').trim()
-    return { image, sound: sound || undefined, name: name || undefined }
+    return { image: common + image, sound: sound ? common + sound : undefined, name: name || undefined }
   }
 
   const looksLikeImage = code => /\bmainImage\s*\(/.test(code) || /\bvoid\s+main\s*\(/.test(code)
@@ -985,6 +1005,7 @@
     if (!looksLikeImage(image)) throw new Error('Image 代码里找不到 mainImage() 或 main()')
     const id = `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     const entry = { id, name: (name || '我的背景').slice(0, 120), source: source || 'paste', code: { image } }
+    if (origin) entry.origin = origin
     if (sound && looksLikeSound(sound)) entry.code.sound = sound
     state.entries.push(entry)
     scheduleSave()
@@ -996,7 +1017,7 @@
     const list = $('lib-list')
     const rows = [
       ...manifest.map(item => ({ id: item.id, name: item.name || item.id, kind: '内置', license: item.license, sound: Boolean(item.hasSound), entry: null })),
-      ...state.entries.map(item => ({ id: item.id, name: item.name, kind: '我的', license: null, sound: Boolean(item.code?.sound), entry: item })),
+      ...state.entries.map(item => ({ id: item.id, name: item.name, kind: '我的', license: item.license, sound: Boolean(item.code?.sound), entry: item })),
     ]
     list.replaceChildren(...rows.map(row => {
       const name = el('span', { className: 'name' })
@@ -1034,11 +1055,12 @@
         remove.textContent = '删除'
         remove.addEventListener('click', async () => {
           if (!window.confirm(`删除「${row.entry.name}」？此操作不可恢复。`)) return
+          const previous = { entries: [...state.entries], overrides: { ...state.overrides }, activeId: state.activeId }
           const wasActive = state.activeId === row.id
           state.entries = state.entries.filter(item => item.id !== row.id)
           delete state.overrides[row.id]
           if (wasActive) state.activeId = manifest[0]?.id ?? null
-          await saveNow()
+          if (!await saveNow()) { Object.assign(state, previous); renderLibrary(); sync(); return }
           if (wasActive) {
             toParent({ type: 'preset', id: state.activeId })
             toParent({ type: 'params', params: effective() })
@@ -1147,6 +1169,10 @@
 
   // ------------------------------------------------------------- code tab
   let codeLoadToken = 0
+  let codeLoadedId = null
+  let codeBaseline = { image: '', sound: '' }
+  let codeSaving = false
+  const codeDrafts = new Map()
   const CODE_HEIGHTS_KEY = 'shadertoy-skin.codeHeights'
 
   /** Restore the user's own code-box heights (drag the bottom-right corner to change). */
@@ -1167,8 +1193,13 @@
     } catch { /* storage may be blocked */ }
   }
 
-  async function loadCode() {
+  async function loadCode(discard = false) {
+    if (codeLoadedId && ($('code-image').value !== codeBaseline.image || $('code-sound').value !== codeBaseline.sound)) {
+      codeDrafts.set(codeLoadedId, { image: $('code-image').value, sound: $('code-sound').value })
+    }
+    if (discard) codeDrafts.delete(state.activeId)
     const token = ++codeLoadToken
+    const id = state.activeId
     const entry = entryById(state.activeId)
     const builtin = builtinById(state.activeId)
     const editable = Boolean(entry)
@@ -1185,9 +1216,12 @@
       const soundFile = builtin.soundFile ?? `${builtin.id}-sound.glsl`
       try { sound = await fetchText(`${BASE}/presets/${soundFile}`) } catch { sound = '' }
     }
-    if (token !== codeLoadToken) return
-    $('code-image').value = image
-    $('code-sound').value = sound
+    if (token !== codeLoadToken || id !== state.activeId) return
+    codeLoadedId = id
+    codeBaseline = { image, sound }
+    const draft = codeDrafts.get(id)
+    $('code-image').value = draft?.image ?? image
+    $('code-sound').value = draft?.sound ?? sound
     $('code-title').textContent = name
     $('code-hint').textContent = `${editable
       ? '正在编辑「我的」背景：保存后立刻重新编译运行，改动只存在本机。'
@@ -1200,7 +1234,8 @@
 
   function updateCodeInfo() {
     const image = $('code-image').value
-    $('code-image-info').textContent = `${image.split('\n').length} 行 · ${image.length} 字符`
+    const dirty = image !== codeBaseline.image || $('code-sound').value !== codeBaseline.sound
+    $('code-image-info').textContent = `${image.split('\n').length} 行 · ${image.length} 字符${dirty ? ' · 未保存' : ''}`
     $('code-sound-info').textContent = $('code-sound').value.trim() ? 'mainSound' : ''
     for (const id of ['code-image', 'code-sound']) {
       const gutter = $(`${id}-lines`)
@@ -1215,6 +1250,11 @@
   }
 
   async function saveCode() {
+    if (codeSaving) return
+    if (codeLoadedId !== state.activeId) {
+      setCodeNote('作品正在加载或切换，请加载完成后再保存。', true)
+      return
+    }
     const image = $('code-image').value
     const sound = $('code-sound').value.trim()
     if (!looksLikeImage(image)) {
@@ -1227,19 +1267,31 @@
     }
     const entry = entryById(state.activeId)
     const builtin = builtinById(state.activeId)
+    codeSaving = true
+    $('code-save').disabled = true
     try {
       if (entry) {
+        const previousCode = entry.code
+        const previousSource = entry.source
         entry.code = { ...(entry.code ?? {}), image }
         if (sound !== '') entry.code.sound = sound
         else delete entry.code.sound
         entry.source = 'edit'
         sync()
         renderLibrary()
-        await saveNow()
+        if (!await saveNow()) {
+          entry.code = previousCode
+          entry.source = previousSource
+          setCodeNote('保存失败，代码草稿已保留，请重试。', true)
+          return
+        }
         toParent({ type: 'preset', id: entry.id })
         toParent({ type: 'params', params: effective() })
         updateCodeInfo()
-        setCodeNote('已保存并重新运行。')
+        codeBaseline = { image, sound }
+        updateCodeInfo()
+        codeDrafts.delete(entry.id)
+        setCodeNote('已保存，已请求重新编译运行。')
         return
       }
       if (!builtin) {
@@ -1248,11 +1300,25 @@
       }
       // built-ins are read-only package files -> save the edit as a copy
       const copy = addEntry({ name: `${builtin.name || builtin.id}（我的副本）`, image, sound, source: 'edit', origin: builtin.id })
-      await setActive(copy.id)
-      await loadCode()
+      if (builtin.license) copy.license = builtin.license
+      if (state.overrides[builtin.id]) state.overrides[copy.id] = { ...state.overrides[builtin.id] }
+      if (!await setActive(copy.id)) {
+        state.entries = state.entries.filter(item => item.id !== copy.id)
+        delete state.overrides[copy.id]
+        renderLibrary()
+        setCodeNote('保存失败，代码草稿已保留，请重试。', true)
+        return
+      }
+      codeDrafts.delete(builtin.id)
+      codeBaseline = { image, sound }
+      codeLoadedId = copy.id
+      await loadCode(true)
       setCodeNote('内置作品只读，已另存为「我的副本」并运行。')
     } catch (error) {
       setCodeNote(`保存失败：${error.message}`, true)
+    } finally {
+      codeSaving = false
+      $('code-save').disabled = false
     }
   }
 
@@ -1337,7 +1403,7 @@
     buildCodeWorkspace()
     $('code-save').addEventListener('click', () => { void saveCode() })
     $('code-revert').addEventListener('click', () => {
-      void loadCode().then(() => setCodeNote('已重新读取当前运行的作品。'))
+      void loadCode(true).then(() => setCodeNote('已重新读取当前运行的作品。'))
     })
     $('code-image').addEventListener('input', updateCodeInfo)
     $('code-sound').addEventListener('input', updateCodeInfo)
@@ -1440,7 +1506,7 @@
   // ---------------------------------------------------------------- messages
   if (!STANDALONE) {
     window.addEventListener('message', event => {
-      if (event.origin !== location.origin) return
+      if (event.origin !== location.origin || event.source !== parent) return
       const message = event.data
       if (!message || typeof message !== 'object') return
       if (message.type === 'audio') {
@@ -1475,7 +1541,7 @@
     try { manifest = await fetchJson(`${BASE}/presets/index.json`) } catch { manifest = [] }
     manifest = Array.isArray(manifest) ? manifest : []
     if (manifest.length === 0) manifest = [{ id: 'aurora', name: '极光（自写）' }, { id: 'flow', name: '流体色带（自写）' }]
-    if (!STANDALONE) {
+    {
       try {
         const remote = await fetchJson(`${BASE}/state`)
         if (remote && typeof remote === 'object') {
@@ -1487,6 +1553,7 @@
       } catch { /* first run */ }
     }
     if (!state.activeId) state.activeId = manifest[0]?.id ?? 'aurora'
+    persistedActiveId = state.activeId
     arrangeSettings()
     bindParams()
     bindLibrary()

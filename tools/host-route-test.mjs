@@ -42,6 +42,14 @@ await writeFile(join(home, 'shader-skin', 'presets', 'exported.json'), JSON.stri
 }), 'utf8')
 await writeFile(join(home, 'shader-skin', 'presets', 'broken.json'), '{"nope":true}', 'utf8')
 await writeFile(join(home, 'shader-skin', 'presets', 'notes.txt'), 'not a shader', 'utf8')
+await writeFile(join(home, 'shader-skin', 'presets', 'common-first.json'), JSON.stringify({ renderpass: [
+  { type: 'common', code: 'float helper() { return 0.5; }' },
+  { type: 'sound', code: 'vec2 mainSound(float t) { return vec2(helper()); }' },
+  { type: 'image', code: seascape },
+] }))
+await writeFile(join(home, 'shader-skin', 'presets', 'buffer.json'), JSON.stringify({ renderpass: [
+  { type: 'buffer', code: seascape }, { type: 'image', code: seascape },
+] }))
 
 const server = createServer((req, res) => {
   handler(req, res).catch(error => {
@@ -104,6 +112,8 @@ try {
   check('local listing parses a ShaderToy export', exported?.kind === 'shadertoy' && exported?.name === 'Exported Toy' && exported?.hasSound === true)
   check('local listing skips unusable json', !local.some(item => item.file === 'broken.json'))
   check('local listing skips unrelated files', !local.some(item => item.file === 'notes.txt'))
+  check('Common before Image is recognized as a usable export', local.some(item => item.file === 'common-first.json' && item.hasSound))
+  check('unsupported Buffer exports are not offered as usable presets', !local.some(item => item.file === 'buffer.json'))
   const localFile = await get('/shader-skin/local/my-shader.glsl')
   check('local preset file is served', localFile.status === 200 && (await localFile.text()).includes('mainImage'))
 
@@ -141,6 +151,13 @@ try {
   check('legacy v1 state is accepted', legacy.status === 200)
   const migrated = await json('/shader-skin/state')
   check('v1 params migrate into an override', migrated.version === 2 && migrated.overrides?.aurora?.glass === 50)
+
+  const parallel = await Promise.all(Array.from({ length: 24 }, (_, i) => putState({
+    version: 2, activeId: `concurrent-${i}`, entries: [], overrides: {},
+  })))
+  check('concurrent state replacements all succeed', parallel.every(response => response.status === 200), parallel.map(response => response.status).join(','))
+  const afterParallel = JSON.parse(await readFile(join(home, 'shader-skin.json'), 'utf8'))
+  check('concurrent saves leave a complete valid document', /^concurrent-\d+$/.test(afterParallel.activeId) && afterParallel.version === 2)
 
   // --- state validation
   const badJson = await fetch(`${origin}/shader-skin/state`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: '{oops' })

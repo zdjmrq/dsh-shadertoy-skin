@@ -21,6 +21,9 @@ import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const ROOT = new URL('..', import.meta.url)
 const PORT = Number(process.env.SMOKE_PORT ?? 8731)
@@ -57,9 +60,11 @@ async function main() {
     process.exit(2)
   }
 
+  const testHome = await mkdtemp(join(tmpdir(), 'shader-renderer-'))
   const server = spawn(process.execPath, [fileURLToPath(new URL('./dev-server.mjs', import.meta.url)), String(PORT)], {
     cwd: fileURLToPath(ROOT),
     stdio: 'ignore',
+    env: { ...process.env, DSH_DEV_STATE: '1', DSH_HOME: testHome },
   })
 
   let browser
@@ -392,6 +397,7 @@ async function main() {
   } finally {
     await browser?.close().catch(() => {})
     server.kill()
+    await rm(testHome, { recursive: true, force: true })
   }
 
   if (failures.length > 0) {
