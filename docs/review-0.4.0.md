@@ -58,6 +58,8 @@ Buffer 按 A–D 执行，自身与后序 Buffer 读取上一帧，前序 Buffer
 - `test:renderer`、`test:audio`、`test:panel`、`test:audit`、`test:ui`、`test:surfaces`、`test:transparency`、`test:core`、`test:project`、`test:multi`、`test:worker`：覆盖真实 WebGL/WebAudio、实际多文件落盘与运行、11 个内置条目、六个新项目截图、体素持久状态、代码与参数竞争、导入导出和兼容路径。
 - `npm audit`：本次检查未报告已知依赖漏洞。没有新增运行时依赖。
 - 自动化使用临时 profile，不改真实用户作品库；截图输出改到被忽略的 `.tmp-validation/`，避免污染 Git 和与桌面文件监视器争用历史截图。
+- DSH 实机正常退出并重启后，Worker 下的 Take On Me 正常播放；验证 Common / Buffer A / Image / Sound 横条、Image 通道、未编辑时的只读干净状态以及字号菜单全部选项对比度。原有 3 个自定义作品源码核对未变。
+- 修复分支完整 GitHub CI 已通过（Actions run 40585875793），包括新增线程阻塞、异步初始化超时、GPU 重复崩溃与安全模式回归。
 - 发布版本 `0.4.0`，经分支验证、DSH 实机、GitHub CI 后合入 main，由 Release 的 OIDC 工作流发布 npm。
 
 ## 后续优化空间
