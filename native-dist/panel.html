@@ -186,6 +186,8 @@
   .code-card.focused .code-frame { flex: 1; min-height: 0; }
   .code-card.focused .code-area { height: 100% !important; min-height: 0; }
   .code-card.focused .code-grip, .code-card.focused .editor-controls button:first-child { display: none; }
+  .editor-focus-save { display: none; }
+  .code-card.focused .editor-focus-save { display: block; }
   #view-code > .actions { position: sticky; bottom: 0; z-index: 5; padding: 12px 0; background: var(--pop); border-top: 1px solid var(--line); }
   @media (max-width: 540px) { .editor-shortcut { display: none; } .editor-toolbar { gap: 12px; } .code-card { padding: 10px; } .code-card > .head output { font-size: 10px; } .editor-controls { width: 100%; justify-content: flex-end; } .code-card.focused { inset: 4px; } }
 
@@ -1250,7 +1252,9 @@
       const button = focused.querySelector('[data-focus]')
       button.textContent = '专注编辑'
       button.setAttribute('aria-pressed', 'false')
-      lastFocused?.focus()
+      focused.removeAttribute('role')
+      focused.removeAttribute('aria-modal')
+      lastFocused?.focus({ preventScroll: true })
     }
     for (const id of ['code-image', 'code-sound']) {
       const area = $(id)
@@ -1265,7 +1269,9 @@
       focus.dataset.focus = id
       focus.setAttribute('aria-label', `专注编辑 ${id === 'code-image' ? 'Image' : 'Sound'}`)
       focus.setAttribute('aria-pressed', 'false')
-      controls.append(collapse, focus)
+      const save = el('button', { type: 'button', className: 'btn tiny primary editor-focus-save', textContent: '保存并运行' })
+      save.addEventListener('click', () => $('code-save').click())
+      controls.append(collapse, save, focus)
       head.append(controls)
       const frame = el('div', { className: 'code-frame', id: `${id}-frame` })
       const gutter = el('pre', { className: 'code-lines', id: `${id}-lines` })
@@ -1287,10 +1293,25 @@
         collapse.textContent = '收起'
         collapse.setAttribute('aria-expanded', 'true')
         card.classList.add('focused')
+        card.setAttribute('role', 'dialog')
+        card.setAttribute('aria-modal', 'true')
+        card.setAttribute('aria-label', id === 'code-image' ? 'Image 专注编辑' : 'Sound 专注编辑')
         document.body.classList.add('editor-focus')
         focus.textContent = '退出专注 · Esc'
         focus.setAttribute('aria-pressed', 'true')
-        area.focus()
+        const scrollTop = area.scrollTop
+        const scrollLeft = area.scrollLeft
+        area.focus({ preventScroll: true })
+        area.scrollTop = scrollTop
+        area.scrollLeft = scrollLeft
+      })
+      card.addEventListener('keydown', event => {
+        if (event.key !== 'Tab' || !card.classList.contains('focused')) return
+        const targets = [...card.querySelectorAll('button, textarea')].filter(node => !node.disabled && node.getClientRects().length)
+        const first = targets[0]
+        const last = targets.at(-1)
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
       })
     }
     const applyPreferences = () => {
