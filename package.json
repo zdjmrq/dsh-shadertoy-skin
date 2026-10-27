@@ -79,6 +79,7 @@
     "test:audit": "node tools/audit-regression.mjs",
     "test:ui": "node tools/ui-regression.mjs",
     "test:surfaces": "node tools/panel-surfaces-regression.mjs",
+    "test:transparency": "node tools/unified-transparency-regression.mjs",
     "preview": "node tools/browser-harness.mjs 8735",
     "pack:check": "npm pack --dry-run --json"
   },

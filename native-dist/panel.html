@@ -51,15 +51,14 @@
     --card-fill: rgba(255, 255, 255, var(--panel-alpha));
     --editor-fill: transparent;
     --focus-fill: var(--card-fill);
-    --control-fill: rgba(0, 0, 0, .035);
-    --control-hover-fill: rgba(0, 0, 0, .075);
-    --action-fill: rgba(255, 255, 255, var(--action-alpha));
+    --control-fill: transparent;
+    --control-hover-fill: transparent;
+    --action-fill: var(--card-fill);
+    --pop: rgba(255, 255, 255, var(--panel-alpha));
   }
   html[data-theme="dark"][data-panels="half"], html[data-theme="dark"][data-panels="clear"] {
     --card-fill: rgba(35, 35, 36, var(--panel-alpha));
-    --control-fill: rgba(0, 0, 0, .12);
-    --control-hover-fill: rgba(255, 255, 255, .08);
-    --action-fill: rgba(35, 35, 36, var(--action-alpha));
+    --pop: rgba(35, 35, 36, var(--panel-alpha));
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
@@ -214,6 +213,7 @@
   body.editor-focus #panel > :not(#view-code),
   body.editor-focus #view-code > :not(.focused),
   body.editor-focus #note { visibility: hidden; }
+  body.editor-focus .panel { background: transparent; border-color: transparent; box-shadow: none; }
   .code-card.focused { position: fixed; inset: 12px; z-index: 100; margin: 0; display: flex; flex-direction: column; background: var(--focus-fill); box-shadow: var(--shadow); }
   .code-card.focused .code-frame { flex: 1; min-height: 0; }
   .code-card.focused .code-area { height: 100% !important; min-height: 0; }
@@ -332,7 +332,7 @@
   .settings-footer { margin-top: 20px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .settings-footer .actions { margin: 0; }
   .settings-footer .note { margin: 0; }
-  #note { position: fixed; right: 24px; bottom: 18px; z-index: 60; max-width: min(480px, calc(100vw - 40px)); margin: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface); box-shadow: var(--shadow); }
+  #note { position: fixed; right: 24px; bottom: 18px; z-index: 60; max-width: min(480px, calc(100vw - 40px)); margin: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--card-fill); box-shadow: var(--shadow); }
   #note:empty { display: none; }
   #note.error { color: var(--danger); }
   .item { padding: 14px 12px; margin-bottom: 8px; border: 1px solid var(--line); background: var(--card-fill); flex-wrap: wrap; }
@@ -388,7 +388,7 @@
     </div>
 
     <div class="row">
-      <div class="head"><label for="glass">玻璃不透明度</label><output id="glass-out"></output></div>
+      <div class="head"><label for="glass">界面不透明度</label><output id="glass-out"></output></div>
       <input type="range" id="glass" min="20" max="95" step="1">
     </div>
 
@@ -909,17 +909,9 @@
   function syncPanelSurfaces(p) {
     const root = document.documentElement
     root.dataset.panels = p.enabled !== false && ['half', 'clear'].includes(p.panels) ? p.panels : 'opaque'
-    // Match client.js glassTokens(): a minimum fill protects text on extreme
-    // shaders when the global veil is low, in both DSH themes.
-    const selected = p.panels === 'half' ? 0.72 : 0.38
-    const glass = clamp(p.glass, 20, 95, 60) / 100
-    const darkestLight = 255 * glass * 0.92
-    const brightestDark = 255 * (1 - glass) + 21 * glass
-    const darkFloor = Math.max(0, (brightestDark - 110) / Math.max(1, brightestDark - 35))
-    const lightFloor = Math.max(0, (140 - darkestLight) / Math.max(1, 255 - darkestLight))
-    const alpha = Math.min(0.96, Math.max(selected, darkFloor, lightFloor))
+    // Match client.js glassTokens(): clear is zero fill, half follows the slider.
+    const alpha = p.panels === 'clear' ? 0 : clamp(p.glass, 20, 95, 60) / 100
     root.style.setProperty('--panel-alpha', String(alpha))
-    root.style.setProperty('--action-alpha', String(Math.max(0.85, alpha)))
     applyTheme()
   }
 
