@@ -823,7 +823,7 @@
       range.style.setProperty('--range-fill', `${100 * (Number(range.value) - Number(range.min)) / (Number(range.max) - Number(range.min))}%`)
     }
     $('audio-seconds').disabled = !sound
-    $('audio-mode-dd').querySelector('button').disabled = !sound
+    if (audioModeDd) $('audio-mode-dd').querySelector('button').disabled = !sound
   }
 
   /**
