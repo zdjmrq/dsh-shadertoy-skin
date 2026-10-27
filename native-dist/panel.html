@@ -176,6 +176,7 @@
     display: none;
   }
   .dd.open .dd-menu { display: block; }
+  .dd.menu-above .dd-menu { top: auto; bottom: calc(100% + 4px); }
   .dd-item {
     display: block; width: 100%; padding: 6px 8px; border: 0; border-radius: 7px;
     background: transparent; color: var(--fg); cursor: pointer; text-align: left;
@@ -272,7 +273,7 @@
   .local-item { padding: 8px 0; }
   .note.error, .hint.error { color: var(--danger); }
   [hidden] { display: none !important; }
-  @media (min-width: 860px) { body.mode-main .settings-grid { grid-template-columns: 1.15fr 1fr; } .settings-card.appearance { grid-row: span 2; } }
+  @media (min-width: 860px) { body.mode-main .settings-grid { grid-template-columns: 1.15fr 1fr; } .settings-card.appearance { grid-row: span 2; } .settings-card.sound { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; column-gap: 32px; } .settings-card.sound > h3, .settings-card.sound > p { grid-column: 1 / -1; } }
   @media (max-width: 540px) { body.mode-main .panel { padding-top: 22px; } .settings-card { padding: 18px; } .item .tools { width: 100%; justify-content: flex-end; } .settings-footer { align-items: stretch; flex-direction: column; } }
   @media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; } }
 </style>
@@ -501,6 +502,12 @@
     const root = el('div', { className: 'dd' })
     const trigger = el('button', { type: 'button', className: 'dd-trigger' })
     const menu = el('div', { className: 'dd-menu', role: 'listbox' })
+    menu.id = `${host.id}-options`
+    const label = host.closest('.row')?.querySelector('label')?.textContent || '选择选项'
+    menu.setAttribute('aria-label', label)
+    trigger.setAttribute('aria-label', label)
+    trigger.setAttribute('aria-controls', menu.id)
+    trigger.setAttribute('role', 'combobox')
     root.append(trigger, menu)
     host.replaceChildren(root)
     let list = options
@@ -515,9 +522,17 @@
     }
     const paintFocus = () => {
       for (const [index, item] of [...menu.children].entries()) item.classList.toggle('focus', index === focusIndex)
+      const focused = menu.children[focusIndex]
+      if (focused) { trigger.setAttribute('aria-activedescendant', focused.id); focused.scrollIntoView({ block: 'nearest' }) }
     }
-    const close = () => { root.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false') }
+    const close = () => { root.classList.remove('open'); trigger.setAttribute('aria-expanded', 'false'); trigger.removeAttribute('aria-activedescendant') }
     const openMenu = () => {
+      const rect = root.getBoundingClientRect()
+      const below = innerHeight - rect.bottom - 8
+      const above = rect.top - 8
+      const flip = below < 180 && above > below
+      root.classList.toggle('menu-above', flip)
+      menu.style.maxHeight = `${Math.max(80, Math.min(280, flip ? above : below))}px`
       root.classList.add('open')
       trigger.setAttribute('aria-expanded', 'true')
       focusIndex = Math.max(0, list.findIndex(option => option.value === current))
@@ -528,11 +543,14 @@
       current = option.value
       close()
       sync()
+      trigger.focus()
       onChange(option.value)
     }
     const render = () => {
       menu.replaceChildren(...list.map((option, index) => {
         const item = el('button', { type: 'button', className: 'dd-item', role: 'option' })
+        item.id = `${menu.id}-${index}`
+        item.tabIndex = -1
         item.textContent = textOf(option)
         item.addEventListener('click', () => pick(option))
         item.addEventListener('mouseenter', () => { focusIndex = index; paintFocus() })
@@ -556,7 +574,12 @@
           if (option) pick(option)
         }
       } else if (event.key === 'Escape') {
+        if (root.classList.contains('open')) event.stopPropagation()
         close()
+      } else if (event.key === 'Tab') {
+        close()
+      } else if (event.key === 'Home' || event.key === 'End') {
+        if (root.classList.contains('open')) { event.preventDefault(); focusIndex = event.key === 'Home' ? 0 : list.length - 1; paintFocus() }
       }
     })
     document.addEventListener('click', event => { if (!root.contains(event.target)) close() })
