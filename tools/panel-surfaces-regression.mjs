@@ -81,6 +81,13 @@ try {
       assert.equal(await panel.getAttribute('html', 'data-panels'), mode)
       assert.equal(await alpha('body'), glass ? 0 : 1)
       assert.equal(await alpha('.settings-card'), glass ? (mode === 'half' ? .6 : 0) : 1)
+      if (glass) {
+        const before = await panel.locator('#blur').boundingBox()
+        await panel.click('#panels-dd .dd-trigger')
+        assert.equal(await panel.locator('#panels-dd .dd-menu').evaluate(node => getComputedStyle(node).position), 'relative')
+        assert.ok((await panel.locator('#blur').boundingBox()).y > before.y + 50, 'transparent options push following controls down instead of overlapping text')
+        await panel.press('#panels-dd .dd-trigger', 'Escape')
+      }
       await page.evaluate(() => {
         document.querySelector('#main').style.background = 'rgb(190, 75, 50)'
       })
@@ -112,7 +119,8 @@ try {
         assert.deepEqual(await heights(), [360, 360])
       }
       assert.equal(await alpha('#view-code > .actions'), glass ? (mode === 'half' ? .6 : 0) : 1)
-      assert.equal(await panel.locator('#code-save').evaluate(node => getComputedStyle(node).color), dark ? 'rgb(21, 21, 23)' : 'rgb(255, 255, 255)', 'primary button text stays solid')
+      assert.equal(await alpha('#code-save'), glass ? 0 : 1, 'primary actions respect transparent surfaces too')
+      assert.equal(await panel.locator('#code-save').evaluate(node => getComputedStyle(node).color), glass ? (dark ? 'rgb(249, 250, 251)' : 'rgb(15, 17, 21)') : (dark ? 'rgb(21, 21, 23)' : 'rgb(255, 255, 255)'), 'primary button text stays solid')
     }
   }
   console.log('ok    settings, library, code, sticky actions and both focused editors across six theme/transparency combinations')

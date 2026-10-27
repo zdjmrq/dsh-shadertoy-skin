@@ -242,6 +242,12 @@
   }
   .dd.open .dd-menu { display: block; }
   .dd.menu-above .dd-menu { top: auto; bottom: calc(100% + 4px); }
+  /* Transparent choices cannot cover the text underneath. In glass modes
+     expand in flow; the card supplies the single surface behind the options. */
+  html[data-panels="half"] .dd-menu, html[data-panels="clear"] .dd-menu,
+  html[data-panels="half"] .dd.menu-above .dd-menu, html[data-panels="clear"] .dd.menu-above .dd-menu {
+    position: relative; inset: auto; margin-top: 6px; background: transparent; box-shadow: none;
+  }
   .dd-item {
     display: block; width: 100%; padding: 6px 8px; border: 0; border-radius: 7px;
     background: transparent; color: var(--fg); cursor: pointer; text-align: left;
@@ -327,6 +333,9 @@
   .dim { opacity: .6; }
   .btn { min-height: 38px; padding: 8px 14px; font-size: 13px; }
   .btn.primary { background: var(--accent); color: var(--canvas); border-color: var(--accent); font-weight: 600; }
+  html[data-panels="half"] .btn.primary, html[data-panels="clear"] .btn.primary {
+    background: transparent; color: var(--fg);
+  }
   .btn.primary:hover { filter: brightness(.94); }
   .btn:disabled { opacity: .5; cursor: default; }
   .settings-footer { margin-top: 20px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
