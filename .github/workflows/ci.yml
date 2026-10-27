@@ -66,3 +66,7 @@ jobs:
         run: npm run test:panel
         env:
           PLAYWRIGHT_CHANNEL: chrome
+      - name: Settings and editor interaction checks
+        run: npm run test:ui
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
