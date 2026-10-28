@@ -23,44 +23,29 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - name: Syntax check
+      - name: Syntax check (every tracked script)
+        # Derive the list from git instead of maintaining one: new tools and
+        # renderer modules used to be silently left out of this step.
         run: |
-          node --check index.js
-          node --check client.js
-          node --check tools/check-bundle.mjs
-          node --check tools/host-route-test.mjs
-          node --check tools/renderer-smoke.mjs
-          node --check tools/audio-smoke.mjs
-          node --check tools/dev-server.mjs
-          node --check tools/push-via-api.mjs
-          node --check tools/browser-harness.mjs
-          node --check tools/panel-regression.mjs
-          node --check tools/ui-regression.mjs
-          node --check tools/audit-regression.mjs
-          node --check tools/core-regression.mjs
-          node --check tools/project-audit-regression.mjs
-          node --check tools/multipass-regression.mjs
-          node --check tools/worker-regression.mjs
-          node --check tools/tabbed-editor-regression.mjs
-          node --check native-dist/project.js
-          node --check native-dist/pipeline.js
-          node --check native-dist/textures.js
-          node --check native-dist/player-controller.js
-          node --check native-dist/player-runtime.js
-          node --check native-dist/render-worker.js
-          node --check tools/panel-surfaces-regression.mjs
-          node --check tools/unified-transparency-regression.mjs
+          git ls-files '*.js' '*.mjs' '*.cjs' | while IFS= read -r file; do
+            node --check "$file"
+          done
       - name: Bundle checks (manifest, files, licence hygiene, npm pack content)
         run: npm run check
       - name: Host half route tests
         run: npm run test:host
 
-  renderer:
-    name: renderer smoke (real WebGL2)
+  suites:
+    name: test (${{ matrix.suite }})
     runs-on: ubuntu-latest
-    # The runner image ships Chrome, so no Playwright browser download is needed
-    # (that download has been observed to hang on some networks).
+    # One job per browser suite: a failure is named instead of hiding at the end
+    # of a 13-minute sequential job, and suites cannot starve each other. The
+    # runner image ships Chrome, so no Playwright browser download is needed.
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [renderer, audio, panel, ui, audit, core, project, multi, worker, editor, surfaces, transparency]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -70,49 +55,7 @@ jobs:
         run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - name: Renderer smoke test (system Chrome, software WebGL)
-        run: npm run test:renderer
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
-      - name: Audio smoke test (mainSound -> readPixels -> WebAudio)
-        run: npm run test:audio
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
-          SMOKE_PORT: '8732'
-      - name: Panel regressions (real client, persistence and import)
-        run: npm run test:panel
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
-      - name: Settings and editor interaction checks
-        run: npm run test:ui
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
-      - name: Extended plugin audit regressions
-        run: npm run test:audit
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
-
-      - name: Playback, persistence and pointer regressions
-        run: npm run test:core
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
-
-      - name: Project audit regressions
-        run: npm run test:project
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
-
-      - name: Multi-file projects and bundled shaders
-        run: npm run test:multi
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
-
-      - name: Worker isolation and crash containment
-        run: npm run test:worker
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
-
-      - name: Tabbed editors and save transport recovery
-        run: npm run test:editor
+      - name: Browser regressions
+        run: npm run test:${{ matrix.suite }}
         env:
           PLAYWRIGHT_CHANNEL: chrome

@@ -25,10 +25,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: npm publish
+  # The same browser suites CI runs, fanned out so a release is gated on the
+  # complete matrix without one 15-minute job near its timeout.
+  verify:
+    name: verify (${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: true
+      matrix:
+        suite: [renderer, audio, panel, ui, audit, core, project, multi, worker, editor, surfaces, transparency]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install dev dependencies
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: Browser regressions
+        run: npm run test:${{ matrix.suite }}
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+
+  publish:
+    name: npm publish
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -62,21 +87,6 @@ jobs:
 
       - name: Bundle and Host checks
         run: npm test
-
-      - name: Browser regression checks
-        run: |
-          npm run test:renderer
-          npm run test:audio
-          npm run test:panel
-          npm run test:ui
-          npm run test:audit
-          npm run test:core
-          npm run test:project
-          npm run test:multi
-          npm run test:worker
-          npm run test:editor
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
 
       - name: Publish to npm
         run: npm publish

@@ -939,11 +939,17 @@ import { createPipeline } from './pipeline.js'
 
   function resize() {
     if (gl.isContextLost()) return
-    const { width: w, height: h } = renderSize(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, window.devicePixelRatio, params.scale, maxRenderSide)
-    if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h; resetDetection() }
-    if (pipeline?.resize(w, h)) state.frame = 0
-    diag.w = canvas.width
-    diag.h = canvas.height
+    try {
+      const { width: w, height: h } = renderSize(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, window.devicePixelRatio, params.scale, maxRenderSide)
+      if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h; resetDetection() }
+      if (pipeline?.resize(w, h)) state.frame = 0
+      diag.w = canvas.width
+      diag.h = canvas.height
+    } catch (error) {
+      // A failed (re)allocation must not break the frame loop or the message
+      // handlers that call resize(); keep the last good size and report once.
+      report(`render size unavailable · ${error.message}`)
+    }
   }
 
   function nowDate() {

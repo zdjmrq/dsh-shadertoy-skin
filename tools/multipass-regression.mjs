@@ -66,15 +66,50 @@ try {
   await panel.waitForFunction(() => document.querySelector('#code-note').textContent.includes('已保存'))
   const updated = JSON.parse(await readFile(join(h.home, 'shader-skin.json'), 'utf8')).entries[0]
   assert.ok(updated.code.includes['helper.glsl'].includes('extraValue'))
-  await page.evaluate(() => document.querySelector('#shadertoy-skin-bg').contentWindow.postMessage({ type: 'init', preset: { name: 'packed-state', code: {
+  // The controller debounces `init` (100 ms) and a panel state sync queued just
+  // before this injection can replace the pending message. That race made this
+  // suite flaky, so re-post until the player actually adopted the preset.
+  const postPacked = () => page.evaluate(() => document.querySelector('#shadertoy-skin-bg').contentWindow.postMessage({ type: 'init', preset: { name: 'packed-state', code: {
     image: 'void mainImage(out vec4 c,in vec2 p){vec4 v=texelFetch(iChannel0,ivec2(0),0);bool ok=v.x==-2.&&v.y==4.&&v.w==-12345678.;c=ok?vec4(0,1,0,1):vec4(1,0,0,1);}',
     buffers: { A: 'void mainImage(out vec4 c,in vec2 p){c=vec4(-2,4,16,-12345678.);}' }, channels: { image: ['buffer:A'] },
   } }, params: { dim: 1, tintMix: 0 } }, location.origin))
-  await player.waitForFunction(() => window.__player?.preset === 'packed-state' && window.__player.ready)
+  let adopted = false
+  for (let attempt = 0; attempt < 10 && !adopted; attempt++) {
+    if (attempt) await panel.waitForTimeout(100)
+    await postPacked()
+    adopted = await player
+      .waitForFunction(() => window.__player?.preset === 'packed-state' && window.__player.ready, null, { timeout: 3000 })
+      .then(() => true, () => false)
+  }
+  assert.ok(adopted, 'the injected packed-state preset must reach the player')
   const packedPixel = await player.evaluate(() => window.__player.inspect('pixel'))
   assert.ok(packedPixel[0] < 5 && packedPixel[1] > 250, `float state must retain signed/HDR/24-bit values: ${packedPixel}`)
+
+  // ShaderToy iChannelTime is the buffer pass time and 0 for textures. The
+  // player used to report the running frame time for font/noise as well.
+  const postChannelTime = () => page.evaluate(() => document.querySelector('#shadertoy-skin-bg').contentWindow.postMessage({ type: 'init', preset: {
+    name: 'channel-time',
+    code: {
+      image: 'void mainImage(out vec4 c,in vec2 p){bool ok=iChannelTime[0]==0.0&&iChannelTime[1]==0.0;c=ok?vec4(0.,1.,0.,1.):vec4(1.,0.,0.,1.);}',
+      channels: { image: ['font', 'noise'] },
+    },
+  }, params: { dim: 1, tintMix: 0 } }, location.origin))
+  let channelTime = false
+  for (let attempt = 0; attempt < 10 && !channelTime; attempt++) {
+    if (attempt) await panel.waitForTimeout(100)
+    await postChannelTime()
+    channelTime = await player
+      .waitForFunction(() => window.__player?.preset === 'channel-time' && window.__player.ready, null, { timeout: 3000 })
+      .then(() => true, () => false)
+  }
+  assert.ok(channelTime, 'the channel-time preset must reach the player')
+  // Inspect after the clock moved: at frame 1 iTime is still 0 and both the old
+  // and new behaviour look identical.
+  await player.waitForFunction(() => window.__player.frames > 10)
+  const channelPixel = await player.evaluate(() => window.__player.inspect('pixel'))
+  assert.ok(channelPixel[1] > 250 && channelPixel[0] < 5, `texture channels must report iChannelTime 0: ${channelPixel}`)
   assert.deepEqual(errors, [])
-  console.log('ok    grouped file import, Common/Buffer tabs, channel wiring, file creation and saving reach the real player and disk')
+  console.log('ok    grouped file import, Common/Buffer tabs and channels reach the real player; texture channels report iChannelTime 0')
   await page.close()
 
   const shots = fileURLToPath(new URL('../.tmp-validation/new-presets/', import.meta.url))

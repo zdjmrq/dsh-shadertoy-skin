@@ -488,7 +488,7 @@
       <div id="audio-mode-dd"></div>
     </div>
     <div class="row" id="audio-seconds-row">
-      <div class="head"><label for="audio-seconds">音乐时长</label><output id="audio-seconds-out"></output></div>
+      <div class="head"><label for="audio-seconds">时长（秒）</label><output id="audio-seconds-out"></output></div>
       <input type="range" id="audio-seconds" min="10" max="600" step="5">
     </div>
     <div class="row" id="audio-duration-row"><div class="head"><label>音乐时长</label></div><div id="audio-duration-dd"></div><div class="hint">自动识别结束淡出，或在有声之后持续静音时结束。</div></div>
@@ -888,7 +888,9 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   }
 
   function scheduleSave() {
-    rememberPending()
+    // The recovery journal is written by saveState() when the debounce fires:
+    // snapshotting the whole library (up to 1.5 MB of code) on every slider
+    // input event made dragging janky in large libraries.
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => { saveTimer = 0; void saveState() }, 320)
   }
@@ -917,7 +919,6 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   function publishParams() {
     if (!stateLoaded || stateConflict) { void saveState(); return }
     toParent({ type: 'params', params: effective() })
-    rememberPending()
     scheduleSave()
   }
 
@@ -1053,6 +1054,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     setTab('params')
   }
   let presetDd
+  let presetOptionsSignature = ''
   let scaleDd
   let fpsDd
   let panelsDd
@@ -1116,7 +1118,13 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
               : '')
       : '无声音'
     $('audio').hidden = !(sound && audioState === 'suspended')
-    if (presetDd) presetDd.setOptions(presetOptions(), state.activeId ?? '')
+    if (presetDd) {
+      // Rebuilding the list resets focus/scroll; only do it when the choices or
+      // the active preset actually changed (sync() runs on every slider input).
+      const options = presetOptions()
+      const signature = `${state.activeId}\u0000${options.map(option => `${option.value}\u0001${option.text}\u0001${option.kind ?? ''}`).join('\u0002')}`
+      if (signature !== presetOptionsSignature) { presetOptionsSignature = signature; presetDd.setOptions(options, state.activeId ?? '') }
+    }
     if (scaleDd) scaleDd.setValue(String(p.scale))
     if (fpsDd) fpsDd.setValue(String(p.fps))
     if (panelsDd) panelsDd.setValue(p.panels ?? 'opaque')
@@ -1228,15 +1236,30 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     $('tab-code').addEventListener('click', () => setTab('code'))
     $('fab').addEventListener('click', () => setOpen(true))
     for (const range of document.querySelectorAll('input[type=range]')) range.addEventListener('change', () => { if (saveTimer) void saveNow() })
-    document.addEventListener('visibilitychange', () => { if (document.hidden && saveTimer) void saveNow() })
-    window.addEventListener('pagehide', () => { if (saveTimer) void saveNow() })
+    // A debounced draft must survive an immediate reload / tab close: flush the
+    // pending writes synchronously while the page is still alive.
+    const flushPending = () => {
+      if (draftTimer) rememberDrafts()
+      if (pasteDraftTimer) rememberPaste()
+    }
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { flushPending(); if (saveTimer) void saveNow() } })
+    window.addEventListener('pagehide', () => { flushPending(); if (saveTimer) void saveNow() })
+    // A parent page reload destroys this iframe without a pagehide in some
+    // Chromium versions; unload is the last chance to persist a pending draft.
+    window.addEventListener('unload', flushPending)
     window.addEventListener('beforeunload', event => {
+      flushPending()
       if (saveTimer || pendingWrites) { event.preventDefault(); event.returnValue = '' }
     })
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && MODE === 'popup' && open && !document.querySelector('.dd.open')) setOpen(false)
     })
-    window.addEventListener('resize', () => { refreshScaleOptions(); sync(); reportSize() })
+    // Window drags fire resize dozens of times per second; refresh once per frame.
+    let resizeFrame = 0
+    window.addEventListener('resize', () => {
+      if (resizeFrame) return
+      resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; refreshScaleOptions(); sync(); reportSize() })
+    })
   }
 
   // ------------------------------------------------------------- library UI
@@ -1599,9 +1622,23 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     })
   }
   let pasteExtras = {}, pasteSelected = 'image'
+  let pasteDraftTimer = 0
   const readPasteCode = () => ({ image: $('paste-image').value, sound: $('paste-sound').value, ...readSources(pasteExtras, '#paste-extra-files [data-project-file]') })
   function rememberPaste() {
+    clearTimeout(pasteDraftTimer)
+    pasteDraftTimer = 0
     try { sessionStorage.setItem('shadertoy-skin.pasteDraft', JSON.stringify({ name: $('paste-name').value, code: readPasteCode() })) } catch { /* keep editor contents */ }
+  }
+  /** Same reason as scheduleRememberDrafts(): no full serialization per keystroke. */
+  let pasteTouched = false
+  function scheduleRememberPaste() {
+    if (pasteDraftTimer) { pasteTouched = true; return }
+    pasteTouched = false
+    rememberPaste()
+    pasteDraftTimer = setTimeout(() => {
+      pasteDraftTimer = 0
+      if (pasteTouched) { pasteTouched = false; scheduleRememberPaste() }
+    }, 300)
   }
   function renderPasteFiles() {
     const files = [{ key: 'image', label: 'Image', area: $('paste-image') }, { key: 'sound', label: 'Sound', area: $('paste-sound') }]
@@ -1653,8 +1690,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       }
     } catch { /* ignore invalid draft */ }
     renderPasteFiles(); bindFileKeys('paste-tabs')
-    $('paste-workspace').addEventListener('input', rememberPaste)
-    $('paste-name').addEventListener('input', rememberPaste)
+    $('paste-workspace').addEventListener('input', scheduleRememberPaste)
+    $('paste-name').addEventListener('input', scheduleRememberPaste)
     $('paste-new').addEventListener('click', () => { $('paste-new-form').hidden = false; $('paste-filename').value = ''; $('paste-filename').focus() })
     $('paste-cancel').addEventListener('click', () => { $('paste-new-form').hidden = true; $('paste-new').focus() })
     $('paste-filename').addEventListener('keydown', event => { if (event.key === 'Enter') $('paste-create').click(); if (event.key === 'Escape') $('paste-cancel').click() })
@@ -1679,6 +1716,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   let codeLoadedId = null
   let codeBaseline = { image: '', sound: '' }
   let codeExtras = {}, codeExtrasBaseline = '{}', selectedFile = 'image'
+  let codeExtrasDirty = false
   let decorateCodeArea, updateEditorPreferences
   const clone = value => JSON.parse(JSON.stringify(value))
   function readExtraCode() {
@@ -1699,7 +1737,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       grip.dataset.code = id; grip.setAttribute('role', 'separator'); grip.setAttribute('aria-label', `调整 ${file.label} 高度`)
       $('code-extra-files').append(row)
       decorateCodeArea?.(id)
-      area.addEventListener('input', () => { updateCodeInfo(); rememberDrafts() })
+      area.addEventListener('input', () => { codeExtrasDirty = true; updateCodeInfo(); scheduleRememberDrafts() })
       files.push({ ...file, area })
     }
     if (!files.some(file => file.key === selectedFile)) selectedFile = 'image'
@@ -1738,23 +1776,39 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       select.addEventListener('change', () => {
         codeExtras = readExtraCode()
         ;((codeExtras.channels ??= {})[role] ??= [null, null, null, null])[index] = select.value || null
-        updateCodeInfo(); rememberDrafts()
+        codeExtrasDirty = true; updateCodeInfo(); rememberDrafts()
       })
       return el('label', { textContent: `${role === 'image' ? 'Image' : role} · iChannel${index}` }, select)
     }))
   }
   let codeSaving = false
   const codeDrafts = new Map()
+  let draftTimer = 0
   const CODE_HEIGHTS_KEY = 'shadertoy-skin.codeHeights'
   const DEFAULT_CODE_HEIGHT = 360
   const CODE_DRAFTS_KEY = 'shadertoy-skin.codeDrafts'
   function rememberDrafts() {
+    clearTimeout(draftTimer)
+    draftTimer = 0
     if (codeLoadedId) {
       const draft = { image: $('code-image').value, sound: $('code-sound').value, project: readExtraCode() }
       if (draft.image !== codeBaseline.image || draft.sound !== codeBaseline.sound || JSON.stringify(draft.project) !== codeExtrasBaseline) codeDrafts.set(codeLoadedId, draft)
       else codeDrafts.delete(codeLoadedId)
     }
     try { sessionStorage.setItem(CODE_DRAFTS_KEY, JSON.stringify([...codeDrafts])) } catch { /* storage full: current editor still holds the draft */ }
+  }
+  /** Typing must not serialize a megabyte of shader code on every keystroke:
+   *  write once immediately (so an instant reload still recovers), then at most
+   *  once per 300 ms plus one trailing write for changes made inside the window. */
+  let draftTouched = false
+  function scheduleRememberDrafts() {
+    if (draftTimer) { draftTouched = true; return }
+    draftTouched = false
+    rememberDrafts()
+    draftTimer = setTimeout(() => {
+      draftTimer = 0
+      if (draftTouched) { draftTouched = false; scheduleRememberDrafts() }
+    }, 300)
   }
 
   /** Version 2 gives Sound the same initial height, then remembers each grip. */
@@ -1810,6 +1864,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     codeExtrasBaseline = JSON.stringify(codeExtras)
     const draft = codeDrafts.get(id)
     if (draft?.project) codeExtras = clone(draft.project)
+    codeExtrasDirty = JSON.stringify(codeExtras) !== codeExtrasBaseline
     $('code-image').value = draft?.image ?? image
     $('code-sound').value = draft?.sound ?? sound
     renderProjectFiles()
@@ -1821,13 +1876,18 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
 
   function updateCodeInfo() {
     const image = $('code-image').value
-    const dirty = image !== codeBaseline.image || $('code-sound').value !== codeBaseline.sound || JSON.stringify(readExtraCode()) !== codeExtrasBaseline
+    const dirty = image !== codeBaseline.image || $('code-sound').value !== codeBaseline.sound || codeExtrasDirty
     $('code-image-info').textContent = `${image.split('\n').length} 行 · ${image.length} 字符${dirty ? ' · 未保存' : ''}`
     $('code-sound-info').textContent = $('code-sound').value.trim() ? 'mainSound' : ''
     for (const { id } of document.querySelectorAll('.code-area')) {
       $(id).closest('.code-card').querySelector('.head output').textContent = `${$(id).value.split('\n').length} 行 · ${$(id).value.length} 字符${dirty ? ' · 未保存' : ''}`
       const gutter = $(`${id}-lines`)
-      if (gutter) gutter.textContent = Array.from({ length: $(id).value.split('\n').length }, (_, i) => i + 1).join('\n')
+      const lines = $(id).value.split('\n').length
+      // Only rebuild the line numbers when the line count changed.
+      if (gutter && gutter.dataset.lines !== String(lines)) {
+        gutter.dataset.lines = String(lines)
+        gutter.textContent = Array.from({ length: lines }, (_, i) => i + 1).join('\n')
+      }
     }
   }
 
@@ -1883,9 +1943,10 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         if (state.activeId !== entry.id || codeLoadedId !== entry.id) return
         toParent({ type: 'preset', id: entry.id })
         toParent({ type: 'params', params: effective() })
-        updateCodeInfo()
         codeBaseline = { image, sound }
-        codeExtrasBaseline = JSON.stringify(readExtraCode())
+        codeExtras = readExtraCode()
+        codeExtrasBaseline = JSON.stringify(codeExtras)
+        codeExtrasDirty = false
         updateCodeInfo()
         codeDrafts.delete(entry.id)
         rememberDrafts()
@@ -2018,6 +2079,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       codeExtras = readExtraCode()
       try { selectedFile = addProjectSource(codeExtras, name) }
       catch (error) { setCodeNote(error.message, true); return }
+      codeExtrasDirty = true
       renderProjectFiles(); updateCodeInfo(); rememberDrafts()
       $('project-new-form').hidden = true
       $('project-tabs').querySelector('[aria-selected=true]').focus()
@@ -2026,7 +2088,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       if (['image', 'sound'].includes(selectedFile) || !window.confirm('删除当前文件？保存并运行后生效。')) return
       codeExtras = readExtraCode()
       removeProjectSource(codeExtras, selectedFile)
-      selectedFile = 'image'; renderProjectFiles(); updateCodeInfo(); rememberDrafts()
+      selectedFile = 'image'; codeExtrasDirty = true
+      renderProjectFiles(); updateCodeInfo(); rememberDrafts()
     })
     $('code-save').addEventListener('click', () => { void saveCode() })
     $('code-revert').addEventListener('click', () => {
@@ -2037,7 +2100,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         if (typeof draft?.image === 'string' && typeof draft?.sound === 'string') codeDrafts.set(id, draft)
       }
     } catch { /* invalid recovery data */ }
-    for (const id of ['code-image', 'code-sound']) $(id).addEventListener('input', () => { updateCodeInfo(); rememberDrafts() })
+    for (const id of ['code-image', 'code-sound']) $(id).addEventListener('input', () => { updateCodeInfo(); scheduleRememberDrafts() })
     restoreCodeHeights()
     bindCodeGrips()
     // Ctrl/Cmd+S inside the editor saves & runs instead of the browser dialog
@@ -2239,6 +2302,12 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     if (!STANDALONE && stateLoaded) toParent({ type: 'params', params: effective() })
     if (!stateLoaded) setNote('配置读取失败，请重新加载。', true)
     if (MODE === 'main') {
+      // The main column is a page, not a modal dialog: region semantics and a
+      // heading-based accessible name match how DSH mounts it.
+      panel.setAttribute('role', 'region')
+      panel.removeAttribute('aria-modal')
+      const heading = document.querySelector('.page-head h2')
+      if (heading) { heading.id = 'shader-skin-page-title'; panel.setAttribute('aria-labelledby', heading.id) }
       document.documentElement.classList.add('mode-main')
       document.body.classList.add('mode-main')
       panel.classList.add('open')

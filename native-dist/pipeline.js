@@ -71,7 +71,10 @@ export async function createPipeline(gl, code, compile) {
           keyboardDirty = false
         }
         dimensions.set([target.width, target.height, target.depth ?? 1], i * 3)
-        times[i] = target.time ?? time
+        // ShaderToy semantics: iChannelTime is the buffer's own render time and
+        // 0 for image/texture inputs. Using the current frame time for textures
+        // made e.g. noise channels report a moving time they never had.
+        times[i] = target.time ?? 0
       }
       if (locations['iChannelResolution[4]']) gl.uniform3fv(locations['iChannelResolution[4]'], dimensions)
       if (locations['iChannelTime[4]']) gl.uniform1fv(locations['iChannelTime[4]'], times)
@@ -88,7 +91,13 @@ export async function createPipeline(gl, code, compile) {
     },
     endFrame() {
       const keyboard = textures.get('keyboard')
-      if (keyboard) { keyboard.data.fill(0, 256 * 4, 512 * 4); keyboardDirty = true }
+      if (!keyboard) return
+      // Row 1 is the single-frame "pressed" flag. Upload only when it was set
+      // last frame; clearing an already-empty row scheduled a 3 KB
+      // texSubImage2D on every rendered frame.
+      const pressed = keyboard.data.subarray(256 * 4, 512 * 4).some(value => value !== 0)
+      keyboard.data.fill(0, 256 * 4, 512 * 4)
+      if (pressed) keyboardDirty = true
     },
     key(code, down) {
       const keyboard = textures.get('keyboard')

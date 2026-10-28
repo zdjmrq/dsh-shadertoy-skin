@@ -9,8 +9,8 @@
 
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
-> **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的 11 个预设只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
-> **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库自写代码是 MIT，八个第三方预设按各自许可证收录）。
+> **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的 12 个预设只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
+> **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库自写代码是 MIT，九个第三方预设按各自许可证收录）。
 > **欢迎 issue 和 PR**：装不上、画面不对、想要新功能 → 开 [Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)（附截图和 `$DSH_HOME/shader-skin.json` 里对应条目更好排查）；bug 修复、文档修正、自写预设 → 直接提 [PR](https://github.com/zdjmrq/dsh-shadertoy-skin/pulls)。
 > **欢迎分享你发现的 / 自己改过的 ShaderToy 作品**：作品链接、截图、调好的参数都行，开 [Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues) 贴出来大家就能直接用；想让它进内置预设就提 PR（先确认原作者的许可证允许再分发）。
 >
@@ -44,7 +44,7 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 插件自带 12 个预设（3 个自写 MIT + 8 个第三方作品及 1 个无闪电变体，第三方部分为 CC BY-NC-SA 3.0，见文末许可证），但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
 
 > **推荐一试**：[`shadertoy.com/view/4dfXWj`](https://www.shadertoy.com/view/4dfXWj) —— 装进来效果挺带感，导入方式见下面任意一种。
-> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0）：装在本机自己玩没问题；想提交进仓库或随包分发，先确认许可证允许，并带上署名与相同许可证（本仓库的八个第三方预设就是这么收录的）。
+> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0）：装在本机自己玩没问题；想提交进仓库或随包分发，先确认许可证允许，并带上署名与相同许可证（本仓库的九个第三方预设就是这么收录的）。
 
 ### 1. 粘贴代码（最稳，不用抓网页）
 
@@ -291,11 +291,19 @@ npm run check            # 包结构 / 许可卫生 / npm pack 内容检查（�
 npm run test:host        # Host 半路由 + 状态 v2 + 本地预设列表
 npm run test:renderer    # 真浏览器 WebGL2 渲染 + 设置页冒烟（需 playwright）
 npm run test:audio       # mainSound → readPixels → WebAudio 真实出声验证（需 playwright）
+npm run test:panel       # 真实 client + 面板 + 播放器 + 磁盘持久化
+npm run test:ui          # 中性色、键盘、预览、专注编辑、窄屏
+npm run test:audit       # 主题/透明度组合、草稿恢复、多窗口 409、GPU 上下文丢失
 npm run test:core        # 自动结束/重播、设置恢复、字号与鼠标隔离回归
 npm run test:project     # 项目整体审查、音频暂停、导出与文件边界
-npm run test:worker       # 线程卡死、超时恢复、GPU 熔断与安全模式
-npm run test:multi       # 多文件导入/编辑与六个新增内置项目的真实 WebGL 验证
+npm run test:multi       # 多文件导入/编辑、内置项目与 iChannelTime 的真实 WebGL 验证
+npm run test:worker      # 线程卡死、超时恢复、GPU 熔断、安全模式与音频设备失败隔离
+npm run test:editor      # 多文件标签编辑器、保存失败/重试/回滚
+npm run test:surfaces    # 设置页自身透明度与 iframe 合成
+npm run test:transparency # 18 组语义表面组合
 ```
+
+CI（`.github/workflows/ci.yml`）把上面除 `dev` / `check` / `test:host` 之外的套件**各开一个 job 并行跑**；`publish.yml` 在发布前再并行跑同一批套件，全部通过才 `npm publish`。
 
 Windows 上已装 Edge 可以跳过浏览器下载：`PLAYWRIGHT_CHANNEL=msedge npm run test:renderer`。
 
@@ -309,7 +317,7 @@ http://127.0.0.1:8730/player.html?preset=local/<file>.glsl
 
 调试玻璃/亮度：`player.html` 支持 `?dim=`（0–2）、`?tint=`（十六进制）`&tintMix=`（0–1）直接看滤镜效果，例如 `?preset=seascape&dim=1.2&tint=090c10&tintMix=0.4`。
 
-架构与决策记录在 [`docs/00-决策与方案复核.md`](docs/00-决策与方案复核.md)，渲染器说明在 [`docs/renderer-notes.md`](docs/renderer-notes.md)，发布流程在 [`docs/PUBLISHING.md`](docs/PUBLISHING.md)。
+架构与决策记录在 [`docs/00-决策与方案复核.md`](docs/00-决策与方案复核.md)，渲染器说明在 [`docs/renderer-notes.md`](docs/renderer-notes.md)，发布流程在 [`docs/PUBLISHING.md`](docs/PUBLISHING.md)，最近一次全量审查见 [`docs/audit-2026-10-29.md`](docs/audit-2026-10-29.md)。
 
 ## 目录
 
@@ -324,7 +332,7 @@ native-dist/
   player-runtime.js     WebGL2 渲染、滤镜、mainSound 合成与播放时钟
   panel.html          设置页（参数 / 背景库 / 代码，深浅色自适应）
   defaults.json       全部默认参数（改这里就改默认值）
-  presets/*.glsl      随包预设：3 个自写 MIT + 8 个第三方 CC BY-NC-SA 3.0（`seascape` / `mario`）
+  presets/*.glsl      随包预设：3 个自写 MIT + 9 个第三方 CC BY-NC-SA 3.0（含雨窗两版）
   presets/dev/        测试夹具（不进 npm 包）
 locale/ icon.svg      插件管理器展示资源
 tools/                开发服务器 / 包检查 / 渲染冒烟 / 音频冒烟 / 实机检查
