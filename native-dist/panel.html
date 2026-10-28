@@ -304,8 +304,8 @@
   body.mode-main .page-head p { color: var(--muted); font-size: 13px; }
   .page-head { position: relative; }
   .preview-tools { position: absolute; top: 0; right: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-  .wallpaper-preview, .background-interact { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card-fill); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
-  .background-interact[aria-pressed=true] { border-color: var(--accent); }
+  .wallpaper-preview { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card-fill); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
+  .wallpaper-preview[aria-pressed=true] { border-color: var(--accent); }
   .preview-tools button:disabled { opacity: .5; cursor: default; }
   body.mode-main.previewing { background: transparent; overflow: hidden; }
   .previewing .panel { visibility: hidden; }
@@ -1101,48 +1101,38 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     const footer = el('div', { className: 'settings-footer' }, $('reset').closest('.actions'))
     view.replaceChildren(grid, footer)
     if (!STANDALONE && MODE === 'main') {
-      const preview = el('button', { type: 'button', className: 'wallpaper-preview', textContent: '预览背景 ↗' })
-      const interact = el('button', { type: 'button', className: 'background-interact', textContent: '键盘交互' })
-      const tools = el('div', { className: 'preview-tools', role: 'group', ariaLabel: '背景预览与交互' }, preview, interact)
+      const preview = el('button', { type: 'button', className: 'wallpaper-preview', textContent: '预览并交互 ↗' })
+      const tools = el('div', { className: 'preview-tools' }, preview)
       const surface = el('div', { className: 'interaction-surface', tabIndex: 0, role: 'region', hidden: true, ariaLabel: '背景交互区域' },
-        el('p', { className: 'interaction-help', textContent: '背景交互中 · 支持键盘与按住鼠标拖动 · Esc 返回设置，Tab 退出交互' }))
+        el('p', { className: 'interaction-help', textContent: '背景交互中 · 支持键盘与按住鼠标拖动 · Esc / Tab 返回设置' }))
       document.body.append(surface)
       let interacting = false, dragging = false, pointerFrame = 0, pendingPointer = null
       const clearPointer = () => {
         if (pointerFrame) cancelAnimationFrame(pointerFrame)
         pointerFrame = 0; pendingPointer = null; dragging = false
       }
-      const setInteraction = (value, notify = true) => {
+      const setPreview = (value, notify = true) => {
         if (interacting === value) return
+        const restoreFocus = document.activeElement === surface && document.hasFocus()
         interacting = value
         clearPointer()
         surface.hidden = !value
-        interact.setAttribute('aria-pressed', String(value))
-        interact.textContent = value ? '退出交互' : '键盘交互'
-        if (notify) toParent({ type: 'interaction', enabled: value })
-        if (value) surface.focus({ preventScroll: true })
-      }
-      stopBackgroundInteraction = () => setInteraction(false, false)
-      preview.setAttribute('aria-pressed', 'false')
-      interact.setAttribute('aria-pressed', 'false')
-      interact.title = '仅在交互区域聚焦时向背景转发按键；普通预览和 DSH 输入不转发'
-      const setPreview = value => {
-        if (!value) setInteraction(false)
         document.body.classList.toggle('previewing', value)
         applyTheme()
         preview.setAttribute('aria-pressed', String(value))
-        preview.textContent = value ? '返回设置 · Esc' : '预览背景 ↗'
+        preview.textContent = value ? '返回设置 · Esc' : '预览并交互 ↗'
+        if (notify) toParent({ type: 'interaction', enabled: value })
+        if (value) surface.focus({ preventScroll: true })
+        else if (restoreFocus) preview.focus({ preventScroll: true })
       }
+      stopBackgroundInteraction = () => setPreview(false, false)
+      preview.setAttribute('aria-pressed', 'false')
+      preview.title = '进入背景预览与键鼠交互；Esc、Tab 或窗口失焦时退出，不影响平时的 DSH 输入'
       preview.addEventListener('click', () => setPreview(!document.body.classList.contains('previewing')))
-      interact.addEventListener('click', () => {
-        if (interacting) { setInteraction(false); interact.focus({ preventScroll: true }); return }
-        setPreview(true)
-        setInteraction(true)
-      })
       for (const type of ['keydown', 'keyup']) surface.addEventListener(type, event => {
         if (!interacting || document.activeElement !== surface || event.isComposing) return
         if (event.key === 'Escape') return // shared handler returns to settings
-        if (event.key === 'Tab' || event.ctrlKey || event.metaKey || event.altKey) { setInteraction(false); return }
+        if (event.key === 'Tab' || event.ctrlKey || event.metaKey || event.altKey) { setPreview(false); return }
         if (!Number.isInteger(event.keyCode) || event.keyCode <= 0 || event.keyCode >= 256 || event.keyCode >= 112 && event.keyCode <= 123) return
         event.preventDefault(); event.stopPropagation()
         if (!event.repeat) toParent({ type: 'interaction-key', keyCode: event.keyCode, down: type === 'keydown' })
@@ -1164,8 +1154,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         if (!dragging) return
         clearPointer(); pointer(event, false)
       })
-      window.addEventListener('blur', () => setInteraction(false))
-      document.addEventListener('visibilitychange', () => { if (document.hidden) setInteraction(false) })
+      window.addEventListener('blur', () => setPreview(false))
+      document.addEventListener('visibilitychange', () => { if (document.hidden) setPreview(false) })
       window.addEventListener('pagehide', () => { clearPointer(); toParent({ type: 'interaction', enabled: false }) })
       document.addEventListener('keydown', event => { if (event.key === 'Escape' && document.body.classList.contains('previewing')) { setPreview(false); preview.focus({ preventScroll: true }) } })
       document.querySelector('.page-head').append(tools)
