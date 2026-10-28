@@ -7,6 +7,10 @@ let canvas = document.getElementById('c'), worker, audio, gain, limiter, audioTi
 let generation = 0, heartbeat = performance.now(), ready = false, compiling = false, failed = false
 let lastInit, fingerprint, pendingInit, initTimer, recoveryAt = -Infinity, jobStarted = performance.now()
 let inspectId = 0
+// Init and params are two independent message streams; a retried init must not be
+// invalidated by a newer params update (and vice versa). Anything older than the
+// newest applied revision of its own stream is dropped as stale.
+let initRevision = 0, paramsRevision = 0
 const sources = new Map(), inspections = new Map()
 const timeout = standalone && query.has('watchdogMs') ? Math.max(1000, Math.min(30000, Number(query.get('watchdogMs')) || 12000)) : 12000
 if (standalone) window.__outbox = []
@@ -156,6 +160,15 @@ function inspect(command) {
 
 function receive(message) {
   if (!message || typeof message !== 'object') return
+  // Newer revisions always win: a queued init for the previous preset used to
+  // override a newer selection when the two messages arrived out of order.
+  if (message.type === 'init' && typeof message.revision === 'number' && Number.isFinite(message.revision)) {
+    if (message.revision < initRevision) return
+    initRevision = message.revision
+  } else if (message.type === 'params' && typeof message.revision === 'number' && Number.isFinite(message.revision)) {
+    if (message.revision < paramsRevision) return
+    paramsRevision = message.revision
+  }
   if (message.type === 'init' && message.preset) {
     const key = JSON.stringify(message.preset)
     // A parent startup retry must not restart a project already stopped by the
