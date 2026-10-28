@@ -2441,11 +2441,18 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       document.documentElement.classList.add('standalone')
       document.body.classList.add('standalone')
     }
-    const [loadedDefaults, loadedManifest, { response, value: remote }] = await Promise.all([
+    const [loadedDefaults, loadedManifest, { response, value: remote }, health] = await Promise.all([
       fetchJson(`${BASE}/defaults.json`),
       fetchJson(`${BASE}/presets/index.json`),
       readHost(`${BASE}/state`, 'json', true),
+      fetchJson(`${BASE}/health`),
     ])
+    if (typeof loadedDefaults?.minHostVersion === 'string') {
+      const parts = version => /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(String(version))?.slice(1).map(Number)
+      const have = parts(health?.version), need = parts(loadedDefaults.minHostVersion)
+      const difference = have && need ? have.map((value, index) => value - need[index]).find(value => value !== 0) ?? 0 : -1
+      if (difference < 0) throw new Error('Host 仍在运行旧版插件，请完全退出并重新启动 DSH，再打开设置页；原配置不会被覆盖')
+    }
     if (!loadedDefaults?.params || !Array.isArray(loadedManifest) || !loadedManifest.length
       || !loadedManifest.every(item => item && typeof item.id === 'string' && typeof item.file === 'string')
       || !validStateShape(remote)) throw new Error('Host 配置或背景目录格式异常，原配置已保留')

@@ -24,6 +24,16 @@ try {
   assert.equal(await panel.locator('#scale-dd .dd-item').count(), 11)
   assert.equal(await panel.textContent('#fps-dd .dd-trigger'), '30 fps')
   console.log('ok    legacy render quality is visible and retained, without exposing every historical scale')
+  await panel.click('#fps-dd .dd-trigger')
+  await panel.getByRole('option', { name: '120 fps', exact: true }).click()
+  await panel.waitForFunction(() => document.querySelector('#note').textContent === '已保存')
+  assert.equal((await (await page.request.get(`${h.url}/shader-skin/state`)).json()).settings.fps, 120)
+  await page.evaluate(() => { const frame = document.querySelector('iframe[title="ShaderToy 背景设置"]'); frame.src = frame.src })
+  await page.waitForTimeout(150)
+  panel = page.frames().find(frame => frame.url().includes('panel.html'))
+  await panel.waitForSelector('#fps-dd .dd-trigger')
+  assert.equal(await panel.textContent('#fps-dd .dd-trigger'), '120 fps')
+  console.log('ok    120 fps survives Host persistence and reopening the panel')
 
   const pixel = () => player.evaluate(() => window.__player.inspect('pixel'))
   const waitPixel = async test => {

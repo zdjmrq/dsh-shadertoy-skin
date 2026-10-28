@@ -47,6 +47,14 @@ try {
   await page.waitForSelector('#preset-dd .dd-trigger')
   console.log('ok    failed metadata reads show the HTTP cause and retry; no editable fallback can overwrite state')
 
+  await page.route('**/shader-skin/health', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ name: 'shadertoy-skin', version: '0.4.3' }) }))
+  await page.goto(url)
+  await page.waitForFunction(() => document.querySelector('#boot-message').textContent.includes('完全退出并重新启动 DSH'))
+  assert.equal(await page.locator('#panel').isVisible(), false)
+  assert.equal(writes, 0, 'a stale Host must not silently discard newly supported settings')
+  await page.unrouteAll({ behavior: 'wait' })
+  console.log('ok    old live Hosts require a complete restart before editing new-version settings')
+
   await page.route('**/shader-skin/state', () => {})
   await page.goto(url)
   await page.waitForFunction(() => document.querySelector('#boot-message').textContent.includes('超过 8 秒'), null, { timeout: 12000 })
