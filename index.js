@@ -22,19 +22,42 @@ import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { normalizeCode, codeBytes, parseDocument as parseShaderDocument } from './native-dist/project.js'
 
+/** @typedef {import('node:http').IncomingMessage} Request */
+/** @typedef {import('node:http').ServerResponse} Response */
+/** @typedef {ReturnType<typeof normalizeCode>} ShaderCode */
+/** @typedef {'paste' | 'file' | 'local' | 'edit'} EntrySource */
+/** @typedef {{ id: string, name: string, source: EntrySource, code: ShaderCode, license?: string, origin?: string, author?: string, sourceUrl?: string, licenseUrl?: string }} Entry */
+/** @typedef {Record<string, number | boolean | string>} Params */
+/** @typedef {{ version: 2, activeId: string | null, settings: Params, overrides: Record<string, Params>, entries: Entry[], updatedAt?: number }} SkinState */
+/** @typedef {{ file: string, name: string, kind: 'shadertoy' | 'glsl', hasSound: boolean, size: number }} LocalPreset */
+/** @typedef {{ min?: number, max?: number, values?: readonly unknown[] }} ParamLimit */
+/** @typedef {Record<string, ParamLimit>} Limits */
+/** @typedef {{ limits: Limits }} Defaults */
+/** @typedef {{ effect(fn: () => void | (() => void), label: string): void, webServer: { register(options: { kind: 'prefix', path: string, handler: Handler }): () => void } }} CordisContext */
+/** @typedef {(req: Request, res: Response) => Promise<void>} Handler */
+
 export const name = 'shadertoy-skin'
 export const inject = ['webServer']
 
 const ROUTE = '/shader-skin'
 const DIST = resolve(fileURLToPath(new URL('./native-dist/', import.meta.url)))
 const MAX_STATE_BYTES = 2 * 1024 * 1024
+/** @type {Promise<unknown>} */
 let stateWrites = Promise.resolve()
 // A Desktop protocol proxy can lose the response after the atomic write.
 // Replaying the same save must not turn a successful write into an ETag conflict.
+/** @type {Map<string, { payloadTag: string, etag: string }>} */
 const stateReceipts = new Map()
+/** @param {string} body @returns {string} */
 const stateTag = body => `"${createHash('sha256').update(body).digest('hex')}"`
-const DEFAULT_LIMITS = JSON.parse(readFileSync(new URL('./native-dist/defaults.json', import.meta.url), 'utf8')).limits
+const DEFAULT_LIMITS = /** @type {Limits} */ (JSON.parse(readFileSync(new URL('./native-dist/defaults.json', import.meta.url), 'utf8')).limits)
 
+/** @param {unknown} error @returns {string | undefined} */
+const errorCode = error => error !== null && typeof error === 'object' && 'code' in error
+  ? String(/** @type {{ code: unknown }} */ (error).code)
+  : undefined
+
+/** @type {Readonly<Record<string, string>>} */
 const MIME = Object.freeze({
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -60,18 +83,18 @@ const EMPTY_STATE = Object.freeze({
 })
 
 /**
- * Best-effort reader for ShaderToy's exported JSON (also accepts our own shape).
- * Returns undefined when the file is not a usable shader document.
+ * List the user-imported presets directory ($DSH_HOME/shader-skin/presets).
+ * @returns {Promise<LocalPreset[]>}
  */
-/** List the user-imported presets directory ($DSH_HOME/shader-skin/presets). */
 async function listLocalPresets() {
   let names
   try {
     names = await readdir(localDir())
   } catch (error) {
-    if (error && error.code === 'ENOENT') return []
+    if (errorCode(error) === 'ENOENT') return []
     throw error
   }
+  /** @type {LocalPreset[]} */
   const out = []
   for (const name of names.sort()) {
     const isJson = /\.json$/i.test(name)
@@ -111,12 +134,14 @@ async function listLocalPresets() {
   return out
 }
 
+/** @returns {string} */
 function dshHome() {
   const fromEnv = process.env.DSH_HOME
   if (typeof fromEnv === 'string' && fromEnv.trim() !== '') return fromEnv
   return join(homedir(), '.dsh')
 }
 
+/** @returns {string} */
 function packageVersion() {
   try {
     return JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version ?? '0.0.0'
@@ -131,6 +156,12 @@ const statePath = () => join(dshHome(), 'shader-skin.json')
 /** $DSH_HOME/shader-skin/presets — user imports live here, never in the package. */
 const localDir = () => join(dshHome(), 'shader-skin', 'presets')
 
+/**
+ * @param {Response} res
+ * @param {number} status
+ * @param {Record<string, string>} [headers]
+ * @param {string | Uint8Array} [body]
+ */
 function finish(res, status, headers = {}, body) {
   res.writeHead(status, {
     'cache-control': 'no-cache, no-store, must-revalidate',
@@ -140,11 +171,17 @@ function finish(res, status, headers = {}, body) {
   res.end(body)
 }
 
+/** @param {Response} res @param {number} status @param {string} message */
 function fail(res, status, message) {
   finish(res, status, { 'content-type': 'text/plain; charset=utf-8' }, message)
 }
 
-/** Resolve `requestPath` inside `root`, rejecting anything that escapes it. */
+/**
+ * Resolve `requestPath` inside `root`, rejecting anything that escapes it.
+ * @param {string} root
+ * @param {string} requestPath
+ * @returns {string | undefined}
+ */
 function resolveInside(root, requestPath) {
   const target = resolve(join(root, normalize(requestPath)))
   if (target === root) return undefined
@@ -152,12 +189,25 @@ function resolveInside(root, requestPath) {
   return target
 }
 
+/**
+ * @param {string} root
+ * @param {string} target
+ * @returns {Promise<boolean>}
+ */
 async function realInside(root, target) {
   const [base, file] = await Promise.all([realpath(root), realpath(target)])
+  /** @param {string} value @returns {string} */
   const normalizeCase = value => process.platform === 'win32' ? value.toLowerCase() : value
   return normalizeCase(file).startsWith(`${normalizeCase(base)}${sep}`)
 }
 
+/**
+ * @param {string} root
+ * @param {string} requestPath
+ * @param {Request} req
+ * @param {Response} res
+ * @returns {Promise<void>}
+ */
 async function serveFile(root, requestPath, req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     finish(res, 405, { allow: 'GET, HEAD' })
@@ -168,12 +218,14 @@ async function serveFile(root, requestPath, req, res) {
     fail(res, 403, 'forbidden')
     return
   }
+  /** @type {Buffer} */
   let body
   try {
     if (!await realInside(root, target)) return fail(res, 403, 'symlink leaves the preset directory')
     body = await readFile(target)
   } catch (error) {
-    if (error && (error.code === 'ENOENT' || error.code === 'EISDIR' || error.code === 'ENOTDIR')) {
+    const code = errorCode(error)
+    if (code === 'ENOENT' || code === 'EISDIR' || code === 'ENOTDIR') {
       fail(res, 404, `404 ${requestPath}`)
       return
     }
@@ -186,7 +238,13 @@ async function serveFile(root, requestPath, req, res) {
   }, req.method === 'HEAD' ? undefined : body)
 }
 
+/**
+ * @param {Request} req
+ * @param {number} [limit]
+ * @returns {Promise<unknown>}
+ */
 async function readJsonBody(req, limit = MAX_STATE_BYTES) {
+  /** @type {Buffer[]} */
   const chunks = []
   let total = 0
   for await (const chunk of req) {
@@ -199,27 +257,36 @@ async function readJsonBody(req, limit = MAX_STATE_BYTES) {
   return JSON.parse(text)
 }
 
-/** Accept only the shape the client half writes; unknown keys are dropped. */
 const GLOBAL_KEYS = new Set(['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted'])
 const PARAM_KEYS = new Set([...GLOBAL_KEYS, 'brightness', 'speed', 'loop', 'loopMode', 'loopSeconds', 'audioMode', 'audioDurationMode', 'audioSeconds'])
 const PANEL_LEVELS = new Set(['opaque', 'half', 'clear'])
 const AUDIO_MODES = new Set(['loop', 'once'])
 
+/** @param {unknown} raw @returns {Record<string, unknown> | undefined} */
+const asObject = raw => raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? /** @type {Record<string, unknown>} */ (raw) : undefined
+
+/**
+ * Accept only the shape the client half writes; unknown keys are dropped.
+ * @param {unknown} raw
+ * @returns {Params}
+ */
 function sanitizeParams(raw) {
+  /** @type {Params} */
   const out = {}
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return out
-  for (const [key, value] of Object.entries(raw)) {
+  const input = asObject(raw)
+  if (input === undefined) return out
+  for (const [key, value] of Object.entries(input)) {
     if (!PARAM_KEYS.has(key)) continue
     if (key === 'enabled' || key === 'muted' || key === 'loop') {
       if (typeof value === 'boolean') out[key] = value
       continue
     }
     if (key === 'panels') {
-      if (PANEL_LEVELS.has(value)) out[key] = value
+      if (typeof value === 'string' && PANEL_LEVELS.has(value)) out[key] = value
       continue
     }
     if (key === 'audioMode') {
-      if (AUDIO_MODES.has(value)) out[key] = value
+      if (typeof value === 'string' && AUDIO_MODES.has(value)) out[key] = value
       continue
     }
     if (key === 'loopMode' || key === 'audioDurationMode') {
@@ -229,74 +296,97 @@ function sanitizeParams(raw) {
     if (typeof value === 'number' && Number.isFinite(value)) {
       const limit = DEFAULT_LIMITS[key]
       if (limit?.values) { if (limit.values.includes(value)) out[key] = value }
-      else out[key] = limit ? Math.min(limit.max, Math.max(limit.min, value)) : value
+      else out[key] = limit ? Math.min(/** @type {number} */ (limit.max), Math.max(/** @type {number} */ (limit.min), value)) : value
     }
   }
   return out
 }
 
+/**
+ * @param {unknown} raw
+ * @param {number} index
+ * @returns {Entry}
+ */
 function sanitizeEntry(raw, index) {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`entry #${index} must be an object`)
-  if (typeof raw.id !== 'string') throw new Error(`entry #${index} needs a string id`)
+  const input = asObject(raw)
+  if (input === undefined) throw new Error(`entry #${index} must be an object`)
+  if (typeof input.id !== 'string') throw new Error(`entry #${index} needs a string id`)
   // Ids are small opaque keys, never paths or markup: bound them like names so a
   // hand-written state file cannot store unbounded strings.
-  const id = raw.id.trim().slice(0, 200)
+  const id = input.id.trim().slice(0, 200)
   if (id === '') throw new Error(`entry #${index} needs a string id`)
-  const code = raw.code !== null && typeof raw.code === 'object' && !Array.isArray(raw.code) ? raw.code : {}
+  const code = asObject(input.code) ?? {}
   if (typeof code.image !== 'string' || code.image.trim() === '') throw new Error(`entry "${id}" needs code.image`)
+  /** @type {Entry} */
   const entry = {
     id,
-    name: typeof raw.name === 'string' && raw.name.trim() !== '' ? raw.name.slice(0, 120) : id,
-    source: ['paste', 'file', 'local', 'edit'].includes(raw.source) ? raw.source : 'paste',
+    name: typeof input.name === 'string' && input.name.trim() !== '' ? input.name.slice(0, 120) : id,
+    source: input.source === 'file' || input.source === 'local' || input.source === 'edit' ? input.source : 'paste',
     code: normalizeCode(code),
   }
   if (typeof code.sound === 'string' && code.sound.trim() !== '') entry.code.sound = code.sound
-  if (typeof raw.license === 'string') entry.license = raw.license.slice(0, 80)
-  if (typeof raw.origin === 'string') entry.origin = raw.origin.slice(0, 300)
-  for (const key of ['author', 'sourceUrl', 'licenseUrl']) if (typeof raw[key] === 'string') entry[key] = raw[key].slice(0, 300)
+  if (typeof input.license === 'string') entry.license = input.license.slice(0, 80)
+  if (typeof input.origin === 'string') entry.origin = input.origin.slice(0, 300)
+  for (const key of /** @type {const} */ (['author', 'sourceUrl', 'licenseUrl'])) {
+    const value = input[key]
+    if (typeof value === 'string') entry[key] = value.slice(0, 300)
+  }
   return entry
 }
 
+/**
+ * @param {unknown} raw
+ * @returns {SkinState}
+ */
 function sanitizeState(raw) {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('state must be an object')
-  if (raw.entries !== undefined && !Array.isArray(raw.entries)) throw new Error('entries must be an array')
+  const input = asObject(raw)
+  if (input === undefined) throw new Error('state must be an object')
+  if (input.entries !== undefined && !Array.isArray(input.entries)) throw new Error('entries must be an array')
   for (const key of ['settings', 'overrides', 'params']) {
-    if (raw[key] !== undefined && (raw[key] === null || typeof raw[key] !== 'object' || Array.isArray(raw[key]))) throw new Error(`${key} must be an object`)
+    if (input[key] !== undefined && asObject(input[key]) === undefined) throw new Error(`${key} must be an object`)
   }
-  const entries = (Array.isArray(raw.entries) ? raw.entries : []).map(sanitizeEntry)
+  const entries = (Array.isArray(input.entries) ? input.entries : []).map(sanitizeEntry)
   if (new Set(entries.map(entry => entry.id)).size !== entries.length) throw new Error('duplicate entry ids')
   if (entries.length > 200) throw new Error('too many entries (max 200)')
   const totalCodeBytes = entries.reduce((total, entry) => total + codeBytes(entry.code), 0)
   if (totalCodeBytes > 1_500_000) throw new Error('shader code too large (max 1.5 MB in total)')
 
+  /** @type {Record<string, Params>} */
   const overrides = Object.create(null)
-  if (raw.overrides !== null && typeof raw.overrides === 'object' && !Array.isArray(raw.overrides)) {
-    for (const [id, value] of Object.entries(raw.overrides)) {
+  const rawOverrides = asObject(input.overrides)
+  if (rawOverrides !== undefined) {
+    for (const [id, value] of Object.entries(rawOverrides)) {
       const params = sanitizeParams(value)
       if (Object.keys(params).length > 0) overrides[id] = params
     }
   }
-  const activeId = typeof raw.activeId === 'string' && raw.activeId !== '' ? raw.activeId : null
+  const activeId = typeof input.activeId === 'string' && input.activeId !== '' ? input.activeId : null
 
   // v1 kept one global `params` object; fold it into the active preset's override.
-  if (raw.version !== 2 && activeId !== null) {
-    const legacy = sanitizeParams(raw.params)
+  if (input.version !== 2 && activeId !== null) {
+    const legacy = sanitizeParams(input.params)
     if (Object.keys(legacy).length > 0) overrides[activeId] = { ...legacy, ...(overrides[activeId] ?? {}) }
   }
 
   // Migrate appearance from the active artwork once. Explicit saved choices,
   // including opaque, survive upgrades; changing artwork no longer changes them.
-  const settings = Object.fromEntries(Object.entries(sanitizeParams({ ...overrides[activeId], ...raw.settings })).filter(([key]) => GLOBAL_KEYS.has(key)))
+  const settings = Object.fromEntries(Object.entries(sanitizeParams({ ...overrides[/** @type {string} */ (activeId)], ...asObject(input.settings) })).filter(([key]) => GLOBAL_KEYS.has(key)))
   return { version: 2, activeId, settings, overrides, entries, updatedAt: Date.now() }
 }
 
+/**
+ * @param {Request} req
+ * @param {Response} res
+ * @returns {Promise<void>}
+ */
 async function handleState(req, res) {
   if (req.method === 'GET' || req.method === 'HEAD') {
+    /** @type {string} */
     let body
     try {
       body = await readFile(statePath(), 'utf8')
     } catch (error) {
-      if (error && error.code === 'ENOENT') {
+      if (errorCode(error) === 'ENOENT') {
         const empty = JSON.stringify(EMPTY_STATE)
         finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag: stateTag(empty) }, req.method === 'HEAD' ? undefined : empty)
         return
@@ -306,7 +396,7 @@ async function handleState(req, res) {
     }
     try {
       const parsed = JSON.parse(body)
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad shape')
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad shape')
       sanitizeState(parsed)
     } catch { return fail(res, 500, 'state is corrupted; original file preserved') }
     finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag: stateTag(body) }, req.method === 'HEAD' ? undefined : body)
@@ -321,11 +411,12 @@ async function handleState(req, res) {
     fail(res, 415, 'state PUT requires application/json')
     return
   }
+  /** @type {SkinState} */
   let state
   try {
     state = sanitizeState(await readJsonBody(req))
   } catch (error) {
-    if (error && error.code === 'E_TOO_LARGE') return fail(res, 413, 'state payload too large')
+    if (errorCode(error) === 'E_TOO_LARGE') return fail(res, 413, 'state payload too large')
     return fail(res, 400, `invalid state: ${error instanceof Error ? error.message : String(error)}`)
   }
   const target = statePath()
@@ -337,18 +428,19 @@ async function handleState(req, res) {
   // data. Queue complete atomic replacements, and recover the queue on errors.
   const write = stateWrites.then(async () => {
     try {
-      const receipt = saveId && stateReceipts.get(saveId)
+      const receipt = saveId ? stateReceipts.get(saveId) : undefined
       if (receipt) {
         const current = await readFile(target, 'utf8')
         if (receipt.payloadTag !== payloadTag || receipt.etag !== stateTag(current)) throw Object.assign(new Error('state conflict'), { code: 'E_CONFLICT' })
         return receipt.etag
       }
-      if (req.headers['if-match']) {
+      const ifMatch = req.headers['if-match']
+      if (ifMatch) {
         const current = await readFile(target, 'utf8').catch(error => {
-          if (error.code === 'ENOENT') return JSON.stringify(EMPTY_STATE)
+          if (errorCode(error) === 'ENOENT') return JSON.stringify(EMPTY_STATE)
           throw error
         })
-        if (req.headers['if-match'] !== stateTag(current)) throw Object.assign(new Error('state conflict'), { code: 'E_CONFLICT' })
+        if (ifMatch !== stateTag(current)) throw Object.assign(new Error('state conflict'), { code: 'E_CONFLICT' })
       }
       await mkdir(join(dirname(target), 'shader-skin'), { recursive: true })
       await writeFile(temp, body, 'utf8')
@@ -356,7 +448,7 @@ async function handleState(req, res) {
       const etag = stateTag(body)
       if (saveId) {
         stateReceipts.set(saveId, { payloadTag, etag })
-        if (stateReceipts.size > 128) stateReceipts.delete(stateReceipts.keys().next().value)
+        if (stateReceipts.size > 128) stateReceipts.delete(/** @type {string} */ (stateReceipts.keys().next().value))
       }
       return etag
     } finally {
@@ -364,19 +456,22 @@ async function handleState(req, res) {
     }
   })
   stateWrites = write.catch(() => {})
+  /** @type {string} */
   let etag
   try {
-    etag = await write
+    etag = /** @type {string} */ (await write)
   } catch (error) {
-    if (error.code === 'E_CONFLICT') return fail(res, 409, 'state changed in another window; reload before saving')
-    const storageCode = ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EBUSY'].includes(error.code) ? ` (${error.code})` : ''
+    if (errorCode(error) === 'E_CONFLICT') return fail(res, 409, 'state changed in another window; reload before saving')
+    const storageCode = ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EBUSY'].includes(String(errorCode(error))) ? ` (${String(errorCode(error))})` : ''
     fail(res, 500, `state write failed${storageCode}`)
     return
   }
   finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag }, JSON.stringify({ ok: true }))
 }
 
+/** @type {Handler} */
 export async function handler(req, res) {
+  /** @type {string} */
   let pathname
   try {
     pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://dsh.local').pathname)
@@ -417,6 +512,9 @@ export async function handler(req, res) {
   return serveFile(DIST, relative, req, res)
 }
 
+/**
+ * @param {CordisContext} ctx
+ */
 export function apply(ctx) {
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',

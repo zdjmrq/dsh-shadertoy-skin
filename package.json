@@ -119,6 +119,7 @@
     "test:editor": "node tools/tabbed-editor-regression.mjs"
   },
   "devDependencies": {
+    "@types/node": "24.19.2",
     "playwright": "^1.55.0",
     "typescript": "7.0.2"
   }
