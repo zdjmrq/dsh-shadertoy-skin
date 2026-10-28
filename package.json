@@ -100,7 +100,8 @@
   "scripts": {
     "dev": "node tools/dev-server.mjs 8730",
     "check": "node tools/check-bundle.mjs",
-    "test": "node tools/check-bundle.mjs && node tools/host-route-test.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node tools/check-bundle.mjs && npm run typecheck && node tools/host-route-test.mjs",
     "test:host": "node tools/host-route-test.mjs",
     "test:renderer": "node tools/renderer-smoke.mjs",
     "test:audio": "node tools/audio-smoke.mjs",
@@ -118,6 +119,7 @@
     "test:editor": "node tools/tabbed-editor-regression.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.55.0"
+    "playwright": "^1.55.0",
+    "typescript": "7.0.2"
   }
 }
