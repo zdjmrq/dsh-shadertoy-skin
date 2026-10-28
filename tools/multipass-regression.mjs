@@ -153,6 +153,26 @@ try {
   }
   console.log('ok    when image and music both end, the pair loops on the later timeline')
 
+  // The joint period is only meaningful at 1x: the image clock is speed-scaled,
+  // the music runs on realtime. Off 1x each timeline keeps its own period.
+  const fastSettled = await injectPreset({
+    name: 'joint-speed2',
+    code: {
+      image: 'void mainImage(out vec4 c,in vec2 p){c=vec4(0.,1.,0.,1.);}',
+      sound: 'vec2 mainSound(float t){return vec2(0.0);}',
+      duration: { image: 3, sound: 2 },
+    },
+  }, { dim: 1, tintMix: 0, speed: 2 })
+  assert.ok(fastSettled, 'joint-speed2 must settle in the player')
+  let fastPlayback = {}
+  for (let attempt = 0; attempt < 10; attempt++) {
+    fastPlayback = await player.evaluate(() => window.__player.playback)
+    if (fastPlayback.loopPeriod === 0 && fastPlayback.musicDuration === 2) break
+    await panel.waitForTimeout(150)
+  }
+  assert.equal(fastPlayback.loopPeriod, 0, `joint loop must not engage off 1x: ${JSON.stringify(fastPlayback)}`)
+  console.log('ok    joint looping stays off when the picture speed is not 1x')
+
   assert.deepEqual(errors, [])
   console.log('ok    grouped file import, Common/Buffer tabs and channels reach the real player; texture channels report iChannelTime 0')
   await page.close()
