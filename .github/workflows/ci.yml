@@ -54,26 +54,4 @@ jobs:
         run: npm run typecheck
 
   suites:
-    name: test (${{ matrix.suite }})
-    runs-on: ubuntu-latest
-    # One job per browser suite: a failure is named instead of hiding at the end
-    # of a 13-minute sequential job, and suites cannot starve each other. The
-    # runner image ships Chrome, so no Playwright browser download is needed.
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: [renderer, audio, panel, ui, audit, core, project, multi, worker, editor, surfaces, transparency, startup, playback]
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-      - name: Install dev dependencies
-        run: npm ci
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - name: Browser regressions
-        run: npm run test:${{ matrix.suite }}
-        env:
-          PLAYWRIGHT_CHANNEL: chrome
+    uses: ./.github/workflows/browser-tests.yml
