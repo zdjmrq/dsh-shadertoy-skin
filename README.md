@@ -269,7 +269,7 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 | `海面（Seascape）` | [Seascape](https://www.shadertoy.com/view/Ms2SD1)，© Alexander Alekseev aka TDM | **CC BY-NC-SA 3.0**（非 MIT） |
 | `马里奥（带音乐）` | [Mario](https://www.shadertoy.com/user/iq)，© Inigo Quilez | **CC BY-NC-SA 3.0**（非 MIT） |
 | `Take On Me` / `Never Gonna Give You Up` | Tonny Espeset，原文件署名与链接保留 | **CC BY-NC-SA 3.0** |
-| `下雨的窗户` | Heartfelt，Martijn Steinrucken aka BigWings；附离线程序化城市纹理 | **CC BY-NC-SA 3.0** |
+| `下雨的窗户` / `下雨的窗户（无闪电）` | Heartfelt，Martijn Steinrucken aka BigWings；附离线程序化城市纹理，无闪电版仅移除闪电 | **CC BY-NC-SA 3.0** |
 | `赛车` | dathor / diatribes 等，原文件贡献者声明保留 | **CC BY-NC-SA 3.0** |
 | `我的世界` | Voxel Game，fb39ca4；内含噪声函数原许可声明保留 | **CC BY-NC-SA 3.0** |
 | `风中的树` | 原作者署名与组件许可声明见第三方清单 | **CC BY-NC-SA 3.0** |
@@ -277,7 +277,7 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 第三方作品是**按上游许可证收录的**（上游允许再分发），所以：
 
 - **署名**：保留作者与许可证声明（文件头、`presets/index.json`、背景库里的红色 `CC BY-NC-SA` 标记）；
-- **非商业**：这些第三方项目 不能用于商业用途。要把这个插件用于商业产品，请先删掉 `native-dist/presets/seascape.glsl`、`mario.glsl`、`mario-sound.glsl`及本轮新增的六个第三方项目目录（或只保留自写预设）；
+- **非商业**：这些第三方项目 不能用于商业用途。要把这个插件用于商业产品，请先删掉 `native-dist/presets/seascape.glsl`、`mario.glsl`、`mario-sound.glsl`及第三方项目和变体目录（或只保留自写预设）；
 - **相同方式共享**：改过的版本再分发时仍要留在 CC BY-NC-SA 3.0 下。设置页「代码」里另存的「我的副本」同样受这个约束。
 
 其余从 ShaderToy 导入的作品（默认 CC BY-NC-SA 3.0，作者可另行声明）**只存在本机** `$DSH_HOME/shader-skin.json`，不会上传，也不会进包；想把自己的修改提交进仓库/随包分发，先确认许可证允许，并带上署名与相同的许可证。
