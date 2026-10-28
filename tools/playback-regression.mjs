@@ -48,6 +48,50 @@ try {
   }
   assert.deepEqual(errors, [])
   console.log('ok    loop off, manual image periods, once-only music and non-1x speed retain independent semantics')
+
+  const response = await page.request.put(`${h.url}/shader-skin/state`, { data: { version: 2, activeId: 'fixture', settings: { muted: true }, entries: [
+    { id: 'fixture', name: 'Audit Song', author: 'Audit Synth', code: {
+      image: '// @duration 2\nvoid mainImage(out vec4 c,in vec2 p){c=vec4(.5);}',
+      sound: '// @duration 3\nvec2 mainSound(float t){return vec2(.1);}',
+    } },
+    { id: 'silent-fixture', name: 'Quiet Fixture', code: { image: 'void mainImage(out vec4 c,in vec2 p){c=vec4(.5);}' } },
+  ] } })
+  assert.equal(response.status(), 200)
+  await page.goto(h.url)
+  await page.waitForSelector('iframe[title="ShaderToy 背景设置"]')
+  let panel = page.frames().find(frame => frame.url().includes('panel.html'))
+  await panel.waitForSelector('#preset-dd .dd-trigger')
+  await panel.waitForFunction(() => document.querySelector('#playback-hint').textContent.includes('按 3 秒联播'))
+  assert.match(await panel.textContent('#playback-hint'), /画面 2 秒 \/ 音乐 3 秒/)
+  const hint = await panel.textContent('#playback-hint')
+  await page.evaluate(() => document.querySelector('iframe[title="ShaderToy 背景设置"]').contentWindow.postMessage({ type: 'playback', id: 'previous', imageDuration: 800, musicDuration: 900 }, location.origin))
+  await panel.waitForTimeout(100)
+  assert.equal(await panel.textContent('#playback-hint'), hint)
+  await page.evaluate(() => { const frame = document.querySelector('iframe[title="ShaderToy 背景设置"]'); frame.src = frame.src })
+  await page.waitForTimeout(150)
+  panel = page.frames().find(frame => frame.url().includes('panel.html'))
+  await panel.waitForFunction(() => document.querySelector('#playback-hint')?.textContent.includes('按 3 秒联播'))
+  console.log('ok    the panel receives real runtime durations, ignores obsolete artwork status and resyncs after remount')
+
+  await panel.click('#tab-library')
+  await panel.selectOption('#lib-filter', 'mine')
+  assert.equal(await panel.locator('#lib-list .item').count(), 2)
+  await panel.fill('#lib-search', 'AUDIT SYNTH')
+  assert.equal(await panel.locator('#lib-list .item').count(), 1)
+  assert.match(await panel.textContent('#lib-list'), /Audit Song/)
+  await panel.fill('#lib-search', '<no matching background>')
+  assert.equal(await panel.locator('#lib-list .item').count(), 0)
+  assert.match(await panel.textContent('#lib-list'), /没有匹配/)
+  await panel.press('#lib-search', 'Escape')
+  assert.equal(await panel.locator('#lib-list .item').count(), 2)
+  await panel.selectOption('#lib-filter', 'builtin')
+  assert.equal(await panel.locator('#lib-list .item').count(), 12)
+  await panel.selectOption('#lib-filter', 'silent')
+  await panel.fill('#lib-search', 'silent-fixture')
+  assert.equal(await panel.locator('#lib-list .item').count(), 1)
+  assert.match(await panel.textContent('#lib-list'), /Quiet Fixture/)
+  assert.deepEqual(errors, [])
+  console.log('ok    library search handles names, authors and ids, combining source/sound filters and empty/Escape states')
 } finally {
   await browser?.close()
   await h.close()

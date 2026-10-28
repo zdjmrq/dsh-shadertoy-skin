@@ -11,6 +11,7 @@ let inspectId = 0
 // invalidated by a newer params update (and vice versa). Anything older than the
 // newest applied revision of its own stream is dropped as stale.
 let initRevision = 0, paramsRevision = 0
+let playbackSignature = ''
 const sources = new Map(), inspections = new Map()
 const timeout = standalone && query.has('watchdogMs') ? Math.max(1000, Math.min(30000, Number(query.get('watchdogMs')) || 12000)) : 12000
 if (standalone) window.__outbox = []
@@ -129,6 +130,15 @@ function start(init) {
       } else if (data.kind === 'snapshot') {
         window.__player = { ...data.player, workerGeneration: generation, isolated: true, inspect }
         if (standalone) { window.__audioProbe = data.probe; window.__audioInternals = { time: data.player.playback?.musicTime } }
+        const preset = lastInit?.preset
+        // Send only changes to durations/modes, never producer-clock ticks. A
+        // previous project's last snapshot must not describe the new selection.
+        if (data.player.playback && (!preset || data.player.preset === (preset.name || preset.id))) {
+          const p = data.player.playback
+          const message = { type: 'playback', id: preset?.id, imageDuration: p.imageDuration, musicDuration: p.musicDuration, jointPeriod: p.jointPeriod, loopPeriod: p.loopPeriod, musicLoopPeriod: p.musicLoopPeriod, loop: p.loop, mode: p.mode, audioMode: p.audioMode, speed: p.speed }
+          const signature = JSON.stringify(message)
+          if (signature !== playbackSignature) { playbackSignature = signature; output(message) }
+        }
       } else if (data.kind === 'diag-dom') diag.textContent = data.text
       else if (data.kind === 'title') document.title = data.text
       else if (data.kind === 'style' && ['filter', 'willChange'].includes(data.property)) canvas.style[data.property] = data.value
@@ -180,6 +190,7 @@ function receive(message) {
       send({ kind: 'message', message: { type: 'params', params: message.params } }); return
     }
     fingerprint = key
+    playbackSignature = ''
     pendingInit = { ...message, params: { ...lastInit?.params, ...message.params } }
     clearTimeout(initTimer)
     initTimer = setTimeout(() => {

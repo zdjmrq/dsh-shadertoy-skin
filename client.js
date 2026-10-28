@@ -174,6 +174,7 @@ window.__ModuleLoader__.load({
           // WebAudio inside an iframe may start suspended until a real user gesture
           // (autoplay policy); the first click / keypress in the app is that gesture.
           let audioSuspended = false
+          let lastAudio = null, lastPlayback = null, lastRendererError = null
 
           // ---------------------------------------------------------------- glass
           //
@@ -471,9 +472,14 @@ window.__ModuleLoader__.load({
           // Settings now live in the main column through the sidebar entry; there is
           // no floating popup any more (it was fragile and the user prefers a page).
 
-          async function handlePanelMessage(message) {
+          async function handlePanelMessage(message, source) {
             if (!message || typeof message !== 'object') return
             switch (message.type) {
+              case 'ready':
+                if (lastAudio) postTo(source, lastAudio)
+                if (lastPlayback?.id === store.activeId) postTo(source, lastPlayback)
+                if (lastRendererError) postTo(source, lastRendererError)
+                return
               case 'params': {
                 paramsRevision++
                 const id = typeof message.id === 'string' ? message.id : store.activeId
@@ -487,6 +493,7 @@ window.__ModuleLoader__.load({
               case 'preset': {
                 if (typeof message.id === 'string' && message.id !== '') {
                   const request = ++presetRequest
+                  lastPlayback = null; lastRendererError = null; lastAudio = null
                   initRequest++
                   await reloadState()
                   if (!booted || request !== presetRequest) return
@@ -642,16 +649,21 @@ window.__ModuleLoader__.load({
               if (message.type === 'ready') {
                 playerReady = true
                 playerInitAttempts = 0
+                lastRendererError = null
               } else if (message.type === 'audio') {
                 audioSuspended = message.state === 'suspended'
+                lastAudio = message
                 broadcastPanel({ type: 'audio', ...message })
+              } else if (message.type === 'playback') {
+                if (message.id === store.activeId) { lastPlayback = message; broadcastPanel(message) }
               } else if (message.type === 'error') {
                 console.warn('[shadertoy-skin] renderer reported an error:', message.stage, message.log)
-                broadcastPanel({ type: 'error', stage: message.stage, log: String(message.log ?? '').slice(0, 400) })
+                lastRendererError = { type: 'error', stage: message.stage, log: String(message.log ?? '').slice(0, 400) }
+                broadcastPanel(lastRendererError)
               }
               return
             }
-            if (panelWindows.has(event.source)) void handlePanelMessage(message)
+            if (panelWindows.has(event.source)) void handlePanelMessage(message, event.source)
           })
 
           // ------------------------------------------------------------------ theme

@@ -404,6 +404,10 @@
   body.mode-main .boot-status { display: block; max-width: 780px; margin: 40px auto; padding: 24px; color: var(--fg); }
   body.mode-main:not(.loading) .boot-status { display: none; }
   .boot-status p { color: var(--muted); line-height: 1.7; }
+  .library-search { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
+  .library-search input { flex: 1; min-width: 160px; }
+  .library-search select { color: var(--fg); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; color-scheme: inherit; font: inherit; }
+  .library-search option { background: var(--bg); color: var(--fg); }
 </style>
 </head>
 <body>
@@ -547,6 +551,11 @@ window.addEventListener('error', () => window.__panelBootFailure(navigator.onLin
       <span>内置 + 我的背景</span>
       <button class="btn tiny" id="lib-reload" type="button">刷新</button>
     </div>
+    <div class="library-search">
+      <input id="lib-search" type="search" aria-label="搜索背景" placeholder="搜索名字、作者或 ID" autocomplete="off">
+      <select id="lib-filter" aria-label="筛选背景"><option value="all">全部背景</option><option value="builtin">内置背景</option><option value="mine">我的背景</option><option value="sound">有声背景</option><option value="silent">无声背景</option></select>
+    </div>
+    <p class="note" id="lib-count" role="status"></p>
     <div class="list" id="lib-list"></div>
 
     <div class="import-box">
@@ -636,6 +645,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   let open = MODE === 'main'
   let saveTimer = 0
   let audioState = 'none'
+  let playbackInfo = null
   let saveQueue = Promise.resolve(true)
   let saveRevision = 0
   let activeRevision = 0
@@ -1062,6 +1072,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       for (const id of ids) card.append($(id).closest('.row'))
       grid.append(card)
     }
+    grid.querySelector('.playback').append(el('p', { className: 'note', id: 'playback-hint' }))
     const side = el('div', { className: 'settings-side' })
     const performance = grid.querySelector('.performance')
     performance.before(side)
@@ -1112,6 +1123,23 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   const PANEL_KINDS = { opaque: '不透明', half: '半透明', clear: '透明' }
   const AUDIO_MODES = { loop: '循环重放', once: '只播一次' }
 
+  function syncPlaybackHint(p) {
+    const hint = $('playback-hint')
+    if (!hint) return
+    const info = playbackInfo?.id === state.activeId ? playbackInfo : null
+    const known = entryById(state.activeId)?.code?.duration ?? builtinById(state.activeId)?.duration
+    const image = info?.imageDuration ?? known?.image
+    const music = p.audioDurationMode === 'manual' ? p.audioSeconds : info?.musicDuration ?? known?.sound
+    const seconds = value => Number(Number(value).toFixed(1))
+    if (!p.loop) hint.textContent = '画面持续播放，不自动重播；音乐遵循自己的播放设置。'
+    else if (p.loopMode === 'manual') hint.textContent = `画面每 ${seconds(p.loopSeconds)} 秒重播，音乐保持自己的播放周期。`
+    else if (!hasSound()) hint.textContent = image ? `画面每 ${seconds(image)} 秒重播。` : '自动检测画面结束；持续运动的背景会持续播放。'
+    else if (p.audioMode === 'once') hint.textContent = '画面自动重播；音乐只播放一次。'
+    else if (p.speed !== 1) hint.textContent = `当前为 ${Number(p.speed).toFixed(2)}×，画面和音乐按各自时长循环。`
+    else if (image > 0 && music > 0) hint.textContent = `画面 ${seconds(image)} 秒 / 音乐 ${seconds(music)} 秒 → 按 ${seconds(Math.max(image, music))} 秒联播。音乐先结束时保持静音，等待画面。`
+    else hint.textContent = '自动识别结束；画面和音乐的时长确定后，按较晚结束的一方联播。'
+  }
+
   function syncPanelSurfaces(p) {
     const root = document.documentElement
     root.dataset.panels = p.enabled !== false && ['half', 'clear'].includes(p.panels) ? p.panels : 'opaque'
@@ -1124,6 +1152,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   function sync() {
     const p = effective()
     syncPanelSurfaces(p)
+    syncPlaybackHint(p)
     $('enabled').checked = p.enabled !== false
     $('glass').value = String(p.glass)
     $('glass-out').textContent = `${Math.round(p.glass)}%`
@@ -1339,10 +1368,15 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   function renderLibrary() {
     const list = $('lib-list')
     const rows = [
-      ...manifest.map(item => ({ id: item.id, name: item.name || item.id, kind: '内置', license: item.license, sound: Boolean(item.hasSound), entry: null })),
-      ...state.entries.map(item => ({ id: item.id, name: item.name, kind: '我的', license: item.license, sound: Boolean(item.code?.sound), entry: item })),
+      ...manifest.map(item => ({ id: item.id, name: item.name || item.id, author: item.author, kind: '内置', license: item.license, sound: Boolean(item.hasSound), entry: null })),
+      ...state.entries.map(item => ({ id: item.id, name: item.name, author: item.author, kind: '我的', license: item.license, sound: Boolean(item.code?.sound), entry: item })),
     ]
-    list.replaceChildren(...rows.map(row => {
+    const terms = $('lib-search').value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+    const filter = $('lib-filter').value
+    const visible = rows.filter(row => (filter === 'all' || filter === 'builtin' && !row.entry || filter === 'mine' && row.entry || filter === 'sound' && row.sound || filter === 'silent' && !row.sound)
+      && terms.every(term => `${row.name} ${row.author ?? ''} ${row.id}`.toLocaleLowerCase().includes(term)))
+    $('lib-count').textContent = `显示 ${visible.length} / ${rows.length} 个背景`
+    list.replaceChildren(...visible.map(row => {
       const name = el('span', { className: 'name' })
       name.textContent = row.name
       name.title = row.name
@@ -1421,6 +1455,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       }
       return el('div', { className: `item${state.activeId === row.id ? ' active' : ''}` }, name, sound, licence, badge, tools)
     }))
+    if (!visible.length) list.append(el('p', { className: 'note', textContent: '没有匹配的背景，请调整搜索或筛选条件。' }))
   }
 
   async function loadLocalPresets(force = false) {
@@ -1472,6 +1507,11 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   }
 
   function bindLibrary() {
+    $('lib-search').addEventListener('input', renderLibrary)
+    $('lib-filter').addEventListener('change', renderLibrary)
+    $('lib-search').addEventListener('keydown', event => {
+      if (event.key === 'Escape') { $('lib-search').value = ''; renderLibrary() }
+    })
     let stagedFiles = []
     const roles = [['image', 'Image'], ['sound', 'Sound'], ['common', 'Common'], ...BUFFER_IDS.map(id => [id, `Buffer ${id}`]), ['include', 'Include 文件'], ['asset', '图片资源'], ['ignore', '不导入']]
     const showStaging = () => {
@@ -2286,6 +2326,9 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         setCodeNote(text, true)
       } else if (message.type === 'theme') {
         applyTheme()
+      } else if (message.type === 'playback' && message.id === state.activeId) {
+        playbackInfo = message
+        syncPlaybackHint(effective())
       } else if (message.type === 'preset') {
         // Renderer acknowledgements can arrive after a newer user selection.
         // This panel owns the saved activeId; an old init must never roll it back.
@@ -2368,8 +2411,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       setOpen(true)
     } else {
       setOpen(false)
-      toParent({ type: 'ready' })
     }
+    if (!STANDALONE) toParent({ type: 'ready' })
     // Recovery may need a slow PUT; show the usable page before waiting for it.
     if (recoveredState && await saveNow()) toParent({ type: 'preset', id: state.activeId })
   }
