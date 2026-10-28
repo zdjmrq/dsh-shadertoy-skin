@@ -19,6 +19,41 @@
  */
 const generated = new Map()
 
+/** Read dimensions before decoding: a small compressed file can expand to a
+ * huge bitmap and exhaust the shared browser/GPU process before a post-decode
+ * size check runs. Supported imports are PNG, JPEG and WebP only.
+ * @param {ArrayBuffer} bytes
+ * @returns {{width: number, height: number}}
+ */
+function imageSize(bytes) {
+  const data = new Uint8Array(bytes), view = new DataView(bytes)
+  /** @param {number} offset @param {string} text */
+  const is = (offset, text) => [...text].every((char, index) => data[offset + index] === char.charCodeAt(0))
+  if (data.length >= 24 && is(0, '\x89PNG\r\n\x1a\n') && is(12, 'IHDR')) return { width: view.getUint32(16), height: view.getUint32(20) }
+  if (data.length >= 25 && is(0, 'RIFF') && is(8, 'WEBP')) {
+    const u24 = /** @param {number} offset */ offset => data[offset] | data[offset + 1] << 8 | data[offset + 2] << 16
+    if (data.length >= 30 && is(12, 'VP8X')) return { width: 1 + u24(24), height: 1 + u24(27) }
+    if (is(12, 'VP8L') && data[20] === 0x2f) return { width: 1 + ((data[21] | data[22] << 8) & 0x3fff), height: 1 + ((data[22] >> 6 | data[23] << 2 | data[24] << 10) & 0x3fff) }
+    if (data.length >= 30 && is(12, 'VP8 ') && is(23, '\x9d\x01\x2a')) return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff }
+  }
+  if (data[0] === 0xff && data[1] === 0xd8) {
+    let offset = 2
+    while (offset + 3 < data.length) {
+      if (data[offset++] !== 0xff) break
+      while (data[offset] === 0xff) offset++
+      const marker = data[offset++]
+      if (marker === 0xda || marker === 0xd9) break
+      if (marker === 0x01 || marker >= 0xd0 && marker <= 0xd7) continue
+      if (offset + 2 > data.length) break
+      const length = view.getUint16(offset)
+      if (length < 2 || offset + length > data.length) break
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker) && length >= 8) return { width: view.getUint16(offset + 5), height: view.getUint16(offset + 3) }
+      offset += length
+    }
+  }
+  throw new Error('无法读取图片尺寸，请使用有效的 PNG / JPEG / WebP 文件')
+}
+
 /**
  * @param {string} id
  * @param {Record<string, string>} [assets]
@@ -28,7 +63,14 @@ export async function makeTextureSource(id, assets) {
   if (id.startsWith('asset:')) {
     const data = assets?.[id.slice(6)]
     if (!/^data:image\/(png|jpeg|webp);base64,/.test(data ?? '')) throw new Error('无效图片资源')
-    const bitmap = await createImageBitmap(await (await fetch(data ?? '')).blob())
+    if ((data?.length ?? 0) > 2_800_000) throw new Error('图片文件不能超过 2 MB')
+    const blob = await (await fetch(data ?? '')).blob()
+    if (blob.size > 2 * 1024 * 1024) throw new Error('图片文件不能超过 2 MB')
+    const size = imageSize(await blob.arrayBuffer())
+    if (!size.width || !size.height || size.width > 4096 || size.height > 4096) throw new Error('图片边长必须在 1–4096 之间（已在解码前拦截）')
+    // WebGL ignores UNPACK_FLIP_Y_WEBGL for ImageBitmap; orient the decoded
+    // pixels explicitly so imported pictures share ShaderToy's bottom-left UVs.
+    const bitmap = await createImageBitmap(blob, { imageOrientation: 'flipY' })
     if (bitmap.width > 4096 || bitmap.height > 4096) { bitmap.close(); throw new Error('图片边长不能超过 4096') }
     return bitmap
   }

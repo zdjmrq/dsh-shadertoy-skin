@@ -124,6 +124,21 @@ try {
   const channelPixel = await pixelMatches(pixel => pixel[1] > 250 && pixel[0] < 5)
   assert.ok(channelPixel[1] > 250 && channelPixel[0] < 5, `texture channels must report iChannelTime 0: ${channelPixel}`)
 
+  for (const mime of ['image/png', 'image/jpeg', 'image/webp']) {
+    const asset = await page.evaluate(mime => {
+      const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16
+      const ctx = canvas.getContext('2d'); ctx.fillStyle = 'red'; ctx.fillRect(0, 0, 16, 8); ctx.fillStyle = 'blue'; ctx.fillRect(0, 8, 16, 8)
+      return canvas.toDataURL(mime, 1)
+    }, mime)
+    assert.ok(await injectPreset({ name: `orientation-${mime}`, code: {
+      image: 'void mainImage(out vec4 c,in vec2 p){c=texture(iChannel0,vec2(.5,.25));}',
+      assets: { 'test-image': asset }, channels: { image: ['asset:test-image'] },
+    } }, { dim: 1, tintMix: 0 }), `${mime} texture loads`)
+    const sample = await pixelMatches(pixel => pixel[2] > 230 && pixel[0] < 15)
+    assert.ok(sample[2] > 230 && sample[0] < 15, `${mime} bottom-left UVs must sample the blue lower half: ${sample}`)
+  }
+  console.log('ok    imported PNG, JPEG and WebP retain bottom-left texture coordinates without vertical inversion')
+
   // A piece with both timelines finite loops on the later one, so music and
   // picture cannot drift apart (the bundled take-on-me has image 209 s / music
   // 180 s; wrapping the music at 180 s would restart it under the visual ending).
