@@ -64,17 +64,17 @@ window.__ModuleLoader__.load({
       return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback
     }
 
-    async function fetchJson(url) {
-      const response = await fetch(url, { cache: 'no-store' })
-      if (!response.ok) throw new Error(`${response.status} ${url}`)
-      return response.json()
+    async function readHost(url, type) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 8000)
+      try {
+        const response = await fetch(url, { cache: 'no-store', signal: controller.signal })
+        if (!response.ok) throw new Error(`${response.status} ${url}`)
+        return await response[type]()
+      } finally { clearTimeout(timer) }
     }
-
-    async function fetchText(url) {
-      const response = await fetch(url, { cache: 'no-store' })
-      if (!response.ok) throw new Error(`${response.status} ${url}`)
-      return response.text()
-    }
+    const fetchJson = url => readHost(url, 'json')
+    const fetchText = url => readHost(url, 'text')
 
     function isDark() {
       return document.body?.hasAttribute('data-ds-dark-theme') === true
@@ -770,14 +770,14 @@ window.__ModuleLoader__.load({
               await new Promise(resolve => { document.addEventListener('DOMContentLoaded', resolve, { once: true }) })
             }
             store.defaults = { ...FALLBACK_DEFAULTS }
-            const defaults = await fetchJson(`${BASE}/defaults.json`).catch(() => null)
+            const [defaults, , safeMode] = await Promise.all([
+              fetchJson(`${BASE}/defaults.json`).catch(() => null),
+              reloadState(),
+              fetchJson(`${BASE}/safe-mode`).catch(() => ({ on: false })),
+            ])
             if (disposed) return
             if (defaults?.params && typeof defaults.params === 'object') store.defaults = { ...FALLBACK_DEFAULTS, ...defaults.params }
-            await reloadState()
-            if (disposed) return
             if (!store.activeId) store.activeId = FALLBACK_PRESET
-            const safeMode = await fetchJson(`${BASE}/safe-mode`).catch(() => ({ on: false }))
-            if (disposed) return
             if (safeMode?.on === true) {
               console.warn('[shadertoy-skin] safe mode: rendering and settings disabled ($DSH_HOME/shader-skin.safe exists)')
               return
@@ -786,10 +786,9 @@ window.__ModuleLoader__.load({
             syncEnabled()
             // Start the bounded checks first so a slow service never delays them.
             scheduleVerify()
-            // Services keep activating after us: wait for the theme before publishing
-            // the glass, otherwise the overrides are lost for this whole page life.
-            await waitForService('theme')
-            applyGlass()
+            // Theme and navigation are independent: a late theme provider must
+            // not hide the settings entry for its entire 15-second deadline.
+            void waitForService('theme').then(() => { if (!disposed) applyGlass() })
             sidebarAllowed = ENABLE_SIDEBAR_ENTRY
             if (booted && !sidebarRegistered) {
               await waitForService('slots')

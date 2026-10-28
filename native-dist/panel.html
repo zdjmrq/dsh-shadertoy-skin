@@ -399,9 +399,40 @@
   #project-channels label { display:grid; gap:4px; min-width:130px; flex:1; font-size:12px; }
   #project-channels select { max-width:100%; color:var(--fg); background:var(--field); color-scheme:inherit; }
   #project-staging .form-row { gap:12px; }
+  .boot-status { display: none; }
+  html[data-loading] body.mode-main .panel { display: none; }
+  body.mode-main .boot-status { display: block; max-width: 780px; margin: 40px auto; padding: 24px; color: var(--fg); }
+  body.mode-main:not(.loading) .boot-status { display: none; }
+  .boot-status p { color: var(--muted); line-height: 1.7; }
 </style>
 </head>
 <body>
+<script>
+// Apply the page shape before modules or Host requests: the legacy popup button
+// must never flash in the main column while a slow Desktop proxy is loading.
+if (new URLSearchParams(location.search).get('mode') === 'main') {
+  document.documentElement.classList.add('mode-main')
+  document.documentElement.dataset.loading = 'true'
+  document.body.classList.add('mode-main', 'loading')
+}
+window.__panelBootFailure = text => {
+  const message = document.getElementById('boot-message')
+  if (document.documentElement.hasAttribute('data-loading') && message) {
+    message.textContent = text
+    document.getElementById('boot-retry').hidden = false
+  }
+}
+window.__panelBootTimer = setTimeout(() => window.__panelBootFailure('设置页资源加载超时，请检查 DSH Host 连接并重新加载。'), 15000)
+window.addEventListener('error', () => window.__panelBootFailure(navigator.onLine === false
+  ? '网络已断开，设置页资源加载失败。请联网后重新加载。'
+  : '设置页资源加载失败，请检查 DSH Host 连接或插件文件后重新加载。'))
+</script>
+<div class="boot-status" role="status" aria-live="polite">
+  <h2>ShaderToy 背景</h2>
+  <p id="boot-message">正在读取背景设置…</p>
+  <button id="boot-retry" class="btn" type="button" hidden>重新加载</button>
+</div>
+<script>document.getElementById('boot-retry').addEventListener('click', () => location.reload())</script>
 <button class="fab" id="fab" type="button" aria-label="Shader 背景设置" aria-expanded="false" aria-controls="panel">
   <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <path d="M2 13.5c1.6-3 3.2-3 4.8 0s3.2 3 4.8 0 2.6-2.1 4.4-1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
@@ -785,15 +816,24 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   ]
   const textOfPreset = option => `${option.text}${option.kind ? ` · ${option.kind}` : ''}`
 
-  async function fetchJson(url) {
-    const response = await fetch(url, { cache: 'no-store' })
-    if (!response.ok) throw new Error(`${response.status} ${url}`)
-    return response.json()
+  async function readHost(url, type = 'json', withResponse = false) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 8000)
+    try {
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal })
+      if (!response.ok) throw Object.assign(new Error(`Host 请求失败（HTTP ${response.status}）`), { status: response.status })
+      const value = await response[type]()
+      return withResponse ? { response, value } : value
+    } finally { clearTimeout(timer) }
   }
-  async function fetchText(url) {
-    const response = await fetch(url, { cache: 'no-store' })
-    if (!response.ok) throw new Error(`${response.status} ${url}`)
-    return response.text()
+  const fetchJson = url => readHost(url)
+  const fetchText = url => readHost(url, 'text')
+  function loadError(error) {
+    if (navigator.onLine === false) return '网络已断开，无法读取 DSH Host。请联网后重新加载。'
+    if (error.name === 'AbortError') return '读取设置超时：DSH Host 超过 8 秒未完成响应，请重新加载或重启 DSH。'
+    if (error.status) return `${error.message}，无法完整读取设置。请重新加载或检查插件是否正常启用。`
+    if (error instanceof SyntaxError) return 'Host 返回的数据格式异常，无法读取设置。请重新加载；原配置不会被覆盖。'
+    return `无法读取背景设置：${error.message || '连接中断'}。请检查 DSH Host 连接后重新加载。`
   }
 
   function toParent(message) {
@@ -2261,16 +2301,18 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       document.documentElement.classList.add('standalone')
       document.body.classList.add('standalone')
     }
-    try { defaults = await fetchJson(`${BASE}/defaults.json`) } catch { /* built-in defaults */ }
-    try { manifest = await fetchJson(`${BASE}/presets/index.json`) } catch { manifest = [] }
-    manifest = Array.isArray(manifest) ? manifest : []
-    if (manifest.length === 0) manifest = [{ id: 'aurora', name: '极光（自写）' }, { id: 'flow', name: '流体色带（自写）' }]
+    const [loadedDefaults, loadedManifest, { response, value: remote }] = await Promise.all([
+      fetchJson(`${BASE}/defaults.json`),
+      fetchJson(`${BASE}/presets/index.json`),
+      readHost(`${BASE}/state`, 'json', true),
+    ])
+    if (!loadedDefaults?.params || !Array.isArray(loadedManifest) || !loadedManifest.length
+      || !loadedManifest.every(item => item && typeof item.id === 'string' && typeof item.file === 'string')
+      || !validStateShape(remote)) throw new Error('Host 配置或背景目录格式异常，原配置已保留')
+    defaults = loadedDefaults
+    manifest = loadedManifest
     {
       try {
-        const response = await fetch(`${BASE}/state`, { cache: 'no-store' })
-        if (!response.ok) throw new Error('state unavailable')
-        const remote = await response.json()
-        if (!validStateShape(remote)) throw new Error('invalid state')
         if (remote && typeof remote === 'object') {
           state.activeId = typeof remote.activeId === 'string' ? remote.activeId : null
           state.entries = Array.isArray(remote.entries) ? remote.entries : []
@@ -2304,9 +2346,9 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     bindCode()
     sync()
     renderLibrary()
-    if (recoveredState && await saveNow()) {
-      toParent({ type: 'preset', id: state.activeId })
-    }
+    clearTimeout(window.__panelBootTimer)
+    document.documentElement.removeAttribute('data-loading')
+    document.body.classList.remove('loading')
     // Push the stored params once: the player/glass always mirror what this page
     // shows, and a page refresh is enough to re-sync after an edit elsewhere.
     if (!STANDALONE && stateLoaded) toParent({ type: 'params', params: effective() })
@@ -2328,9 +2370,15 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       setOpen(false)
       toParent({ type: 'ready' })
     }
+    // Recovery may need a slow PUT; show the usable page before waiting for it.
+    if (recoveredState && await saveNow()) toParent({ type: 'preset', id: state.activeId })
   }
 
-  boot()
+  boot().catch(error => {
+    clearTimeout(window.__panelBootTimer)
+    stateLoaded = false
+    window.__panelBootFailure(loadError(error))
+  })
 })()
 </script>
 </body>
