@@ -1143,7 +1143,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       const surface = el('div', { className: 'interaction-surface', tabIndex: 0, role: 'region', hidden: true, ariaLabel: '背景交互区域' },
         el('p', { className: 'interaction-help', textContent: '背景交互中 · 支持键盘与按住鼠标拖动 · Esc / Tab 返回设置' }))
       document.body.append(surface)
-      let interacting = false, dragging = false, pointerFrame = 0, pendingPointer = null
+      let interacting = false, interactionToken = null, dragging = false, pointerFrame = 0, pendingPointer = null
       const clearPointer = () => {
         if (pointerFrame) cancelAnimationFrame(pointerFrame)
         pointerFrame = 0; pendingPointer = null; dragging = false
@@ -1151,6 +1151,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       const setPreview = (value, notify = true) => {
         if (interacting === value) return
         const restoreFocus = document.activeElement === surface && document.hasFocus()
+        const token = value ? (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`) : interactionToken
+        interactionToken = value ? token : null
         interacting = value
         clearPointer()
         surface.hidden = !value
@@ -1158,11 +1160,11 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         applyTheme()
         preview.setAttribute('aria-pressed', String(value))
         preview.textContent = value ? '返回设置 · Esc' : '预览并交互 ↗'
-        if (notify) toParent({ type: 'interaction', enabled: value })
+        if (notify) toParent({ type: 'interaction', enabled: value, token })
         if (value) surface.focus({ preventScroll: true })
         else if (restoreFocus) preview.focus({ preventScroll: true })
       }
-      stopBackgroundInteraction = () => setPreview(false, false)
+      stopBackgroundInteraction = token => { if (token && token === interactionToken) setPreview(false, false) }
       preview.setAttribute('aria-pressed', 'false')
       preview.title = '进入背景预览与键鼠交互；Esc、Tab 或窗口失焦时退出，不影响平时的 DSH 输入'
       preview.addEventListener('click', () => setPreview(!document.body.classList.contains('previewing')))
@@ -1172,10 +1174,10 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         if (event.key === 'Tab' || event.ctrlKey || event.metaKey || event.altKey) { setPreview(false); return }
         if (!Number.isInteger(event.keyCode) || event.keyCode <= 0 || event.keyCode >= 256 || event.keyCode >= 112 && event.keyCode <= 123) return
         event.preventDefault(); event.stopPropagation()
-        if (!event.repeat) toParent({ type: 'interaction-key', keyCode: event.keyCode, down: type === 'keydown' })
+        if (!event.repeat) toParent({ type: 'interaction-key', token: interactionToken, keyCode: event.keyCode, down: type === 'keydown' })
       })
-      surface.addEventListener('blur', () => { if (interacting) { clearPointer(); toParent({ type: 'interaction-release' }) } })
-      const pointer = (event, down) => toParent({ type: 'interaction-pointer', x: event.clientX, y: event.clientY, down })
+      surface.addEventListener('blur', () => { if (interacting) { clearPointer(); toParent({ type: 'interaction-release', token: interactionToken }) } })
+      const pointer = (event, down) => toParent({ type: 'interaction-pointer', token: interactionToken, x: event.clientX, y: event.clientY, down })
       surface.addEventListener('pointerdown', event => {
         if (!interacting || event.button !== 0 || event.isPrimary === false) return
         surface.focus({ preventScroll: true }); surface.setPointerCapture(event.pointerId)
@@ -1183,7 +1185,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       })
       surface.addEventListener('pointermove', event => {
         if (!interacting || !dragging) return
-        if (!(event.buttons & 1)) { clearPointer(); toParent({ type: 'interaction-release' }); return }
+        if (!(event.buttons & 1)) { clearPointer(); toParent({ type: 'interaction-release', token: interactionToken }); return }
         pendingPointer = { clientX: event.clientX, clientY: event.clientY }
         if (!pointerFrame) pointerFrame = requestAnimationFrame(() => { pointerFrame = 0; if (pendingPointer && interacting && dragging) pointer(pendingPointer, true); pendingPointer = null })
       })
@@ -1193,7 +1195,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       })
       window.addEventListener('blur', () => setPreview(false))
       document.addEventListener('visibilitychange', () => { if (document.hidden) setPreview(false) })
-      window.addEventListener('pagehide', () => { clearPointer(); toParent({ type: 'interaction', enabled: false }) })
+      window.addEventListener('pagehide', () => { clearPointer(); toParent({ type: 'interaction', enabled: false, token: interactionToken }) })
       document.addEventListener('keydown', event => { if (event.key === 'Escape' && document.body.classList.contains('previewing')) { setPreview(false); preview.focus({ preventScroll: true }) } })
       document.querySelector('.page-head').append(tools)
     }
@@ -2423,7 +2425,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         playbackInfo = message
         syncPlaybackHint(effective())
       } else if (message.type === 'interaction' && message.enabled === false) {
-        stopBackgroundInteraction()
+        stopBackgroundInteraction(message.token)
       } else if (message.type === 'preset') {
         // Renderer acknowledgements can arrive after a newer user selection.
         // This panel owns the saved activeId; an old init must never roll it back.

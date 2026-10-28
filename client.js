@@ -182,7 +182,7 @@ window.__ModuleLoader__.load({
           // (autoplay policy); the first click / keypress in the app is that gesture.
           let audioSuspended = false
           let lastAudio = null, lastPlayback = null, lastRendererError = null
-          let interactionOwner = null, interactionPointer = null
+          let interactionOwner = null, interactionToken = null, interactionPointer = null
 
           // ---------------------------------------------------------------- glass
           //
@@ -492,14 +492,15 @@ window.__ModuleLoader__.load({
           function endInteraction() {
             if (!interactionOwner) return
             const owner = interactionOwner
-            interactionOwner = null
+            const token = interactionToken
+            interactionOwner = null; interactionToken = null
             panelInteractionCleanup.delete(owner)
             releaseInteractionInput()
-            postTo(owner, { type: 'interaction', enabled: false })
+            postTo(owner, { type: 'interaction', enabled: false, token })
           }
-          function ownsInteraction(source) {
+          function ownsInteraction(source, token) {
             const frame = panelFrames.get(source)
-            return source === interactionOwner && frame?.isConnected && document.activeElement === frame
+            return source === interactionOwner && token === interactionToken && frame?.isConnected && document.activeElement === frame
               && document.hasFocus() && !document.hidden && effective().enabled !== false
           }
           on(window, 'blur', () => { if (!document.hasFocus()) endInteraction() })
@@ -512,29 +513,30 @@ window.__ModuleLoader__.load({
             if (!message || typeof message !== 'object') return
             switch (message.type) {
               case 'interaction': {
-                if (message.enabled === true && background && effective().enabled !== false
+                if (message.enabled === true && typeof message.token === 'string' && message.token.length <= 80 && background && effective().enabled !== false
                   && document.hasFocus() && document.activeElement === panelFrames.get(source)) {
-                  if (interactionOwner !== source) {
+                  if (interactionOwner !== source || interactionToken !== message.token) {
                     endInteraction()
                     interactionOwner = source
+                    interactionToken = message.token
                     panelInteractionCleanup.set(source, endInteraction)
                     releaseInteractionInput()
                   }
-                  postTo(source, { type: 'interaction', enabled: true })
-                } else if (interactionOwner === source) endInteraction()
-                else postTo(source, { type: 'interaction', enabled: false })
+                  postTo(source, { type: 'interaction', enabled: true, token: message.token })
+                } else if (interactionOwner === source && interactionToken === message.token) endInteraction()
+                else postTo(source, { type: 'interaction', enabled: false, token: message.token })
                 return
               }
               case 'interaction-release':
-                if (source === interactionOwner) releaseInteractionInput()
+                if (source === interactionOwner && interactionToken === message.token) releaseInteractionInput()
                 return
               case 'interaction-key':
-                if (ownsInteraction(source) && Number.isInteger(message.keyCode) && message.keyCode >= 0 && message.keyCode < 256 && message.keyCode !== 27) {
+                if (ownsInteraction(source, message.token) && Number.isInteger(message.keyCode) && message.keyCode >= 0 && message.keyCode < 256 && message.keyCode !== 27) {
                   postTo(background, { type: 'keyboard', keyCode: message.keyCode, down: message.down === true })
                 }
                 return
               case 'interaction-pointer': {
-                if (!ownsInteraction(source) || !Number.isFinite(message.x) || !Number.isFinite(message.y)) return
+                if (!ownsInteraction(source, message.token) || !Number.isFinite(message.x) || !Number.isFinite(message.y)) return
                 const rect = panelFrames.get(source).getBoundingClientRect()
                 const x = clamp(rect.left + message.x, .001, innerWidth, .001)
                 const y = clamp(innerHeight - rect.top - message.y, .001, innerHeight, .001)

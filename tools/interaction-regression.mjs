@@ -49,6 +49,10 @@ try {
     await panel.waitForFunction(() => document.activeElement?.classList.contains('interaction-surface'))
     assert.equal(await panel.getAttribute('.wallpaper-preview', 'aria-pressed'), 'true')
   }
+  await panel.evaluate(() => { const button = document.querySelector('.wallpaper-preview'); button.click(); button.click(); button.click() })
+  await page.waitForTimeout(200)
+  assert.equal(await panel.getAttribute('.wallpaper-preview', 'aria-pressed'), 'true', 'an older exit acknowledgement must not close a newer preview session')
+  await page.keyboard.press('Escape')
   await enter()
   await page.keyboard.down('a')
   await aDown()
