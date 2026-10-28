@@ -56,6 +56,25 @@ try {
   await page.waitForFunction(() => window.__player?.ready && window.__player.preset === 'recovered')
   const pixel = await page.evaluate(() => window.__player.inspect('pixel'))
   assert.ok(pixel[1] > 250 && pixel[0] < 5, String(pixel))
+
+  // postMessage retries can be delivered out of order: an older init/params
+  // revision must never override a newer one.
+  await page.evaluate(() => {
+    const post = (type, revision, body) => window.postMessage({ type, revision, ...body }, location.origin)
+    post('init', 5, { preset: { name: 'revision-new', code: { image: 'void mainImage(out vec4 c,in vec2 p){c=vec4(0.,1.,0.,1.);}' } }, params: { dim: 1, tintMix: 0 } })
+    post('init', 4, { preset: { name: 'revision-old', code: { image: 'void mainImage(out vec4 c,in vec2 p){c=vec4(1.,0.,0.,1.);}' } }, params: { dim: 1, tintMix: 0 } })
+  })
+  await page.waitForFunction(() => window.__player?.preset === 'revision-new' && window.__player.ready)
+  assert.equal(await page.evaluate(() => window.__player.preset), 'revision-new', 'a stale init must not win')
+  await page.evaluate(() => window.postMessage({ type: 'params', revision: 2, params: { dim: 0 } }, location.origin))
+  await page.waitForTimeout(250)
+  const dimmed = await page.evaluate(() => window.__player.inspect('pixel'))
+  assert.ok(dimmed[1] < 5, `a newer params update must apply: ${dimmed}`)
+  await page.evaluate(() => window.postMessage({ type: 'params', revision: 1, params: { dim: 1 } }, location.origin))
+  await page.waitForTimeout(250)
+  const stillDim = await page.evaluate(() => window.__player.inspect('pixel'))
+  assert.ok(stillDim[1] < 5, `a stale params update must be ignored: ${stillDim}`)
+  console.log('ok    out-of-order init/params revisions are ignored')
   const size = renderSize(16000, 9000, 3, 2)
   assert.ok(size.width * size.height <= 8 * 1024 * 1024)
   assert.ok(size.width <= 8192 && size.height <= 8192)

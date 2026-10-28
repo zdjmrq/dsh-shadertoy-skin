@@ -164,6 +164,13 @@ window.__ModuleLoader__.load({
           let presetRequest = 0
           let stateRequest = 0
           let paramsRevision = 0
+          // Monotonic revisions for every init/params message sent to the player.
+          // The player keeps the two sequences separate and drops a message whose
+          // revision is older than the last one it applied, so a delayed init for a
+          // previous preset can never override a newer selection (both can be in
+          // flight: retries, panel saves, reloads).
+          let initRevision = 0
+          let paramsMessageRevision = 0
           // WebAudio inside an iframe may start suspended until a real user gesture
           // (autoplay policy); the first click / keypress in the app is that gesture.
           let audioSuspended = false
@@ -404,7 +411,7 @@ window.__ModuleLoader__.load({
             for (const win of panelWindows) postTo(win, message)
           }
 
-          async function sendInit(frame) {
+          async function sendInit(frame, revision = ++initRevision) {
             if (frame === null || playerInitAttempts >= 4) return
             const request = ++initRequest
             const id = store.activeId
@@ -412,7 +419,7 @@ window.__ModuleLoader__.load({
             const retry = (delay) => {
               if (playerInitAttempts >= 4) return
               timers.push(setTimeout(() => {
-                if (request === initRequest && booted && !playerReady && background === frame) void sendInit(frame)
+                if (request === initRequest && booted && !playerReady && background === frame) void sendInit(frame, revision)
               }, delay))
             }
             try {
@@ -422,7 +429,7 @@ window.__ModuleLoader__.load({
               // theme first: the player keeps per-theme preview defaults only until
               // it receives an explicit look, and init carries that explicit look
               postTo(frame, { type: 'theme', dark: isDark() })
-              postTo(frame, { type: 'init', preset, params: { ...effective(), ...playerLook() } })
+              postTo(frame, { type: 'init', revision, preset, params: { ...effective(), ...playerLook() } })
               broadcastPanel({ type: 'preset', id: preset.id, name: preset.name })
               retry(3000)
             } catch (error) {
@@ -474,7 +481,7 @@ window.__ModuleLoader__.load({
                 for (const key of GLOBAL_KEYS) if (key in (message.params ?? {})) store.settings[key] = message.params[key]
                 applyGlass()
                 syncEnabled()
-                postTo(background, { type: 'params', params: { ...effective(), ...playerLook() } })
+                postTo(background, { type: 'params', revision: ++paramsMessageRevision, params: { ...effective(), ...playerLook() } })
                 return
               }
               case 'preset': {
@@ -662,7 +669,7 @@ window.__ModuleLoader__.load({
             lastDark = dark
             if (background) {
               postTo(background, { type: 'theme', dark })
-              postTo(background, { type: 'params', params: playerLook() })
+              postTo(background, { type: 'params', revision: ++paramsMessageRevision, params: playerLook() })
             }
             broadcastPanel({ type: 'theme', dark })
           })
