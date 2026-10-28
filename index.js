@@ -237,12 +237,16 @@ function sanitizeParams(raw) {
 
 function sanitizeEntry(raw, index) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`entry #${index} must be an object`)
-  if (typeof raw.id !== 'string' || raw.id.trim() === '') throw new Error(`entry #${index} needs a string id`)
+  if (typeof raw.id !== 'string') throw new Error(`entry #${index} needs a string id`)
+  // Ids are small opaque keys, never paths or markup: bound them like names so a
+  // hand-written state file cannot store unbounded strings.
+  const id = raw.id.trim().slice(0, 200)
+  if (id === '') throw new Error(`entry #${index} needs a string id`)
   const code = raw.code !== null && typeof raw.code === 'object' && !Array.isArray(raw.code) ? raw.code : {}
-  if (typeof code.image !== 'string' || code.image.trim() === '') throw new Error(`entry "${raw.id}" needs code.image`)
+  if (typeof code.image !== 'string' || code.image.trim() === '') throw new Error(`entry "${id}" needs code.image`)
   const entry = {
-    id: raw.id,
-    name: typeof raw.name === 'string' && raw.name.trim() !== '' ? raw.name.slice(0, 120) : raw.id,
+    id,
+    name: typeof raw.name === 'string' && raw.name.trim() !== '' ? raw.name.slice(0, 120) : id,
     source: ['paste', 'file', 'local', 'edit'].includes(raw.source) ? raw.source : 'paste',
     code: normalizeCode(code),
   }

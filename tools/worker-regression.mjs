@@ -71,6 +71,25 @@ try {
   assert.equal(await safePage.locator('#shadertoy-skin-bg').count(), 0)
   assert.equal(await safePage.locator('#shadertoy-skin-glass-style').count(), 0)
   console.log('ok    extreme viewport sizes respect the pixel budget and safe mode never starts a renderer')
+
+  // A missing/broken output device used to stop the whole renderer ("声音设备
+  // 异常" went through stop()). It must only disable sound; the wallpaper keeps
+  // rendering and the failure is reported as an audio state instead.
+  const audioPage = await browser.newPage({ viewport: { width: 640, height: 360 } })
+  const audioPageErrors = []
+  audioPage.on('pageerror', error => audioPageErrors.push(error.message))
+  await audioPage.addInitScript(() => {
+    class BrokenAudioContext { constructor() { throw new Error('no output device') } }
+    Object.defineProperty(window, 'AudioContext', { configurable: true, get: () => BrokenAudioContext })
+  })
+  await audioPage.goto(`${h.url}/shader-skin/player.html?preset=pulse`)
+  await audioPage.waitForFunction(() => window.__player?.ready && window.__player.frames > 5, null, { timeout: 30000 })
+  const audioMessages = await audioPage.evaluate(() => window.__outbox.filter(message => message.type === 'audio'))
+  assert.ok(audioMessages.some(message => message.state === 'error'), 'a broken device must surface as an audio error')
+  assert.equal(await audioPage.evaluate(() => window.__player.isolated), true)
+  assert.deepEqual(audioPageErrors, [])
+  await audioPage.close()
+  console.log('ok    a failing audio device is reported without stopping the renderer')
   assert.deepEqual(errors, [])
   console.log('ok    a stuck worker cannot block interface clicks, times out and recovers on project switch')
 } finally { await browser?.close(); await h.close() }

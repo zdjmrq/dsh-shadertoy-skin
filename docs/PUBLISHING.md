@@ -4,8 +4,8 @@
 
 | 工作流 | 触发 | 做什么 |
 |---|---|---|
-| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | `bundle` 检查（manifest、文件、许可证卫生、`npm pack` 内容）+ `renderer` 真浏览器 WebGL2 冒烟 |
-| `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 校验版本与 tag 一致 → 包、Host 和浏览器回归 → `npm publish`（OIDC，无 token） |
+| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | `bundle` 检查（manifest、文件、许可证卫生、`npm pack` 内容、全部脚本 `node --check`）+ `test:host` + 12 个浏览器回归套件（每个套件一个并行 job） |
+| `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 先并行跑同一批 12 个套件 → 校验版本与 tag 一致 → 包与 Host 检查 → `npm publish`（OIDC，无 token） |
 
 npm 侧用 **Trusted Publisher（OIDC）**：不需要在仓库里放 `NPM_TOKEN`，发布时由 GitHub Actions 的 OIDC 身份换取短期凭证，并自动生成 provenance 证明。
 
@@ -101,9 +101,12 @@ node tools/push-via-api.mjs --message "feat: ..."
 - 随包预设必须为 MIT 或带完整署名/来源/许可声明的 CC BY-NC-SA 3.0；Image、Common、Buffer 和 Sound 文件均需存在
 - ShaderToy view/embed 来源链接仅允许出现在已登记 CC BY-NC-SA 3.0 的预设文件中，避免把第三方作品标为 MIT
 - `native-dist/presets/local/` 必须不存在（用户导入目录）
-- `npm pack --dry-run` 的文件清单：必须含 `player.html`/两半入口，必须排除 `docs/`、`tools/`、`presets/dev/`、`presets/local/`
+- `npm pack --dry-run` 的文件清单：必须含 `player.html`/两半入口，必须排除 `docs/`、`tools/`、`presets/dev/`、`presets/local/`、仓库专用的 `assets/` 与 `screenshots.json`
+  - 解析同时兼容 npm 11（数组）与 npm 12（以包名为键的对象）的 `--json` 输出；CI 用 Node 24 自带的 npm，本机 npm 升到 12 也不会把检查跑挂
 
-`renderer` job 用真 Chromium + SwiftShader 跑 `tools/renderer-smoke.mjs`：aurora/flow 必须 ES3 在跑且像素不同、legacy 改写成 ES3、`gl_FragData` 回落 ES1、坏 shader 必须出现错误面板、`debug=bg` 生效、无未捕获异常。
+`bundle` job 用 `git ls-files '*.js' '*.mjs' '*.cjs'` 做语法检查，所以新增脚本自动纳入，不需要再维护一张文件清单。
+
+`suites` job 用真 Chromium + SwiftShader 并行跑 12 个套件（renderer / audio / panel / ui / audit / core / project / multi / worker / editor / surfaces / transparency）：aurora/flow 必须 ES3 在跑且像素不同、legacy 改写成 ES3、`gl_FragData` 回落 ES1、坏 shader 必须出现错误面板、`debug=bg` 生效、无未捕获异常；其余套件覆盖面板/编辑器交互、多文件项目、线程隔离与崩溃恢复、透明层与安全模式。
 
 ---
 

@@ -35,6 +35,18 @@ function readJson(rel) {
   return readFile(join(ROOT, rel), 'utf8').then(JSON.parse)
 }
 
+/**
+ * Read the published file list out of `npm pack --dry-run --json`.
+ * npm < 12 prints an array of reports; npm >= 12 prints an object keyed by
+ * package name. Both are valid, so both are accepted.
+ */
+function packReportFiles(stdout) {
+  const report = JSON.parse(stdout)
+  const entry = Array.isArray(report) ? report[0] : Object.values(report ?? {})[0]
+  if (!entry || !Array.isArray(entry.files)) throw new Error('unexpected npm pack report shape')
+  return entry.files.map(file => file.path)
+}
+
 /** Expand the tiny glob subset used in `files` (`dir/*.json`). */
 async function expand(pattern) {
   if (!pattern.includes('*')) return [pattern]
@@ -149,6 +161,11 @@ async function main() {
   }
   check('no user-imported presets directory', !existsSync(join(ROOT, 'native-dist/presets/local')))
 
+  // --- npm pack report parser (npm <= 11: array, npm >= 12: object keyed by name)
+  check('npm pack report parser accepts both npm output shapes',
+    packReportFiles(JSON.stringify([{ files: [{ path: 'a.js' }] }])).join() === 'a.js'
+    && packReportFiles(JSON.stringify({ 'pkg@1.0.0': { files: [{ path: 'b.js' }] } })).join() === 'b.js')
+
   // --- what npm would actually publish
   if (!process.argv.includes('--no-pack')) {
     // One shell string instead of an argv array: on Windows npm is a .cmd shim,
@@ -159,7 +176,7 @@ async function main() {
     } else {
       let files = []
       try {
-        files = JSON.parse(packed.stdout)[0].files.map(file => file.path)
+        files = packReportFiles(packed.stdout)
       } catch (error) {
         check('npm pack --dry-run output parses', false, String(error))
       }
@@ -168,6 +185,8 @@ async function main() {
       check('npm pack includes defaults.json', files.includes('native-dist/defaults.json'))
       check('npm pack includes cordis.patch.yml', files.includes('cordis.patch.yml'))
       check('npm pack includes both halves', files.includes('index.js') && files.includes('client.js'))
+      check('npm pack includes README, licence and manifest',
+        files.includes('README.md') && files.includes('LICENSE') && files.includes('package.json'))
       check('npm pack includes third-party notices', files.includes('THIRD-PARTY-NOTICES.md'))
       check('npm pack includes the bundled third-party presets',
         files.includes('native-dist/presets/seascape.glsl')
@@ -176,6 +195,8 @@ async function main() {
       check('npm pack excludes dev fixtures', !files.some(file => file.includes('presets/dev/') || file.startsWith('native-dist/presets/_')))
       check('npm pack excludes local presets', !files.some(file => file.includes('presets/local/')))
       check('npm pack excludes docs/tools', !files.some(file => file.startsWith('docs/') || file.startsWith('tools/')))
+      check('npm pack excludes repository-only assets',
+        !files.some(file => file.startsWith('assets/') || file === 'screenshots.json' || file.startsWith('.github/')))
     }
   }
 
