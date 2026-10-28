@@ -487,6 +487,11 @@ import { createPipeline } from './pipeline.js'
    * finite, leaving each timeline on its own behaviour.
    */
   function jointLoopPeriod() {
+    // state.time is the *image* clock scaled by `speed`, while the music runs on
+    // realtime. A joint period only lines up at 1x — at other speeds the two
+    // would wrap different numbers of real seconds, so keep the independent
+    // timelines there.
+    if (params.speed !== 1) return 0
     const image = playback.duration > 0 ? playback.duration : 0
     const music = musicDuration()
     if (image > 0 && Number.isFinite(music) && music > 0) return Math.max(image, music)
