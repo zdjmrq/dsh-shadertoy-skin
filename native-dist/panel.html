@@ -622,9 +622,15 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   const validStateShape = value => value && typeof value === 'object' && !Array.isArray(value)
     && (value.entries === undefined || Array.isArray(value.entries) && value.entries.every(entry => entry && typeof entry.id === 'string' && typeof entry.code?.image === 'string'))
     && ['settings', 'overrides', 'params'].every(key => value[key] === undefined || value[key] && typeof value[key] === 'object' && !Array.isArray(value[key]))
-  const rememberPending = () => {
+  /**
+   * The journal stores the exact JSON that would be PUT, as a string: serializing
+   * the whole library twice per autosave (request body + journal) was measurable
+   * in large libraries. Recovery parses it once. Old journals that stored an
+   * object are still accepted.
+   */
+  const rememberPending = (serialized = JSON.stringify(snapshot())) => {
     if (!stateLoaded || stateConflict) return
-    try { localStorage.setItem(JOURNAL_KEY, JSON.stringify({ owner: journalOwner, etag: stateEtag, state: snapshot() })) } catch { /* optional recovery */ }
+    try { localStorage.setItem(JOURNAL_KEY, JSON.stringify({ owner: journalOwner, etag: stateEtag, state: serialized })) } catch { /* optional recovery */ }
   }
 
   const clamp = (v, lo, hi, fb) => {
@@ -850,7 +856,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       setNote(lastSaveError, true)
       return Promise.resolve(false)
     }
-    rememberPending()
+    rememberPending(body)
     const revision = ++saveRevision
     setNote('正在保存…')
     let requestEtag
@@ -868,7 +874,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         if (response.ok) {
           try {
             const pending = JSON.parse(localStorage.getItem(JOURNAL_KEY) || 'null')
-            if (JSON.stringify(pending?.state) === body) localStorage.removeItem(JOURNAL_KEY)
+            const pendingState = pending && (typeof pending.state === 'string' ? pending.state : JSON.stringify(pending.state))
+            if (pendingState === body) localStorage.removeItem(JOURNAL_KEY)
             else if (pending?.owner === journalOwner && pending.etag === requestEtag) { pending.etag = stateEtag; localStorage.setItem(JOURNAL_KEY, JSON.stringify(pending)) }
           } catch { /* recovery is best effort */ }
         }
@@ -2277,10 +2284,13 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         stateLoaded = true
         try {
           const pending = JSON.parse(localStorage.getItem(JOURNAL_KEY) || 'null')
-          if (validStateShape(pending?.state)) {
-            const same = JSON.stringify(snapshot()) === JSON.stringify(pending.state)
+          // Journals written by newer panels hold the serialized state; older
+          // ones hold the object. Both are recovered.
+          const pendingState = pending && (typeof pending.state === 'string' ? JSON.parse(pending.state) : pending.state)
+          if (validStateShape(pendingState)) {
+            const same = JSON.stringify(snapshot()) === JSON.stringify(pendingState)
             if (same) localStorage.removeItem(JOURNAL_KEY)
-            else if (pending.etag === stateEtag) { Object.assign(state, pending.state); recoveredState = true }
+            else if (pending.etag === stateEtag) { Object.assign(state, pendingState); recoveredState = true }
             // Never overwrite a newer disk revision with an old recovery record.
           }
         } catch { /* invalid recovery record */ }
