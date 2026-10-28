@@ -35,6 +35,7 @@ try {
   await panel.locator('#paste-extra-files textarea:visible').fill(image)
   await panel.click('#paste-tabs [data-file=image]')
   assert.equal(await panel.inputValue('#paste-image'), image)
+  await panel.click('#paste-channel-details summary')
   await panel.selectOption('#paste-channels select >> nth=0', 'buffer:A')
   await panel.click('#paste-tabs [data-file=common]')
   await panel.press('#paste-tabs [data-file=common]', 'Home')

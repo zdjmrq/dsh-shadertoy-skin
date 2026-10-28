@@ -4,8 +4,8 @@
 
 | 工作流 | 触发 | 做什么 |
 |---|---|---|
-| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | 包、语法、Host、项目格式检查 + TypeScript 7 类型检查 + 14 个浏览器套件 |
-| `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 同一批 14 个浏览器套件全部通过 → 校验版本与 tag → `npm test` → OIDC 发布 |
+| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | 包、语法、Host、项目格式检查 + TypeScript 7 类型检查 + 15 个浏览器套件 |
+| `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 同一批 15 个浏览器套件全部通过 → 校验版本与 tag → `npm test` → OIDC 发布 |
 | `.github/workflows/browser-tests.yml` | 供上述两条工作流调用 | 单一套件清单、npm 下载缓存、失败截图保留 7 天；不上传配置或任意临时文件 |
 
 npm 侧用 **Trusted Publisher（OIDC）**：不需要在仓库里放 `NPM_TOKEN`，发布时由 GitHub Actions 的 OIDC 身份换取短期凭证，并自动生成 provenance 证明。
@@ -109,7 +109,7 @@ node tools/push-via-api.mjs --message "feat: ..."
 
 `typecheck` job 跑 `npm run typecheck`：TypeScript 7 以 `--noEmit` 检查 `index.js`、`native-dist/project.js`、`pipeline.js`、`textures.js` 的 JSDoc 类型（`allowJs` + `checkJs` + `strict`），**不产出任何构建物**，发布包仍是可直接运行的 `.js`。
 
-`suites` 和发布前的 `verify` 调用同一个 `browser-tests.yml`，用真 Chromium + SwiftShader 并行跑 14 个套件（renderer / audio / panel / ui / audit / core / project / multi / worker / editor / surfaces / transparency / startup / playback）。覆盖着色器兼容、面板/编辑器、多文件项目、线程隔离与恢复、透明层、安全模式，以及启动超时、网络报错、联播静音尾段、独立循环模式和重开面板状态同步。每个套件独立超时；失败时保留合成测试页面的截图。OIDC 写权限只给实际发布 job。
+`suites` 和发布前的 `verify` 调用同一个 `browser-tests.yml`，用真 Chromium + SwiftShader 并行跑 15 个套件（renderer / audio / panel / ui / audit / core / project / multi / worker / editor / surfaces / transparency / startup / playback / interaction）。覆盖着色器兼容、面板/编辑器、多文件项目、线程隔离与恢复、透明层、安全模式，以及启动超时、网络报错、联播静音尾段、独立循环模式、重开面板状态同步、显式键鼠交互与退出释放、旧画质档位保留和分组通道导入。每个套件独立超时；失败时保留合成测试页面的截图。OIDC 写权限只给实际发布 job。
 
 ---
 

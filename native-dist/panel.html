@@ -371,6 +371,7 @@
   @media (max-width: 540px) { body.mode-main .panel { padding-top: 22px; } .settings-card { padding: 18px; } .item .tools { width: 100%; justify-content: flex-end; } .settings-footer { align-items: stretch; flex-direction: column; } }
   @media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; } }
   .project-filebar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:18px 0; }
+  .project-filebar label { flex: 1 1 160px; min-width: 0; }
   .project-filebar [aria-selected=true] { border-color:var(--fg); font-weight:700; }
   /* A single editor surface with attached, horizontally scrolling file tabs. */
   .file-workspace { border: 1px solid var(--line); border-radius: 12px; overflow: clip; margin: 18px 0; background: var(--card-fill); }
@@ -404,7 +405,8 @@
   #project-tabs button { white-space:nowrap; }
   #project-channels { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
   #project-channels label { display:grid; gap:4px; min-width:130px; flex:1; font-size:12px; }
-  #project-channels select { max-width:100%; color:var(--fg); background:var(--field); color-scheme:inherit; }
+  .channel-select { width: 100%; min-height: 36px; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; color: var(--fg); background: var(--control-fill); color-scheme: inherit; font: inherit; }
+  .channel-select option, .channel-select optgroup { color: var(--fg); background: var(--bg); }
   #project-staging .form-row { gap:12px; }
   .boot-status { display: none; }
   html[data-loading] body.mode-main .panel { display: none; }
@@ -565,7 +567,7 @@ window.addEventListener('error', () => window.__panelBootFailure(navigator.onLin
         <div class="paste-file"><textarea id="paste-image" aria-label="Image 代码" spellcheck="false" placeholder="void mainImage(out vec4 fragColor, in vec2 fragCoord) { ... }"></textarea></div>
         <div class="paste-file" hidden><textarea id="paste-sound" aria-label="Sound 代码" spellcheck="false" placeholder="可选：vec2 mainSound(float time) { ... }"></textarea></div>
         <div id="paste-extra-files"></div>
-        <div id="paste-channels" class="file-channels" hidden></div>
+        <details id="paste-channel-details" class="channel-details"><summary>通道输入 <span>高级 · iChannel0 – 3</span></summary><p class="note">只在源码需要纹理或 Buffer 输入时调整；键盘需进入「预览并交互」。</p><div id="paste-channels" class="file-channels"></div></details>
       </div>
       <div class="actions"><button class="btn primary" id="paste-add" type="button">加入背景库</button></div>
       <p class="note error" id="paste-error" hidden></p>
@@ -613,7 +615,7 @@ window.addEventListener('error', () => window.__panelBootFailure(navigator.onLin
     </div>
 
     <div id="code-extra-files"></div>
-    <details class="channel-details"><summary>通道输入 <span>iChannel0 – 3</span></summary><div id="project-channels"></div></details>
+    <details class="channel-details"><summary>通道输入 <span>高级 · iChannel0 – 3</span></summary><p class="note">只在源码需要纹理或 Buffer 输入时调整；内置作品建议保留原连接。键盘需进入「预览并交互」。</p><div id="project-channels"></div></details>
     </div>
     <div class="actions">
       <button class="btn primary" id="code-save" type="button">保存并运行</button>
@@ -805,6 +807,41 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   }
 
   // ---------------------------------------------------------------- helpers
+  function channelOptions(bufferIds = [], assets = []) {
+    return [
+      ['', '无输入', '', '此通道不连接资源'],
+      ...bufferIds.map(id => [`buffer:${id}`, `Buffer ${id}`, '项目 Buffer', '多 pass 计算与反馈；自引用会读取上一帧']),
+      ...assets.map(name => [`asset:${name}`, name, '项目图片', '当前项目内嵌的图片纹理']),
+      ['font', '字体图集', '内置纹理', '供字符、字形与文字动画采样的图集'],
+      ['noise', '2D 噪声', '内置纹理', '二维随机纹理，用于地形、材质等效果'],
+      ['noise3d', '3D 噪声', '内置纹理', '三维随机纹理，供 sampler3D 采样'],
+      ['scene', '城市示例图（雨窗）', '内置纹理', '雨窗使用的离线城市图片，不是实时窗外画面'],
+      ['keyboard', '键盘状态（预览并交互）', '交互输入', '仅在显式预览交互模式或独立预览接收按键'],
+    ]
+  }
+  function channelSelect(options, value, label, change) {
+    const select = el('select', { className: 'channel-select' })
+    select.setAttribute('aria-label', label)
+    const groups = new Map()
+    for (const [key, name, group, description] of options) {
+      let container = select
+      if (group) {
+        if (!groups.has(group)) { const node = el('optgroup', { label: group }); groups.set(group, node); select.append(node) }
+        container = groups.get(group)
+      }
+      container.append(el('option', { value: key, textContent: name, title: description }))
+    }
+    // An edited/deleted resource should remain visibly unresolved rather than
+    // silently masquerading as an empty input until the user chooses a resource.
+    if (value && !options.some(option => option[0] === value)) select.append(el('option', { value, textContent: `缺失资源：${value}`, disabled: true }))
+    select.value = value || ''
+    const explain = () => { select.title = options.find(option => option[0] === select.value)?.[3] || '请重新选择此通道的资源' }
+    explain()
+    select.addEventListener('change', () => { explain(); change(select.value || null) })
+    return select
+  }
+  const channelCount = refs => (refs ?? []).filter(Boolean).length
+
   const effective = () => ({ ...defaults.params, ...(state.overrides[state.activeId] ?? {}), ...state.settings })
   const builtinById = id => manifest.find(item => item.id === id)
   const entryById = id => state.entries.find(item => item.id === id)
@@ -1575,7 +1612,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     const showStaging = () => {
       const name = el('input', { id: 'project-name', type: 'text', value: $('project-name')?.value || stagedFiles[0]?.folder || '我的多文件背景' })
       name.setAttribute('aria-label', '项目名字')
-      const resources = [['', '无输入'], ...stagedFiles.filter(file => BUFFER_IDS.includes(file.role)).map(file => [`buffer:${file.role}`, `Buffer ${file.role}`]), ...stagedFiles.filter(file => file.role === 'asset').map(file => [`asset:${file.name}`, file.name]), ['font', '字体'], ['noise', '2D 噪声'], ['noise3d', '3D 噪声'], ['scene', '窗外城市'], ['keyboard', '键盘（独立预览）']]
+      const resources = channelOptions(stagedFiles.filter(file => BUFFER_IDS.includes(file.role)).map(file => file.role), stagedFiles.filter(file => file.role === 'asset').map(file => file.name))
       const rows = stagedFiles.map(file => {
         const role = el('select')
         role.setAttribute('aria-label', `${file.name} 文件角色`)
@@ -1585,15 +1622,15 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         const row = el('div', { className: 'row' }, el('div', { className: 'head' }, el('label', { textContent: file.name }), role))
         if (['image', 'sound', ...BUFFER_IDS].includes(file.role)) {
           const inputs = el('div', { className: 'project-filebar' })
+          const summary = el('summary', { textContent: `通道输入 · ${channelCount(file.channels)}/4 已连接` })
           for (let i = 0; i < 4; i++) {
-            const select = el('select')
-            select.setAttribute('aria-label', `${file.name} iChannel${i}`)
-            select.append(...resources.map(([value, textContent]) => el('option', { value, textContent: `iChannel${i} · ${textContent}` })))
-            select.value = file.channels?.[i] ?? ''
-            select.addEventListener('change', () => { (file.channels ??= [null, null, null, null])[i] = select.value || null })
-            inputs.append(select)
+            const select = channelSelect(resources, file.channels?.[i], `${file.name} iChannel${i}`, value => {
+              (file.channels ??= [null, null, null, null])[i] = value
+              summary.textContent = `通道输入 · ${channelCount(file.channels)}/4 已连接`
+            })
+            inputs.append(el('label', { textContent: `iChannel${i}` }, select))
           }
-          row.append(inputs)
+          row.append(el('details', { className: 'channel-details' }, summary, inputs))
         }
         return row
       })
@@ -1802,13 +1839,12 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       }
       $('paste-delete').hidden = ['image', 'sound'].includes(key)
       const role = key.startsWith('buffers:') ? key.slice(8) : key
-      const options = [['', '无输入'], ...Object.keys(pasteExtras.buffers ?? {}).map(id => [`buffer:${id}`, `Buffer ${id}`]), ['noise', '2D 噪声'], ['noise3d', '3D 噪声'], ['font', '字体'], ['scene', '窗外城市']]
-      $('paste-channels').hidden = !['image', 'sound', ...BUFFER_IDS].includes(role) || !Object.keys(pasteExtras.buffers ?? {}).length
+      const options = channelOptions(Object.keys(pasteExtras.buffers ?? {}), Object.keys(pasteExtras.assets ?? {}))
+      $('paste-channel-details').hidden = !['image', 'sound', ...BUFFER_IDS].includes(role)
+      const count = () => { $('paste-channel-details').querySelector('summary span').textContent = `高级 · ${channelCount(pasteExtras.channels?.[role])}/4 已连接` }
+      count()
       $('paste-channels').replaceChildren(...Array.from({ length: 4 }, (_, i) => {
-        const input = el('select', { ariaLabel: `导入 ${role} iChannel${i}` })
-        input.append(...options.map(([value, textContent]) => el('option', { value, textContent })))
-        input.value = pasteExtras.channels?.[role]?.[i] ?? ''
-        input.addEventListener('change', () => { ((pasteExtras.channels ??= {})[role] ??= [null, null, null, null])[i] = input.value || null; rememberPaste() })
+        const input = channelSelect(options, pasteExtras.channels?.[role]?.[i], `导入 ${role} iChannel${i}`, value => { ((pasteExtras.channels ??= {})[role] ??= [null, null, null, null])[i] = value; count(); rememberPaste() })
         return el('label', { textContent: `iChannel${i} ` }, input)
       }))
     }
@@ -1912,15 +1948,14 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     const role = selectedFile.startsWith('buffers:') ? selectedFile.slice(8) : selectedFile
     $('project-channels').closest('details').hidden = !['image', 'sound', ...BUFFER_IDS].includes(role)
     if (!['image', 'sound', ...BUFFER_IDS].includes(role)) { $('project-channels').replaceChildren(); return }
-    const options = [['', '无输入'], ...Object.keys(codeExtras.buffers ?? {}).map(id => [`buffer:${id}`, `Buffer ${id}`]), ['font', '字体'], ['noise', '2D 噪声'], ['noise3d', '3D 噪声'], ['scene', '窗外城市'], ['keyboard', '键盘（独立预览）'], ...Object.keys(codeExtras.assets ?? {}).map(name => [`asset:${name}`, name])]
+    const options = channelOptions(Object.keys(codeExtras.buffers ?? {}), Object.keys(codeExtras.assets ?? {}))
+    const count = () => { $('project-channels').closest('details').querySelector('summary span').textContent = `高级 · ${channelCount(codeExtras.channels?.[role])}/4 已连接` }
+    count()
     $('project-channels').replaceChildren(...Array.from({ length: 4 }, (_, index) => {
-      const select = el('select', { 'aria-label': `${role} iChannel${index}` })
-      select.setAttribute('aria-label', `${role} iChannel${index}`)
-      select.append(...options.map(([value, textContent]) => el('option', { value, textContent })))
-      select.value = codeExtras.channels?.[role]?.[index] ?? ''
-      select.addEventListener('change', () => {
+      const select = channelSelect(options, codeExtras.channels?.[role]?.[index], `${role} iChannel${index}`, value => {
         codeExtras = readExtraCode()
-        ;((codeExtras.channels ??= {})[role] ??= [null, null, null, null])[index] = select.value || null
+        ;((codeExtras.channels ??= {})[role] ??= [null, null, null, null])[index] = value
+        count()
         codeExtrasDirty = true; updateCodeInfo(); rememberDrafts()
       })
       return el('label', { textContent: `${role === 'image' ? 'Image' : role} · iChannel${index}` }, select)
