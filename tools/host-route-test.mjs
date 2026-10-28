@@ -181,6 +181,9 @@ try {
   await putState({ version: 2, activeId: 'aurora', entries: [], overrides: { aurora: { brightness: 999, glass: -100, speed: -10, fps: 99, scale: 0.333 } } })
   const bounded = (await json('/shader-skin/state')).overrides.aurora
   check('numeric settings stay within declared limits', bounded.brightness === 180 && bounded.glass === 20 && bounded.speed === 0 && bounded.fps === undefined && bounded.scale === undefined)
+  await putState({ version: 2, entries: [], settings: { fps: 120, scale: .4 } })
+  const legacyScale = await json('/shader-skin/state')
+  check('120 fps is accepted and existing legacy render scale is preserved', legacyScale.settings.fps === 120 && legacyScale.settings.scale === .4)
   const originalTag = (await get('/shader-skin/state')).headers.get('etag')
   const receiptHeaders = { 'content-type': 'application/json', 'if-match': originalTag, 'x-shader-save-id': 'lost-response-retry' }
   const receiptBody = JSON.stringify({ version: 2, entries: [], settings: { glass: 47 } })

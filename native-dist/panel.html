@@ -1248,10 +1248,12 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   }
 
   function scaleOptions() {
-    const values = defaults.limits.scale?.values ?? [0.25, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5, 1.75, 2]
+    const values = [...(defaults.limits.scale?.values ?? [0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1, 1.25, 1.5, 2])]
+    const current = effective().scale
+    if (!values.includes(current) && [0.35, 0.4, 0.6, 1.75].includes(current)) values.push(current)
+    const names = { 0.25: '极省电', 0.375: '省电', 0.5: '流畅', 0.625: '均衡', 0.75: '清晰', 0.875: '优质', 1: '标准 · 默认', 1.25: '精细', 1.5: '超清', 2: '最高' }
     return values.map(value => {
-      const note = value === 0.25 ? ' · 最省电' : value === 2 ? ' · 最吃显卡' : ''
-      return { value: String(value), text: `${bufferSizeFor(value)}（${value}×${note}）` }
+      return { value: String(value), text: `${names[value] ?? '保留原设置'} · ${bufferSizeFor(value)}（${value * 100}%）` }
     })
   }
 
@@ -1272,7 +1274,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       onChange: value => setParam('scale', Number(value)),
     })
     fpsDd = makeDropdown($('fps-dd'), {
-      options: (defaults.limits.fps?.values ?? [15, 20, 30, 60]).map(value => ({ value: String(value), text: `${value} fps` })),
+      options: (defaults.limits.fps?.values ?? [15, 20, 30, 60, 120]).map(value => ({ value: String(value), text: `${value} fps` })),
       value: String(effective().fps),
       onChange: value => setParam('fps', Number(value)),
     })

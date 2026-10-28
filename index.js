@@ -258,6 +258,8 @@ async function readJsonBody(req, limit = MAX_STATE_BYTES) {
 }
 
 const GLOBAL_KEYS = new Set(['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted'])
+// Retain earlier saved choices without continuing to offer arbitrary tiers.
+const LEGACY_SCALES = new Set([0.35, 0.4, 0.6, 1.75])
 const PARAM_KEYS = new Set([...GLOBAL_KEYS, 'brightness', 'speed', 'loop', 'loopMode', 'loopSeconds', 'audioMode', 'audioDurationMode', 'audioSeconds'])
 const PANEL_LEVELS = new Set(['opaque', 'half', 'clear'])
 const AUDIO_MODES = new Set(['loop', 'once'])
@@ -294,6 +296,7 @@ function sanitizeParams(raw) {
       continue
     }
     if (typeof value === 'number' && Number.isFinite(value)) {
+      if (key === 'scale' && LEGACY_SCALES.has(value)) { out[key] = value; continue }
       const limit = DEFAULT_LIMITS[key]
       if (limit?.values) { if (limit.values.includes(value)) out[key] = value }
       else out[key] = limit ? Math.min(/** @type {number} */ (limit.max), Math.max(/** @type {number} */ (limit.min), value)) : value

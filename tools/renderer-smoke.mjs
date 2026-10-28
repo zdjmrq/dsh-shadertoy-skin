@@ -205,14 +205,14 @@ async function main() {
     const initial = await panelState()
     check('panel applies a theme (dark/light)', initial.theme === 'dark' || initial.theme === 'light', String(initial.theme))
     check('panel defaults to 30 fps', initial.fps === '30 fps', String(initial.fps))
-    check('panel defaults to 1x render scale', /1×/.test(initial.scale ?? ''), String(initial.scale))
+    check('panel defaults to standard 100% render scale', /标准.*100%/.test(initial.scale ?? ''), String(initial.scale))
     // Viewport is 1024x640 at DPR 1 in this test run, so the labels are deterministic.
-    check('scale menu shows concrete resolutions', (initial.scaleChoices ?? []).length === 11
-      && /^1024 × 640（1×）$/.test(initial.scaleChoices[6] ?? ''), (initial.scaleChoices ?? []).join(' | '))
+    check('scale menu shows ten named tiers with concrete resolutions', (initial.scaleChoices ?? []).length === 10
+      && /标准.*1024 × 640（100%）$/.test(initial.scaleChoices[6] ?? ''), (initial.scaleChoices ?? []).join(' | '))
     check('scale menu covers 0.25x up to 2x',
-      (initial.scaleChoices ?? []).includes('256 × 160（0.25× · 最省电）')
-      && (initial.scaleChoices ?? []).includes('2048 × 1280（2× · 最吃显卡）')
-      && (initial.scaleChoices ?? []).includes('512 × 320（0.5×）'),
+      (initial.scaleChoices ?? []).includes('极省电 · 256 × 160（25%）')
+      && (initial.scaleChoices ?? []).includes('最高 · 2048 × 1280（200%）')
+      && (initial.scaleChoices ?? []).includes('流畅 · 512 × 320（50%）'),
       (initial.scaleChoices ?? []).join(' | '))
     check('resolution header shows the drawing-buffer size', /^1024 × 640$/.test(initial.scaleHeader ?? ''), String(initial.scaleHeader))
     check('resolution hint explains the DPR cap', /DPR 上限 1\.5/.test(initial.scaleHint ?? ''), String(initial.scaleHint))
@@ -239,20 +239,20 @@ async function main() {
     // resolution picker: concrete sizes, applying one moves the header + hint
     await page.click('#scale-dd .dd-trigger')
     await page.waitForSelector('#scale-dd .dd.open .dd-menu', { timeout: 5_000 })
-    await page.locator('#scale-dd .dd-item', { hasText: '（0.25×' }).click()
+    await page.locator('#scale-dd .dd-item', { hasText: '（25%）' }).click()
     const quarterScale = await panelState()
     check('choosing 0.25× shows a quarter-size buffer', /^256 × 160$/.test(quarterScale.scaleHeader ?? ''), String(quarterScale.scaleHeader))
     await page.click('#scale-dd .dd-trigger')
-    await page.locator('#scale-dd .dd-item', { hasText: '（0.5×）' }).click()
+    await page.locator('#scale-dd .dd-item', { hasText: '（50%）' }).click()
     const halfScale = await panelState()
     check('choosing 0.5× shows the smaller buffer', /^512 × 320$/.test(halfScale.scaleHeader ?? ''), String(halfScale.scaleHeader))
-    check('scale trigger keeps the pixel size', /^512 × 320（0\.5×）$/.test(halfScale.scale ?? ''), String(halfScale.scale))
+    check('scale trigger keeps the named tier and pixel size', /^流畅 · 512 × 320（50%）$/.test(halfScale.scale ?? ''), String(halfScale.scale))
     await page.click('#scale-dd .dd-trigger')
-    await page.locator('#scale-dd .dd-item', { hasText: '（1×）' }).click()
+    await page.locator('#scale-dd .dd-item', { hasText: '（100%）' }).click()
     await page.setViewportSize({ width: 800, height: 600 })
     await sleep(200)
     check('resizing the window rebuilds the scale labels',
-      /^800 × 600（1×）$/.test((await panelState()).scale ?? ''), String((await panelState()).scale))
+      /800 × 600（100%）$/.test((await panelState()).scale ?? ''), String((await panelState()).scale))
     await page.setViewportSize({ width: 1024, height: 640 })
     await sleep(200)
 
@@ -270,7 +270,7 @@ async function main() {
     await page.click('#fps-dd .dd-trigger')
     await page.waitForSelector('#fps-dd .dd.open .dd-menu', { timeout: 5_000 })
     const fpsChoices = await page.locator('#fps-dd .dd-item').count()
-    check('fps dropdown is a custom list with 4 choices', fpsChoices === 4, String(fpsChoices))
+    check('fps dropdown is a custom list with 5 choices', fpsChoices === 5, String(fpsChoices))
     const popup = await page.evaluate(() => {
       const menu = document.querySelector('#fps-dd .dd-menu')
       const item = menu?.querySelector('.dd-item')
@@ -279,6 +279,9 @@ async function main() {
     check('dropdown popup is themed, not a white system list', Boolean(popup) && !(popup.bg === 'rgb(255, 255, 255)' && popup.fg === 'rgb(0, 0, 0)'), JSON.stringify(popup))
     await page.locator('#fps-dd .dd-item', { hasText: '60 fps' }).click()
     check('choosing 60 fps applies it', (await panelState()).fps === '60 fps')
+    await page.click('#fps-dd .dd-trigger')
+    await page.locator('#fps-dd .dd-item', { hasText: '120 fps' }).click()
+    check('choosing 120 fps applies it', (await panelState()).fps === '120 fps')
 
     // library tab lists built-in presets
     await page.click('#tab-library')
