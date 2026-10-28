@@ -65,6 +65,7 @@ import { createPipeline } from './pipeline.js'
     const resetProbe = ['loop', 'loopMode', 'speed', 'dim', 'tintMix', 'tint'].some(key => key in next && next[key] !== params[key])
     const wasPaused = params.paused
     const wasAudible = targetGain() > 0
+    const previousLoopPeriod = audioLoopPeriod()
     if ('speed' in next) params.speed = clamp(next.speed, 0, 2, 1)
     if ('scale' in next) params.scale = clamp(next.scale, 0.25, 2, 1)
     if ('blur' in next) params.blur = clamp(next.blur, 0, 12, 0)
@@ -102,9 +103,10 @@ import { createPipeline } from './pipeline.js'
     // Otherwise a mode change can cut off the final lookahead or leak samples
     // beyond a newly shortened duration.
     const synthesisChanged = wasAudible !== (targetGain() > 0) && Number.isFinite(musicDuration())
-    if ((audioModeChanged || synthesisChanged) && audio.program && audio.ctx) {
+    if ((audioModeChanged || synthesisChanged || previousLoopPeriod !== audioLoopPeriod()) && audio.program && audio.ctx) {
       stopAudioScheduler('reconfigure')
-      if (audioLoopPeriod() > 0 && audio.time >= musicDuration()) audio.time = 0
+      const period = audioLoopPeriod()
+      if (period > 0 && audio.time >= period) audio.time %= period
       if (audio.ctx.state === 'running' && !params.paused) startAudioScheduler()
     }
     resize()
@@ -491,7 +493,7 @@ import { createPipeline } from './pipeline.js'
     // realtime. A joint period only lines up at 1x — at other speeds the two
     // would wrap different numbers of real seconds, so keep the independent
     // timelines there.
-    if (params.speed !== 1) return 0
+    if (params.speed !== 1 || !params.loop || params.loopMode !== 'auto' || params.audioMode !== 'loop' || !audio.program) return 0
     const image = playback.duration > 0 ? playback.duration : 0
     const music = musicDuration()
     if (image > 0 && Number.isFinite(music) && music > 0) return Math.max(image, music)
@@ -533,7 +535,7 @@ import { createPipeline } from './pipeline.js'
       state: audio.state, sampleRate: audio.sampleRate, chunks: audio.chunks,
       chunkSize: audio.chunkSize, peak: audio.peak, rms: audio.rms, gain: targetGain(),
     }
-    p.playback = { time: state.time, frame: state.frame, duration: playback.duration, imageDuration: playback.duration || null, repeats: playback.repeats, mode: params.loopMode, loopPeriod: params.loop ? (params.loopMode === 'manual' ? params.loopSeconds : jointLoopPeriod()) : 0, musicDuration: Number.isFinite(musicDuration()) ? musicDuration() : null, musicTime: audio.time, musicAudibleTime: audibleMusicTime() }
+    p.playback = { time: state.time, frame: state.frame, duration: playback.duration, imageDuration: playback.duration || null, repeats: playback.repeats, mode: params.loopMode, loopPeriod: params.loop ? (params.loopMode === 'manual' ? params.loopSeconds : jointLoopPeriod() || playback.duration) : 0, jointPeriod: jointLoopPeriod(), musicLoopPeriod: audioLoopPeriod(), loop: params.loop, audioMode: params.audioMode, speed: params.speed, musicDuration: Number.isFinite(musicDuration()) ? musicDuration() : null, musicTime: audio.time, musicAudibleTime: audibleMusicTime() }
     if (AUDIOPROBE) window.__audioProbe = { peak: audio.peak, rms: audio.rms, chunks: audio.chunks }
     window.__snapshot?.(p, window.__audioProbe)
   }
@@ -640,10 +642,11 @@ import { createPipeline } from './pipeline.js'
       if (time < AUDIO_SEAM_FADE) gain = Math.min(gain, Math.max(0, time) / AUDIO_SEAM_FADE)
       const left = period - time
       if (left < AUDIO_SEAM_FADE) gain = Math.min(gain, Math.max(0, left) / AUDIO_SEAM_FADE)
-    } else if (params.audioMode === 'once') {
-      const left = musicDuration() - time
-      if (left < AUDIO_SEAM_FADE) gain = Math.min(gain, Math.max(0, left) / AUDIO_SEAM_FADE)
     }
+    // The joint cycle may outlast the music. The configured music end still
+    // bounds synthesis, including the chunk that straddles that end.
+    const left = musicDuration() - time
+    if (left < AUDIO_SEAM_FADE) gain = Math.min(gain, Math.max(0, left) / AUDIO_SEAM_FADE)
     return gain
   }
 
@@ -657,7 +660,7 @@ import { createPipeline } from './pipeline.js'
     // A known finite piece can keep its clock/looping while muted without
     // evaluating thousands of expensive vocal/synth samples that nobody hears.
     // Unknown durations still render so end-of-sound detection remains valid.
-    if (targetGain() === 0 && Number.isFinite(musicDuration())) {
+    if ((targetGain() === 0 || startTime >= musicDuration()) && Number.isFinite(musicDuration())) {
       audio.left.fill(0); audio.right.fill(0); audio.peak = 0; audio.rms = 0
       return true
     }

@@ -167,10 +167,11 @@ try {
   let fastPlayback = {}
   for (let attempt = 0; attempt < 10; attempt++) {
     fastPlayback = await player.evaluate(() => window.__player.playback)
-    if (fastPlayback.loopPeriod === 0 && fastPlayback.musicDuration === 2) break
+    if (fastPlayback.jointPeriod === 0 && fastPlayback.musicDuration === 2) break
     await panel.waitForTimeout(150)
   }
-  assert.equal(fastPlayback.loopPeriod, 0, `joint loop must not engage off 1x: ${JSON.stringify(fastPlayback)}`)
+  assert.equal(fastPlayback.jointPeriod, 0, `joint loop must not engage off 1x: ${JSON.stringify(fastPlayback)}`)
+  assert.equal(fastPlayback.loopPeriod, 3, 'independent image looping still uses its own duration off 1x')
   console.log('ok    joint looping stays off when the picture speed is not 1x')
 
   assert.deepEqual(errors, [])

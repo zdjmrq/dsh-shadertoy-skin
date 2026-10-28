@@ -117,7 +117,8 @@
     "test:multi": "node tools/multipass-regression.mjs",
     "test:worker": "node tools/worker-regression.mjs",
     "test:editor": "node tools/tabbed-editor-regression.mjs",
-    "test:startup": "node tools/startup-regression.mjs"
+    "test:startup": "node tools/startup-regression.mjs",
+    "test:playback": "node tools/playback-regression.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
