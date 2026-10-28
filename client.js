@@ -44,18 +44,25 @@ window.__ModuleLoader__.load({
      * the settings page (sliders appeared dead while their own state still saved).
      */
     const panelWindows = new Set()
+    const panelFrames = new Map(), panelInteractionCleanup = new Map()
     function registerPanelFrame(frame) {
       if (!frame) return () => {}
       let win = frame.contentWindow ?? null
       const add = () => {
         if (win === null && frame.contentWindow) win = frame.contentWindow
-        if (win !== null) panelWindows.add(win)
+        if (win !== null) { panelWindows.add(win); panelFrames.set(win, frame) }
       }
-      if (win !== null) panelWindows.add(win)
+      const release = () => panelInteractionCleanup.get(win)?.()
+      frame.addEventListener('load', release)
+      if (win !== null) { panelWindows.add(win); panelFrames.set(win, frame) }
       else frame.addEventListener('load', add, { once: true })
       return () => {
         frame.removeEventListener('load', add)
-        if (win !== null) panelWindows.delete(win)
+        frame.removeEventListener('load', release)
+        if (win !== null) {
+          panelInteractionCleanup.get(win)?.()
+          panelWindows.delete(win); panelFrames.delete(win)
+        }
       }
     }
 
@@ -175,6 +182,7 @@ window.__ModuleLoader__.load({
           // (autoplay policy); the first click / keypress in the app is that gesture.
           let audioSuspended = false
           let lastAudio = null, lastPlayback = null, lastRendererError = null
+          let interactionOwner = null, interactionPointer = null
 
           // ---------------------------------------------------------------- glass
           //
@@ -463,6 +471,7 @@ window.__ModuleLoader__.load({
           }
 
           function removeBackground() {
+            endInteraction()
             initRequest++
             document.getElementById(BG_ID)?.remove()
             background = null
@@ -472,9 +481,74 @@ window.__ModuleLoader__.load({
           // Settings now live in the main column through the sidebar entry; there is
           // no floating popup any more (it was fragile and the user prefers a page).
 
+          function releaseInteractionInput() {
+            postTo(background, { type: 'keyboard', reset: true })
+            if (interactionPointer) {
+              const p = interactionPointer
+              postTo(background, { type: 'mouse', mouse: [p.x, p.y, -Math.abs(p.cx), -Math.abs(p.cy)] })
+              interactionPointer = null
+            }
+          }
+          function endInteraction() {
+            if (!interactionOwner) return
+            const owner = interactionOwner
+            interactionOwner = null
+            panelInteractionCleanup.delete(owner)
+            releaseInteractionInput()
+            postTo(owner, { type: 'interaction', enabled: false })
+          }
+          function ownsInteraction(source) {
+            const frame = panelFrames.get(source)
+            return source === interactionOwner && frame?.isConnected && document.activeElement === frame
+              && document.hasFocus() && !document.hidden && effective().enabled !== false
+          }
+          on(window, 'blur', () => { if (!document.hasFocus()) endInteraction() })
+          on(document, 'visibilitychange', () => { if (document.hidden) endInteraction() })
+          on(document, 'focusin', event => {
+            if (interactionOwner && event.target !== panelFrames.get(interactionOwner)) endInteraction()
+          })
+
           async function handlePanelMessage(message, source) {
             if (!message || typeof message !== 'object') return
             switch (message.type) {
+              case 'interaction': {
+                if (message.enabled === true && background && effective().enabled !== false
+                  && document.hasFocus() && document.activeElement === panelFrames.get(source)) {
+                  if (interactionOwner !== source) {
+                    endInteraction()
+                    interactionOwner = source
+                    panelInteractionCleanup.set(source, endInteraction)
+                    releaseInteractionInput()
+                  }
+                  postTo(source, { type: 'interaction', enabled: true })
+                } else if (interactionOwner === source) endInteraction()
+                else postTo(source, { type: 'interaction', enabled: false })
+                return
+              }
+              case 'interaction-release':
+                if (source === interactionOwner) releaseInteractionInput()
+                return
+              case 'interaction-key':
+                if (ownsInteraction(source) && Number.isInteger(message.keyCode) && message.keyCode >= 0 && message.keyCode < 256 && message.keyCode !== 27) {
+                  postTo(background, { type: 'keyboard', keyCode: message.keyCode, down: message.down === true })
+                }
+                return
+              case 'interaction-pointer': {
+                if (!ownsInteraction(source) || !Number.isFinite(message.x) || !Number.isFinite(message.y)) return
+                const rect = panelFrames.get(source).getBoundingClientRect()
+                const x = clamp(rect.left + message.x, .001, innerWidth, .001)
+                const y = clamp(innerHeight - rect.top - message.y, .001, innerHeight, .001)
+                if (message.down === true) {
+                  interactionPointer ??= { cx: x, cy: y }
+                  Object.assign(interactionPointer, { x, y })
+                  postTo(background, { type: 'mouse', mouse: [x, y, interactionPointer.cx, interactionPointer.cy] })
+                } else if (interactionPointer) {
+                  const p = interactionPointer
+                  postTo(background, { type: 'mouse', mouse: [x, y, -Math.abs(p.cx), -Math.abs(p.cy)] })
+                  interactionPointer = null
+                }
+                return
+              }
               case 'ready':
                 if (lastAudio) postTo(source, lastAudio)
                 if (lastPlayback?.id === store.activeId) postTo(source, lastPlayback)
@@ -492,6 +566,7 @@ window.__ModuleLoader__.load({
               }
               case 'preset': {
                 if (typeof message.id === 'string' && message.id !== '') {
+                  endInteraction()
                   const request = ++presetRequest
                   lastPlayback = null; lastRendererError = null; lastAudio = null
                   initRequest++
@@ -657,6 +732,7 @@ window.__ModuleLoader__.load({
               } else if (message.type === 'playback') {
                 if (message.id === store.activeId) { lastPlayback = message; broadcastPanel(message) }
               } else if (message.type === 'error') {
+                endInteraction()
                 console.warn('[shadertoy-skin] renderer reported an error:', message.stage, message.log)
                 lastRendererError = { type: 'error', stage: message.stage, log: String(message.log ?? '').slice(0, 400) }
                 broadcastPanel(lastRendererError)
@@ -819,6 +895,7 @@ window.__ModuleLoader__.load({
             removeBackground()
             for (const dispose of listeners) dispose()
             panelWindows.clear()
+            panelFrames.clear(); panelInteractionCleanup.clear()
           }
         }, 'shadertoy-skin: background surface, settings surfaces and glass')
       },

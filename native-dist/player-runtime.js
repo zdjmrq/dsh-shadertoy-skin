@@ -1236,6 +1236,10 @@ import { createPipeline } from './pipeline.js'
           break
         }
         case 'params': applyParams(message.params); break
+        case 'keyboard':
+          if (message.reset === true) pipeline?.releaseKeys()
+          else if (Number.isInteger(message.keyCode) && message.keyCode >= 0 && message.keyCode < 256) pipeline?.key(message.keyCode, message.down === true)
+          break
         case 'mouse':
           if (Array.isArray(message.mouse) && message.mouse.length === 4) {
             // parent sends CSS-pixel viewport coords (origin bottom-left); scale to the drawing buffer

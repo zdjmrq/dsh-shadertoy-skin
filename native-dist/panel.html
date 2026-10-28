@@ -303,10 +303,17 @@
   body.mode-main .page-head h2 { font-size: 23px; letter-spacing: -.025em; font-weight: 600; margin: 0; }
   body.mode-main .page-head p { color: var(--muted); font-size: 13px; }
   .page-head { position: relative; }
-  .wallpaper-preview { position: absolute; top: 0; right: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card-fill); color: var(--fg); font-size: 12px; cursor: pointer; }
+  .preview-tools { position: absolute; top: 0; right: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .wallpaper-preview, .background-interact { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card-fill); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
+  .background-interact[aria-pressed=true] { border-color: var(--accent); }
+  .preview-tools button:disabled { opacity: .5; cursor: default; }
   body.mode-main.previewing { background: transparent; overflow: hidden; }
   .previewing .panel { visibility: hidden; }
-  .previewing .wallpaper-preview { visibility: visible; position: fixed; top: 24px; right: 24px; box-shadow: var(--shadow); }
+  .previewing .preview-tools { visibility: visible; position: fixed; top: 24px; right: 24px; z-index: 41; }
+  .previewing .preview-tools button { background: var(--pop); box-shadow: var(--shadow); }
+  .interaction-surface { position: fixed; inset: 0; z-index: 40; outline: none; cursor: grab; touch-action: none; user-select: none; }
+  .interaction-surface:active { cursor: grabbing; }
+  .interaction-help { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; color: var(--fg); background: var(--pop); font-size: 12px; text-align: center; pointer-events: none; }
   body.mode-main .tabs { max-width: none; width: fit-content; min-width: min(100%, 288px); margin: 0 0 28px; padding: 3px; border: 1px solid var(--line); background: var(--control-fill); }
   .tabs button { padding: 9px 22px; font-size: 13px; letter-spacing: 0; white-space: nowrap; }
   body.mode-main .tabs button.active { background: var(--card-fill); color: var(--fg); box-shadow: 0 1px 3px #00000012; font-weight: 600; }
@@ -360,7 +367,7 @@
   [hidden] { display: none !important; }
   .settings-side { display: contents; }
   @media (min-width: 860px) { body.mode-main .settings-grid { grid-template-columns: 1.15fr 1fr; } .settings-side { display: grid; gap: 18px; } .settings-card.sound { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; column-gap: 32px; } .settings-card.sound > h3, .settings-card.sound > p { grid-column: 1 / -1; } }
-  @media (max-width: 740px) { .wallpaper-preview { position: static; margin-top: 14px; } }
+  @media (max-width: 740px) { .preview-tools { position: static; margin-top: 14px; } .previewing .preview-tools { margin: 0; top: 16px; right: 16px; } }
   @media (max-width: 540px) { body.mode-main .panel { padding-top: 22px; } .settings-card { padding: 18px; } .item .tools { width: 100%; justify-content: flex-end; } .settings-footer { align-items: stretch; flex-direction: column; } }
   @media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; } }
   .project-filebar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:18px 0; }
@@ -637,6 +644,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   let saveTimer = 0
   let audioState = 'none'
   let playbackInfo = null
+  let stopBackgroundInteraction = () => {}
   let saveQueue = Promise.resolve(true)
   let saveRevision = 0
   let activeRevision = 0
@@ -1094,16 +1102,73 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     view.replaceChildren(grid, footer)
     if (!STANDALONE && MODE === 'main') {
       const preview = el('button', { type: 'button', className: 'wallpaper-preview', textContent: '预览背景 ↗' })
+      const interact = el('button', { type: 'button', className: 'background-interact', textContent: '键盘交互' })
+      const tools = el('div', { className: 'preview-tools', role: 'group', ariaLabel: '背景预览与交互' }, preview, interact)
+      const surface = el('div', { className: 'interaction-surface', tabIndex: 0, role: 'region', hidden: true, ariaLabel: '背景交互区域' },
+        el('p', { className: 'interaction-help', textContent: '背景交互中 · 支持键盘与按住鼠标拖动 · Esc 返回设置，Tab 退出交互' }))
+      document.body.append(surface)
+      let interacting = false, dragging = false, pointerFrame = 0, pendingPointer = null
+      const clearPointer = () => {
+        if (pointerFrame) cancelAnimationFrame(pointerFrame)
+        pointerFrame = 0; pendingPointer = null; dragging = false
+      }
+      const setInteraction = (value, notify = true) => {
+        if (interacting === value) return
+        interacting = value
+        clearPointer()
+        surface.hidden = !value
+        interact.setAttribute('aria-pressed', String(value))
+        interact.textContent = value ? '退出交互' : '键盘交互'
+        if (notify) toParent({ type: 'interaction', enabled: value })
+        if (value) surface.focus({ preventScroll: true })
+      }
+      stopBackgroundInteraction = () => setInteraction(false, false)
       preview.setAttribute('aria-pressed', 'false')
+      interact.setAttribute('aria-pressed', 'false')
+      interact.title = '仅在交互区域聚焦时向背景转发按键；普通预览和 DSH 输入不转发'
       const setPreview = value => {
+        if (!value) setInteraction(false)
         document.body.classList.toggle('previewing', value)
         applyTheme()
         preview.setAttribute('aria-pressed', String(value))
         preview.textContent = value ? '返回设置 · Esc' : '预览背景 ↗'
       }
       preview.addEventListener('click', () => setPreview(!document.body.classList.contains('previewing')))
+      interact.addEventListener('click', () => {
+        if (interacting) { setInteraction(false); interact.focus({ preventScroll: true }); return }
+        setPreview(true)
+        setInteraction(true)
+      })
+      for (const type of ['keydown', 'keyup']) surface.addEventListener(type, event => {
+        if (!interacting || document.activeElement !== surface || event.isComposing) return
+        if (event.key === 'Escape') return // shared handler returns to settings
+        if (event.key === 'Tab' || event.ctrlKey || event.metaKey || event.altKey) { setInteraction(false); return }
+        if (!Number.isInteger(event.keyCode) || event.keyCode <= 0 || event.keyCode >= 256 || event.keyCode >= 112 && event.keyCode <= 123) return
+        event.preventDefault(); event.stopPropagation()
+        if (!event.repeat) toParent({ type: 'interaction-key', keyCode: event.keyCode, down: type === 'keydown' })
+      })
+      surface.addEventListener('blur', () => { if (interacting) { clearPointer(); toParent({ type: 'interaction-release' }) } })
+      const pointer = (event, down) => toParent({ type: 'interaction-pointer', x: event.clientX, y: event.clientY, down })
+      surface.addEventListener('pointerdown', event => {
+        if (!interacting || event.button !== 0 || event.isPrimary === false) return
+        surface.focus({ preventScroll: true }); surface.setPointerCapture(event.pointerId)
+        dragging = true; pointer(event, true)
+      })
+      surface.addEventListener('pointermove', event => {
+        if (!interacting || !dragging) return
+        if (!(event.buttons & 1)) { clearPointer(); toParent({ type: 'interaction-release' }); return }
+        pendingPointer = { clientX: event.clientX, clientY: event.clientY }
+        if (!pointerFrame) pointerFrame = requestAnimationFrame(() => { pointerFrame = 0; if (pendingPointer && interacting && dragging) pointer(pendingPointer, true); pendingPointer = null })
+      })
+      for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) surface.addEventListener(type, event => {
+        if (!dragging) return
+        clearPointer(); pointer(event, false)
+      })
+      window.addEventListener('blur', () => setInteraction(false))
+      document.addEventListener('visibilitychange', () => { if (document.hidden) setInteraction(false) })
+      window.addEventListener('pagehide', () => { clearPointer(); toParent({ type: 'interaction', enabled: false }) })
       document.addEventListener('keydown', event => { if (event.key === 'Escape' && document.body.classList.contains('previewing')) { setPreview(false); preview.focus({ preventScroll: true }) } })
-      document.querySelector('.page-head').append(preview)
+      document.querySelector('.page-head').append(tools)
     }
     $('note').setAttribute('role', 'status')
     for (const name of ['params', 'library', 'code']) {
@@ -1162,6 +1227,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
 
   function sync() {
     const p = effective()
+    for (const button of document.querySelectorAll('.preview-tools button')) button.disabled = p.enabled === false
     syncPanelSurfaces(p)
     syncPlaybackHint(p)
     $('enabled').checked = p.enabled !== false
@@ -2331,6 +2397,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       } else if (message.type === 'playback' && message.id === state.activeId) {
         playbackInfo = message
         syncPlaybackHint(effective())
+      } else if (message.type === 'interaction' && message.enabled === false) {
+        stopBackgroundInteraction()
       } else if (message.type === 'preset') {
         // Renderer acknowledgements can arrive after a newer user selection.
         // This panel owns the saved activeId; an old init must never roll it back.

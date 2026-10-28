@@ -1,0 +1,105 @@
+import assert from 'node:assert/strict'
+import { chromium } from 'playwright'
+import { startHarness } from './browser-harness.mjs'
+
+const h = await startHarness()
+let browser
+try {
+  browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || (process.env.CI ? 'chrome' : 'msedge'), headless: true,
+    args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] })
+  const page = await browser.newPage({ viewport: { width: 1100, height: 800 } })
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  const shader = 'void mainImage(out vec4 c,in vec2 p){float a=texelFetch(iChannel0,ivec2(65,0),0).r;float w=texelFetch(iChannel0,ivec2(87,0),0).r;c=vec4(a,1.-a,max(w,step(.001,iMouse.z)),1.);}'
+  const response = await page.request.put(`${h.url}/shader-skin/state`, { data: { version: 2, activeId: 'keyboard-test', settings: { scale: .4, fps: 30 }, entries: [{ id: 'keyboard-test', name: 'Keyboard Test', code: { image: shader, channels: { image: ['keyboard'] } } }] } })
+  assert.equal(response.status(), 200)
+  await page.goto(h.url)
+  await page.waitForSelector('iframe[title="ShaderToy 背景设置"]')
+  let panel = page.frames().find(frame => frame.url().includes('panel.html'))
+  const player = page.frames().find(frame => frame.url().includes('player.html'))
+  await panel.waitForSelector('.background-interact')
+  await player.waitForFunction(() => window.__player?.ready)
+  assert.match(await panel.textContent('#scale-dd .dd-trigger'), /保留原设置.*40%/)
+  assert.equal(await panel.locator('#scale-dd .dd-item').count(), 11)
+  assert.equal(await panel.textContent('#fps-dd .dd-trigger'), '30 fps')
+  console.log('ok    legacy render quality is visible and retained, without exposing every historical scale')
+
+  const pixel = () => player.evaluate(() => window.__player.inspect('pixel'))
+  const waitPixel = async test => {
+    let value
+    for (let i = 0; i < 25; i++) { value = await pixel(); if (test(value)) return value; await page.waitForTimeout(40) }
+    assert.fail(`Unexpected keyboard/mouse pixels: ${value}`)
+  }
+  const released = () => waitPixel(p => p[1] > p[0] + 60 && p[1] > p[2] + 60)
+  const aDown = () => waitPixel(p => p[0] > p[1] + 60)
+  await released()
+  await panel.click('.wallpaper-preview')
+  await panel.press('.wallpaper-preview', 'a')
+  await released()
+  await panel.press('.wallpaper-preview', 'Escape')
+  await panel.click('#tab-code')
+  await panel.waitForFunction(() => document.querySelector('#code-image').value.includes('mainImage'))
+  await panel.focus('#code-image')
+  await page.keyboard.press('a')
+  await released()
+  await panel.click('#tab-params')
+  console.log('ok    ordinary preview and editor typing never forward keys to the background')
+
+  const enter = async () => {
+    await panel.click('.background-interact')
+    await panel.waitForFunction(() => document.activeElement?.classList.contains('interaction-surface'))
+    assert.equal(await panel.getAttribute('.background-interact', 'aria-pressed'), 'true')
+  }
+  await enter()
+  await page.keyboard.down('a')
+  await aDown()
+  await page.keyboard.up('a')
+  await released()
+  await page.keyboard.down('w')
+  await waitPixel(p => p[2] > p[0] + 60)
+  await page.keyboard.up('w')
+  await released()
+  const bounds = await panel.locator('.interaction-surface').boundingBox()
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+  await page.mouse.down()
+  await waitPixel(p => p[2] > p[0] + 60)
+  await page.mouse.up()
+  await released()
+  console.log('ok    explicit interaction forwards real keyboard and mouse input through the client into the rendering worker')
+
+  await page.keyboard.down('a'); await aDown()
+  await page.keyboard.press('Escape')
+  await released(); await page.keyboard.up('a')
+  assert.equal(await panel.getAttribute('.wallpaper-preview', 'aria-pressed'), 'false')
+  assert.equal(await panel.getAttribute('.background-interact', 'aria-pressed'), 'false')
+  await enter(); await page.keyboard.down('a'); await aDown()
+  await page.keyboard.press('Tab'); await released(); await page.keyboard.up('a')
+  assert.equal(await panel.getAttribute('.background-interact', 'aria-pressed'), 'false')
+  await enter(); await page.keyboard.down('a'); await aDown()
+  await page.keyboard.down('Control'); await released(); await page.keyboard.up('Control'); await page.keyboard.up('a')
+  assert.equal(await panel.getAttribute('.background-interact', 'aria-pressed'), 'false')
+  console.log('ok    Escape, Tab and system modifier shortcuts release held keys and leave keyboard interaction')
+
+  await enter(); await page.keyboard.down('a'); await aDown()
+  await page.evaluate(() => {
+    const input = document.createElement('input'); input.id = 'dsh-composer-test'; input.style = 'position:fixed;top:5px;left:5px;z-index:1000'
+    document.body.append(input); input.focus()
+  })
+  await released(); await page.keyboard.up('a')
+  await page.keyboard.type('aW')
+  assert.equal(await page.inputValue('#dsh-composer-test'), 'aW')
+  await released()
+  assert.equal(await panel.getAttribute('.background-interact', 'aria-pressed'), 'false')
+  console.log('ok    moving focus to a DSH input exits interaction and typing affects only that input')
+
+  await enter(); await page.keyboard.down('a'); await aDown()
+  await page.evaluate(() => { const frame = document.querySelector('iframe[title="ShaderToy 背景设置"]'); frame.src = frame.src })
+  await released(); await page.keyboard.up('a')
+  panel = page.frames().find(frame => frame.url().includes('panel.html'))
+  await panel.waitForSelector('.background-interact')
+  assert.equal(await panel.getAttribute('.background-interact', 'aria-pressed'), 'false')
+  await panel.evaluate(() => parent.postMessage({ type: 'interaction-key', keyCode: 65, down: true }, location.origin))
+  await released()
+  assert.deepEqual(errors, [])
+  console.log('ok    panel reloads release held keys; interaction is not remembered and unarmed key messages are ignored')
+} finally { await browser?.close(); await h.close() }
