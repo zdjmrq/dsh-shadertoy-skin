@@ -3,6 +3,7 @@
 [![CI](https://github.com/zdjmrq/dsh-shadertoy-skin/actions/workflows/ci.yml/badge.svg)](https://github.com/zdjmrq/dsh-shadertoy-skin/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/dsh-shadertoy-skin)](https://www.npmjs.com/package/dsh-shadertoy-skin)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com/p/zdjmrq/dsh-shadertoy-skin/)
 
 **给 DeepSeek Harness 套一层实时 ShaderToy 背景皮肤。** 一个零运行时依赖的 WebGL2 小播放器 + 背景库 + 玻璃界面，把聊天界面变成「浮在着色器上」的皮肤。
 

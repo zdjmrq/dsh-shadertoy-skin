@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Build the storefront assets used by the awesome-list entry:
+ * Legacy video-frame generator for the storefront assets.
+ * Current storefront screenshots are curated PNGs listed in screenshots.json.
  *
  *   assets/icon-180.png        raster icon (that list only accepts png/jpg/webp)
  *   docs/market/*.jpg          screenshots, also declared in ./screenshots.json
  *
  * Usage:
  *   MARIO_VIDEO=/path/to/mario.mp4 SEA_VIDEO=/path/to/seascape.mp4 \
- *     FFMPEG=/path/to/ffmpeg node tools/make-market-assets.cjs
+ *     FFMPEG=/path/to/ffmpeg node tools/make-market-assets.cjs --legacy-video-screenshots
  *
  * Frames are cropped to 1280x740 so the recording's sidebar footer (avatar and
  * nickname) and the floating input-method toolbar never appear — which is why
@@ -23,6 +24,11 @@ const ROOT = path.resolve(__dirname, '..')
 const FFMPEG = process.env.FFMPEG || 'ffmpeg'
 const MARIO = process.env.MARIO_VIDEO
 const SEA = process.env.SEA_VIDEO
+
+if (!process.argv.includes('--legacy-video-screenshots')) {
+  console.error('screenshots.json now lists curated PNGs. This legacy generator would replace their selection; pass --legacy-video-screenshots explicitly to restore video frames.')
+  process.exit(1)
+}
 
 if (!MARIO || !SEA) {
   console.error('set MARIO_VIDEO and SEA_VIDEO to the two demo recordings')
