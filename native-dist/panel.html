@@ -151,11 +151,11 @@
   input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5.5px; border: 0; border-radius: 50%; background: var(--accent); }
   input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
-  input[type=text], textarea, input[type=file] {
+  input[type=text], input[type=search], textarea, input[type=file] {
     width: 100%; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line);
     background: var(--control-fill); color: var(--fg); font: inherit;
   }
-  input[type=text]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input[type=text]:focus, input[type=search]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   textarea { resize: vertical; min-height: 92px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.5; }
 
   /* code tab: editable shader source of the running skin.
@@ -323,7 +323,7 @@
   #preset-kind, #scale-out, #fps-out, #panels-out, #audio-mode-out { display: none; }
   .hint, .note { font-size: 12px; color: var(--faint); line-height: 1.7; }
   .hint { margin-top: 8px; }
-  .dd-trigger, input[type=text], input[type=file] { min-height: 40px; padding: 9px 12px; font-size: 13px; }
+  .dd-trigger, input[type=text], input[type=search], input[type=file] { min-height: 40px; padding: 9px 12px; font-size: 13px; }
   .dd-trigger { gap: 16px; }
   .dd-trigger::after { flex: 0 0 6px; }
   .dd-item { padding: 9px 10px; font-size: 13px; }
