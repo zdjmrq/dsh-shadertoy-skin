@@ -41,6 +41,7 @@ jobs:
           node --check tools/project-audit-regression.mjs
           node --check tools/multipass-regression.mjs
           node --check tools/worker-regression.mjs
+          node --check tools/tabbed-editor-regression.mjs
           node --check native-dist/project.js
           node --check native-dist/pipeline.js
           node --check native-dist/textures.js
@@ -108,5 +109,10 @@ jobs:
 
       - name: Worker isolation and crash containment
         run: npm run test:worker
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+
+      - name: Tabbed editors and save transport recovery
+        run: npm run test:editor
         env:
           PLAYWRIGHT_CHANNEL: chrome

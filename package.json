@@ -1,6 +1,6 @@
 {
   "name": "dsh-shadertoy-skin",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Realtime ShaderToy background skin for DeepSeek Harness — a zero-runtime-dependency WebGL2 player, background library and glass UI integration.",
   "type": "module",
   "license": "MIT",
@@ -113,7 +113,8 @@
     "test:core": "node tools/core-regression.mjs",
     "test:project": "node tools/project-audit-regression.mjs",
     "test:multi": "node tools/multipass-regression.mjs",
-    "test:worker": "node tools/worker-regression.mjs"
+    "test:worker": "node tools/worker-regression.mjs",
+    "test:editor": "node tools/tabbed-editor-regression.mjs"
   },
   "devDependencies": {
     "playwright": "^1.55.0"

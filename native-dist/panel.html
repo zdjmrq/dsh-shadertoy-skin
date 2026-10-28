@@ -214,7 +214,9 @@
   /* A translucent focus surface must reveal the shader, not the old editor's
      text underneath. Visibility preserves layout/scroll position on exit. */
   body.editor-focus #panel > :not(#view-code),
-  body.editor-focus #view-code > :not(.focused),
+  body.editor-focus #view-code > :not(#code-workspace),
+  body.editor-focus #code-workspace > :not(.focused):not(#code-extra-files),
+  body.editor-focus #code-extra-files > :not(.focused),
   body.editor-focus #note { visibility: hidden; }
   body.editor-focus .panel { background: transparent; border-color: transparent; box-shadow: none; }
   .code-card.focused { position: fixed; inset: 12px; z-index: 100; margin: 0; display: flex; flex-direction: column; background: var(--focus-fill); box-shadow: var(--shadow); }
@@ -363,6 +365,34 @@
   @media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; } }
   .project-filebar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:18px 0; }
   .project-filebar [aria-selected=true] { border-color:var(--fg); font-weight:700; }
+  /* A single editor surface with attached, horizontally scrolling file tabs. */
+  .file-workspace { border: 1px solid var(--line); border-radius: 12px; overflow: clip; margin: 18px 0; background: var(--card-fill); }
+  .file-strip { display: flex; align-items: stretch; min-width: 0; border-bottom: 1px solid var(--line); padding: 0 10px; }
+  .file-strip [role=tablist] { display: flex; align-items: stretch; overflow-x: auto; min-width: 0; scrollbar-width: thin; }
+  .file-tab, .file-add, .file-remove { appearance: none; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; flex-shrink: 0; }
+  .file-tab { position: relative; padding: 14px 18px; font-size: 13px; white-space: nowrap; border-bottom: 2px solid transparent; }
+  .file-tab[aria-selected=true] { color: var(--fg); border-bottom-color: var(--fg); background: var(--accent-soft); }
+  .file-tab:hover, .file-add:hover, .file-remove:hover { color: var(--fg); background: var(--accent-soft); }
+  .file-add { padding: 8px 16px; font-size: 23px; }
+  .file-remove { margin-left: auto; padding: 8px; font-size: 11px; }
+  .file-create { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .file-create input { flex: 1; min-width: 150px; }
+  .file-workspace .editor-toolbar { margin: 0; padding: 10px 16px; gap: 14px; }
+  .file-workspace .code-card:not(.focused) { border: 0; border-radius: 0; margin: 0; padding: 0; background: transparent; }
+  .file-workspace .code-card:not(.focused) > .head { padding: 8px 16px; margin: 0; }
+  .file-workspace .code-card:not(.focused) > .head > label { display: none; }
+  .file-workspace .code-card:not(.focused) .code-frame { border: 0; border-radius: 0; }
+  .file-workspace .code-grip { margin: 0; height: 18px; }
+  .file-workspace .code-frame:focus-within { box-shadow: inset 0 0 0 1px var(--accent); }
+  .channel-details { border-top: 1px solid var(--line); padding: 12px 16px; font-size: 12px; color: var(--muted); }
+  .channel-details summary { cursor: pointer; }
+  .channel-details summary span { color: var(--faint); margin-left: 8px; }
+  .channel-details #project-channels { margin-top: 12px; }
+  .paste-file textarea { display: block; width: 100%; height: 320px; border: 0; border-radius: 0; background: transparent; resize: vertical; padding: 16px; font: 13px/1.7 ui-monospace, Consolas, monospace; color: var(--fg); }
+  #paste-workspace { background: transparent; }
+  body.editor-focus #code-workspace { background: transparent; border-color: transparent; }
+  .file-channels { padding: 12px 16px; border-top: 1px solid var(--line); }
+  .file-channels label { display: block; margin: 6px 0; }
   #project-tabs { display:flex; gap:5px; overflow-x:auto; max-width:100%; padding:4px 0; }
   #project-tabs button { white-space:nowrap; }
   #project-channels { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
@@ -491,8 +521,14 @@
     <div class="import-box">
       <h2>粘贴 ShaderToy 代码</h2>
       <div class="form-row"><label for="paste-name">名字</label><input type="text" id="paste-name" placeholder="例如：我的海面"></div>
-      <div class="form-row"><label for="paste-image">Image 代码（必填）</label><textarea id="paste-image" placeholder="void mainImage(out vec4 fragColor, in vec2 fragCoord) { ... }"></textarea></div>
-      <div class="form-row"><label for="paste-sound">Sound 代码（可选，mainSound）</label><textarea id="paste-sound" placeholder="vec2 mainSound(float time) { ... }"></textarea></div>
+      <div class="file-workspace" id="paste-workspace">
+        <div class="file-strip"><div id="paste-tabs" role="tablist" aria-label="导入项目文件"></div><button id="paste-new" class="file-add" type="button" aria-label="新建导入文件" title="新建文件">+</button><button id="paste-delete" class="file-remove" type="button">删除文件</button></div>
+        <div class="file-create" id="paste-new-form" hidden><input id="paste-filename" aria-label="导入文件名" placeholder="Common.glsl / Buffer A.glsl / helper.glsl"><button id="paste-create" class="btn tiny" type="button">创建</button><button id="paste-cancel" class="btn tiny" type="button">取消</button></div>
+        <div class="paste-file"><textarea id="paste-image" aria-label="Image 代码" spellcheck="false" placeholder="void mainImage(out vec4 fragColor, in vec2 fragCoord) { ... }"></textarea></div>
+        <div class="paste-file" hidden><textarea id="paste-sound" aria-label="Sound 代码" spellcheck="false" placeholder="可选：vec2 mainSound(float time) { ... }"></textarea></div>
+        <div id="paste-extra-files"></div>
+        <div id="paste-channels" class="file-channels" hidden></div>
+      </div>
       <div class="actions"><button class="btn primary" id="paste-add" type="button">加入背景库</button></div>
       <p class="note error" id="paste-error" hidden></p>
     </div>
@@ -522,9 +558,9 @@
   <div id="view-code" hidden>
     <div class="head"><label>当前运行的作品</label><output id="code-title"></output></div>
     <div class="hint" id="code-hint">内置作品只读：保存会另存为「我的副本」并立刻运行。改动只存在本机。</div>
-    <div class="project-filebar"><div id="project-tabs" role="tablist" aria-label="项目文件"></div><button type="button" class="btn tiny" id="project-new">＋ 新建文件</button><button type="button" class="btn tiny" id="project-delete">删除文件</button></div>
-    <div class="project-filebar" id="project-new-form" hidden><input id="project-filename" type="text" aria-label="新文件名" placeholder="Common.glsl / Buffer A.glsl / helper.glsl"><button type="button" class="btn tiny" id="project-create">创建文件</button><button type="button" class="btn tiny" id="project-cancel">取消</button></div>
-    <div id="project-channels"></div>
+    <div class="file-workspace" id="code-workspace">
+    <div class="file-strip"><div id="project-tabs" role="tablist" aria-label="项目文件"></div><button type="button" class="file-add" id="project-new" aria-label="新建文件" title="新建文件">+</button><button type="button" class="file-remove" id="project-delete">删除文件</button></div>
+    <div class="file-create" id="project-new-form" hidden><input id="project-filename" type="text" aria-label="新文件名" placeholder="Common.glsl / Buffer A.glsl / helper.glsl"><button type="button" class="btn tiny" id="project-create">创建文件</button><button type="button" class="btn tiny" id="project-cancel">取消</button></div>
 
     <div class="row">
       <div class="head"><label for="code-image">Image 代码</label><output id="code-image-info"></output></div>
@@ -539,6 +575,8 @@
     </div>
 
     <div id="code-extra-files"></div>
+    <details class="channel-details"><summary>通道输入 <span>iChannel0 – 3</span></summary><div id="project-channels"></div></details>
+    </div>
     <div class="actions">
       <button class="btn primary" id="code-save" type="button">保存并运行</button>
       <button class="btn" id="code-revert" type="button">放弃修改</button>
@@ -574,6 +612,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   let stateLoaded = false
   let stateEtag = null
   let stateConflict = false
+  let lastSaveError = ''
   let pendingWrites = 0
   let recoveredState = false
   let libraryBusy = false
@@ -757,16 +796,58 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     try { parent.postMessage(message, location.origin) } catch { /* parent gone */ }
   }
 
+  async function putState(body, headers) {
+    // Ordinary saves do not need keepalive. Its shared 64 KiB browser quota
+    // can reject a valid request before it ever reaches the Host.
+    headers['x-shader-save-id'] = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
+    let failure
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 12000)
+      try {
+        const response = await fetch(`${BASE}/state`, { method: 'PUT', headers, body, signal: controller.signal })
+        if (![502, 503, 504].includes(response.status) || attempt) return response
+      } catch (error) {
+        failure = error
+        if (attempt) throw error
+      } finally { clearTimeout(timeout) }
+      await new Promise(resolve => setTimeout(resolve, 400))
+    }
+    throw failure
+  }
+
+  function saveResponseError(status, detail = '') {
+    const reasons = {
+      400: '项目或配置内容无效', 401: 'DSH 登录已失效，请重新登录',
+      403: '没有保存权限', 404: 'Host 保存路由不存在，请重启 DSH 以加载插件',
+      405: 'Host 不支持保存请求，请检查插件版本',
+      409: '配置已在其他页面更新，请重新加载', 413: '配置超过容量限制，请缩小代码或图片',
+      415: 'Host 不支持当前配置格式', 429: '保存过于频繁，请稍后重试',
+      500: 'Host 写入失败', 502: '桌面转发服务异常',
+      503: 'Host 服务暂不可用，请稍后重试或重启 DSH', 504: 'Host 服务响应超时',
+    }
+    const storage = /ENOSPC/.test(detail) ? '磁盘空间不足' : /EACCES|EPERM/.test(detail) ? '配置文件写入权限不足或被占用' : /EROFS/.test(detail) ? '配置所在磁盘只读' : /corrupted/.test(detail) ? '配置文件损坏，原文件已保留' : ''
+    return `保存失败：${storage || reasons[status] || 'Host 请求失败'}（HTTP ${status}）。修改已保留。`
+  }
+
+  function saveConnectionError(error) {
+    if (navigator.onLine === false) return '保存失败：网络已断开，无法连接 DSH Host。修改已保留，联网后请重试。'
+    if (error.name === 'AbortError') return '保存超时：等待 Host 响应超过 12 秒，自动重试后仍未成功。修改已保留。'
+    return '保存连接中断：未收到 Host 响应，自动重试后仍未成功。请检查网络连接与 DSH Host 是否正常。修改已保留。'
+  }
+
   function saveState() {
     if (!stateLoaded || stateConflict) {
-      setNote(stateConflict ? '配置已在其他页面更新，请重新加载。' : '配置读取失败，请重新加载。', true)
+      lastSaveError = stateConflict ? '配置已在其他页面更新，请重新加载。' : '配置读取失败，请重新加载。'
+      setNote(lastSaveError, true)
       return Promise.resolve(false)
     }
     const activeId = state.activeId
     const body = JSON.stringify(snapshot())
     const encoder = new TextEncoder()
     if (encoder.encode(body).length > 2 * 1024 * 1024 || state.entries.reduce((sum, entry) => sum + codeBytes(entry.code), 0) > 1_500_000) {
-      setNote('配置超过 2 MB 或代码总量超过 1.5 MB，修改仍保留在当前页面，请缩小代码后重试。', true)
+      lastSaveError = '配置超过 2 MB 或代码总量超过 1.5 MB，修改仍保留在当前页面，请缩小代码后重试。'
+      setNote(lastSaveError, true)
       return Promise.resolve(false)
     }
     rememberPending()
@@ -778,7 +859,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       const headers = { 'content-type': 'application/json' }
       requestEtag = stateEtag
       if (stateEtag) headers['if-match'] = stateEtag
-      return fetch(`${BASE}/state`, { method: 'PUT', headers, body, keepalive: new TextEncoder().encode(body).length < 60000 })
+      return putState(body, headers)
     })
       .then(async response => {
         if (response.status === 409) stateConflict = true
@@ -792,11 +873,14 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
           } catch { /* recovery is best effort */ }
         }
         const detail = response.ok ? '' : (await response.text()).slice(0, 180)
-        if (revision === saveRevision) setNote(response.ok ? '已保存' : stateConflict ? '配置已在其他页面更新，请重新加载。' : `保存失败（HTTP ${response.status}）：${detail}`, !response.ok)
+        if (revision === saveRevision) {
+          lastSaveError = response.ok ? '' : saveResponseError(response.status, detail)
+          setNote(response.ok ? '已保存' : lastSaveError, !response.ok)
+        }
         return response.ok
       }).finally(() => { pendingWrites-- })
-      .catch(() => {
-        if (revision === saveRevision) setNote('保存失败：Host 路由不可用，请重试。', true)
+      .catch(error => {
+        if (revision === saveRevision) { lastSaveError = saveConnectionError(error); setNote(lastSaveError, true) }
         return false
       })
     saveQueue = result
@@ -1304,7 +1388,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
           const parsed = item.kind === 'shadertoy' ? parseShaderDocument(text) : { image: text, sound: looksLikeSound(text) ? text : undefined }
           if (!parsed) throw new Error('无法解析这个文件')
           addEntry({ ...parsed, name: parsed.name || item.name, source: 'local', origin: parsed.origin || item.file })
-          if (!await saveNow()) throw new Error('保存未完成，作品暂留在当前列表中，请重试保存')
+          if (!await saveNow()) throw new Error(lastSaveError || '保存未完成，作品暂留在当前列表中，请重试保存')
           setNote(`已导入「${parsed.name || item.name}」（已保存）。`)
         } catch (error) {
           setNote(`导入失败：${error.message}`, true)
@@ -1362,7 +1446,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
             if (file.channels && ['image', 'sound', ...BUFFER_IDS].includes(file.role)) code.channels[file.role] = file.channels
           }
           const entry = addEntry({ ...normalizeCode(code), name: name.value.trim() || '我的多文件背景', source: 'file', license: stagedFiles.some(file => /CC BY-NC-SA 3\.0|Attribution-NonCommercial-ShareAlike 3\.0/.test(file.text)) ? 'CC BY-NC-SA 3.0' : undefined })
-          if (!await setActive(entry.id)) throw new Error('保存未完成，文件仍保留，请重试保存')
+          if (!await setActive(entry.id)) throw new Error(lastSaveError || '保存未完成，文件仍保留，请重试保存')
           stagedFiles = []; $('project-staging').replaceChildren(); setTab('code')
           setNote(`已导入「${entry.name}」（已保存）。`)
         } catch (error) { setNote(`项目导入失败：${error.message}`, true) }
@@ -1406,21 +1490,27 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     }
     $('project-input').addEventListener('change', stageProject)
     $('project-folder').addEventListener('change', stageProject)
+    bindPasteWorkspace()
+    let pasteCandidate = null
     $('paste-add').addEventListener('click', async () => {
       const error = $('paste-error')
       error.hidden = true
-      const input = { name: $('paste-name').value, image: $('paste-image').value, sound: $('paste-sound').value }
+      const input = JSON.stringify({ name: $('paste-name').value, code: readPasteCode() })
       $('paste-add').disabled = true
       try {
-        const entry = addEntry({
+        const entry = pasteCandidate?.input === input && entryById(pasteCandidate.id) || addEntry({
           name: $('paste-name').value.trim() || '我的背景',
-          image: $('paste-image').value,
-          sound: $('paste-sound').value,
+          ...readPasteCode(),
           source: 'paste',
         })
-        if (!await setActive(entry.id)) throw new Error('保存未完成，输入内容已保留，请重试保存')
-        for (const key of ['name', 'image', 'sound']) if ($(`paste-${key}`).value === input[key]) $(`paste-${key}`).value = ''
+        pasteCandidate = { input, id: entry.id }
+        if (!await setActive(entry.id)) throw new Error(lastSaveError || '保存未完成，输入内容已保留，请重试保存')
+        if (JSON.stringify({ name: $('paste-name').value, code: readPasteCode() }) === input) {
+          $('paste-name').value = ''; $('paste-image').value = ''; $('paste-sound').value = ''
+          pasteExtras = {}; pasteSelected = 'image'; renderPasteFiles(); rememberPaste()
+        }
         setTab('params')
+        pasteCandidate = null
         setNote(`已加入「${entry.name}」。`)
       } catch (err) {
         error.textContent = err.message
@@ -1442,7 +1532,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
             name: parsed.name || file.name.replace(/\.[^.]+$/, ''),
             source: 'file', origin: parsed.origin || file.name,
           })
-          if (!await saveNow()) throw new Error('保存未完成，作品暂留在当前列表中，请重试保存')
+          if (!await saveNow()) throw new Error(lastSaveError || '保存未完成，作品暂留在当前列表中，请重试保存')
           setNote(`已导入「${parsed.name || file.name}」（已保存）。`)
         } catch (error) {
           setNote(`导入 ${file.name} 失败：${error.message}`, true)
@@ -1454,35 +1544,156 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   }
 
   // ------------------------------------------------------------- code tab
+  function addProjectSource(extra, filename) {
+    if (/^(image|sound)(?:\.glsl)?$/i.test(filename)) return filename.toLowerCase().split('.')[0]
+    if (/^common(?:\.glsl)?$/i.test(filename)) {
+      extra.common ??= '// Shared declarations\n'
+      return 'common'
+    }
+    const buffer = filename.match(/^buffer[ _-]?([a-d])(?:\.glsl)?$/i)
+    if (buffer) {
+      const id = buffer[1].toUpperCase()
+      ;(extra.buffers ??= {})[id] ??= 'void mainImage(out vec4 color, in vec2 pixel) { color = vec4(0.0, 0.0, 0.0, 1.0); }'
+      return `buffers:${id}`
+    }
+    normalizeCode({ image: '// New project', includes: { [filename]: '// Include\n' } })
+    ;(extra.includes ??= {})[filename] ??= '// Include\n'
+    return `includes:${filename}`
+  }
+  function extraSources(extra) {
+    return [
+      ...(extra.common !== undefined ? [{ key: 'common', label: 'Common', text: extra.common }] : []),
+      ...Object.entries(extra.buffers ?? {}).map(([id, text]) => ({ key: `buffers:${id}`, label: `Buffer ${id}`, text })),
+      ...Object.entries(extra.includes ?? {}).map(([name, text]) => ({ key: `includes:${name}`, label: name, text })),
+    ]
+  }
+  function readSources(extra, selector) {
+    const next = clone(extra)
+    for (const area of document.querySelectorAll(selector)) {
+      const [kind, ...name] = area.dataset.projectFile.split(':')
+      if (kind === 'common') next.common = area.value
+      else (next[kind] ??= {})[name.join(':')] = area.value
+    }
+    return next
+  }
+  function removeProjectSource(extra, key) {
+    if (key === 'common') delete extra.common
+    else {
+      const [kind, ...name] = key.split(':')
+      delete extra[kind]?.[name.join(':')]
+      if (kind === 'buffers') {
+        delete extra.bufferSettings?.[name[0]]
+        delete extra.channels?.[name[0]]
+        for (const channels of Object.values(extra.channels ?? {})) for (let i = 0; i < channels.length; i++) if (channels[i] === `buffer:${name[0]}`) channels[i] = null
+      }
+    }
+  }
+  function bindFileKeys(id) {
+    $(id).addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+      const buttons = [...$(id).children], current = buttons.indexOf(document.activeElement)
+      if (current < 0) return
+      event.preventDefault()
+      const index = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+      buttons[index].click(); buttons[index].focus()
+    })
+  }
+  let pasteExtras = {}, pasteSelected = 'image'
+  const readPasteCode = () => ({ image: $('paste-image').value, sound: $('paste-sound').value, ...readSources(pasteExtras, '#paste-extra-files [data-project-file]') })
+  function rememberPaste() {
+    try { sessionStorage.setItem('shadertoy-skin.pasteDraft', JSON.stringify({ name: $('paste-name').value, code: readPasteCode() })) } catch { /* keep editor contents */ }
+  }
+  function renderPasteFiles() {
+    const files = [{ key: 'image', label: 'Image', area: $('paste-image') }, { key: 'sound', label: 'Sound', area: $('paste-sound') }]
+    $('paste-extra-files').replaceChildren(...extraSources(pasteExtras).map((file, index) => {
+      const area = el('textarea', { id: `paste-extra-${index}`, spellcheck: false, value: file.text, ariaLabel: `${file.label} 代码` })
+      area.dataset.projectFile = file.key
+      files.push({ ...file, area })
+      return el('div', { className: 'paste-file' }, area)
+    }))
+    const select = key => {
+      pasteSelected = key
+      for (const file of files) file.area.parentElement.hidden = file.key !== key
+      for (const button of $('paste-tabs').children) {
+        button.setAttribute('aria-selected', String(button.dataset.file === key))
+        button.tabIndex = button.dataset.file === key ? 0 : -1
+      }
+      $('paste-delete').hidden = ['image', 'sound'].includes(key)
+      const role = key.startsWith('buffers:') ? key.slice(8) : key
+      const options = [['', '无输入'], ...Object.keys(pasteExtras.buffers ?? {}).map(id => [`buffer:${id}`, `Buffer ${id}`]), ['noise', '2D 噪声'], ['noise3d', '3D 噪声'], ['font', '字体'], ['scene', '窗外城市']]
+      $('paste-channels').hidden = !['image', 'sound', ...BUFFER_IDS].includes(role) || !Object.keys(pasteExtras.buffers ?? {}).length
+      $('paste-channels').replaceChildren(...Array.from({ length: 4 }, (_, i) => {
+        const input = el('select', { ariaLabel: `导入 ${role} iChannel${i}` })
+        input.append(...options.map(([value, textContent]) => el('option', { value, textContent })))
+        input.value = pasteExtras.channels?.[role]?.[i] ?? ''
+        input.addEventListener('change', () => { ((pasteExtras.channels ??= {})[role] ??= [null, null, null, null])[i] = input.value || null; rememberPaste() })
+        return el('label', { textContent: `iChannel${i} ` }, input)
+      }))
+    }
+    $('paste-tabs').replaceChildren(...files.map(file => {
+      const tab = el('button', { type: 'button', className: 'file-tab', role: 'tab', textContent: file.label, id: `tab-${file.area.id}` })
+      tab.dataset.file = file.key
+      const pane = file.area.parentElement
+      pane.id = `pane-${file.area.id}`; pane.setAttribute('role', 'tabpanel'); pane.setAttribute('aria-labelledby', tab.id)
+      tab.setAttribute('aria-controls', pane.id)
+      tab.addEventListener('click', () => select(file.key))
+      return tab
+    }))
+    select(files.some(file => file.key === pasteSelected) ? pasteSelected : 'image')
+  }
+  function bindPasteWorkspace() {
+    try {
+      const draft = JSON.parse(sessionStorage.getItem('shadertoy-skin.pasteDraft') || 'null')
+      if (draft && typeof draft.name === 'string') {
+        if (typeof draft.code?.image !== 'string') throw new Error('Invalid draft')
+        const { sound = '', ...extra } = normalizeCode({ ...draft.code, image: draft.code.image || '// Empty draft' })
+        delete extra.image
+        if (typeof draft.code.common === 'string') extra.common = draft.code.common
+        $('paste-name').value = draft.name; $('paste-image').value = draft.code.image; $('paste-sound').value = sound; pasteExtras = extra
+      }
+    } catch { /* ignore invalid draft */ }
+    renderPasteFiles(); bindFileKeys('paste-tabs')
+    $('paste-workspace').addEventListener('input', rememberPaste)
+    $('paste-name').addEventListener('input', rememberPaste)
+    $('paste-new').addEventListener('click', () => { $('paste-new-form').hidden = false; $('paste-filename').value = ''; $('paste-filename').focus() })
+    $('paste-cancel').addEventListener('click', () => { $('paste-new-form').hidden = true; $('paste-new').focus() })
+    $('paste-filename').addEventListener('keydown', event => { if (event.key === 'Enter') $('paste-create').click(); if (event.key === 'Escape') $('paste-cancel').click() })
+    $('paste-create').addEventListener('click', () => {
+      const name = $('paste-filename').value.trim()
+      if (!name) return
+      try {
+        pasteExtras = readSources(pasteExtras, '#paste-extra-files [data-project-file]')
+        pasteSelected = addProjectSource(pasteExtras, name)
+        renderPasteFiles(); rememberPaste(); $('paste-new-form').hidden = true
+        $('paste-tabs').querySelector('[aria-selected=true]').focus()
+        $('paste-error').hidden = true
+      } catch (error) { $('paste-error').textContent = error.message; $('paste-error').hidden = false }
+    })
+    $('paste-delete').addEventListener('click', () => {
+      if (['image', 'sound'].includes(pasteSelected) || !window.confirm('删除当前文件？')) return
+      pasteExtras = readSources(pasteExtras, '#paste-extra-files [data-project-file]')
+      removeProjectSource(pasteExtras, pasteSelected); pasteSelected = 'image'; renderPasteFiles(); rememberPaste()
+    })
+  }
   let codeLoadToken = 0
   let codeLoadedId = null
   let codeBaseline = { image: '', sound: '' }
-  let codeExtras = {}, codeExtrasBaseline = '{}', selectedFile = 'all'
+  let codeExtras = {}, codeExtrasBaseline = '{}', selectedFile = 'image'
   let decorateCodeArea, updateEditorPreferences
   const clone = value => JSON.parse(JSON.stringify(value))
   function readExtraCode() {
-    const extra = clone(codeExtras)
-    for (const area of document.querySelectorAll('[data-project-file]')) {
-      const [kind, ...rest] = area.dataset.projectFile.split(':')
-      if (kind === 'common') extra.common = area.value
-      else (extra[kind] ??= {})[rest.join(':')] = area.value
-    }
-    return extra
+    return readSources(codeExtras, '#code-extra-files [data-project-file]')
   }
   function renderProjectFiles() {
     $('code-extra-files').replaceChildren()
-    const files = [{ key: 'image', label: 'Image.glsl', area: $('code-image') }, { key: 'sound', label: 'Sound.glsl', area: $('code-sound') }]
-    const extraFiles = [
-      ...(codeExtras.common !== undefined ? [{ key: 'common', label: 'Common.glsl', text: codeExtras.common }] : []),
-      ...Object.entries(codeExtras.buffers ?? {}).map(([id, text]) => ({ key: `buffers:${id}`, label: `Buffer ${id}.glsl`, text })),
-      ...Object.entries(codeExtras.includes ?? {}).map(([name, text]) => ({ key: `includes:${name}`, label: name, text })),
-    ]
+    const files = [{ key: 'image', label: 'Image', area: $('code-image') }, { key: 'sound', label: 'Sound', area: $('code-sound') }]
+    const extraFiles = extraSources(codeExtras)
     for (const [index, file] of extraFiles.entries()) {
       const id = `code-extra-${index}`
       const area = el('textarea', { id, className: 'code-area', value: file.text, spellcheck: false, wrap: 'off' })
       area.dataset.projectFile = file.key
       area.dataset.fileLabel = file.label
-      const row = el('div', { className: 'row' }, el('div', { className: 'head' }, el('label', { textContent: file.label, htmlFor: id })), area,
+      const row = el('div', { className: 'row' }, el('div', { className: 'head' }, el('label', { textContent: file.label, htmlFor: id }), el('output')), area,
         el('div', { className: 'code-grip', tabIndex: 0 }))
       const grip = row.querySelector('.code-grip')
       grip.dataset.code = id; grip.setAttribute('role', 'separator'); grip.setAttribute('aria-label', `调整 ${file.label} 高度`)
@@ -1491,18 +1702,22 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       area.addEventListener('input', () => { updateCodeInfo(); rememberDrafts() })
       files.push({ ...file, area })
     }
-    if (!files.some(file => file.key === selectedFile)) selectedFile = 'all'
+    if (!files.some(file => file.key === selectedFile)) selectedFile = 'image'
     const select = key => {
       selectedFile = key
-      for (const file of files) file.area.closest('.code-card').hidden = key !== 'all' && key !== file.key
+      for (const file of files) file.area.closest('.code-card').hidden = key !== file.key
       for (const button of $('project-tabs').children) button.setAttribute('aria-selected', String(button.dataset.file === key))
       for (const button of $('project-tabs').children) button.tabIndex = button.dataset.file === key ? 0 : -1
-      $('project-delete').disabled = ['all', 'image'].includes(key)
+      $('project-delete').hidden = ['image', 'sound'].includes(key)
       renderChannels()
     }
-    $('project-tabs').replaceChildren(...[{ key: 'all', label: '全部文件' }, ...files].map(file => {
-      const button = el('button', { type: 'button', className: 'btn tiny', role: 'tab', textContent: file.label })
+    $('project-tabs').replaceChildren(...files.map(file => {
+      const button = el('button', { type: 'button', className: 'file-tab', role: 'tab', textContent: file.label })
       button.dataset.file = file.key
+      button.id = `project-tab-${file.area.id}`
+      button.setAttribute('aria-controls', file.area.closest('.code-card').id = `pane-${file.area.id}`)
+      file.area.closest('.code-card').setAttribute('role', 'tabpanel')
+      file.area.closest('.code-card').setAttribute('aria-labelledby', button.id)
       button.addEventListener('click', () => select(file.key))
       return button
     }))
@@ -1511,7 +1726,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     select(selectedFile)
   }
   function renderChannels() {
-    const role = selectedFile === 'all' ? 'image' : selectedFile.startsWith('buffers:') ? selectedFile.slice(8) : selectedFile
+    const role = selectedFile.startsWith('buffers:') ? selectedFile.slice(8) : selectedFile
+    $('project-channels').closest('details').hidden = !['image', 'sound', ...BUFFER_IDS].includes(role)
     if (!['image', 'sound', ...BUFFER_IDS].includes(role)) { $('project-channels').replaceChildren(); return }
     const options = [['', '无输入'], ...Object.keys(codeExtras.buffers ?? {}).map(id => [`buffer:${id}`, `Buffer ${id}`]), ['font', '字体'], ['noise', '2D 噪声'], ['noise3d', '3D 噪声'], ['scene', '窗外城市'], ['keyboard', '键盘（独立预览）'], ...Object.keys(codeExtras.assets ?? {}).map(name => [`asset:${name}`, name])]
     $('project-channels').replaceChildren(...Array.from({ length: 4 }, (_, index) => {
@@ -1609,6 +1825,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     $('code-image-info').textContent = `${image.split('\n').length} 行 · ${image.length} 字符${dirty ? ' · 未保存' : ''}`
     $('code-sound-info').textContent = $('code-sound').value.trim() ? 'mainSound' : ''
     for (const { id } of document.querySelectorAll('.code-area')) {
+      $(id).closest('.code-card').querySelector('.head output').textContent = `${$(id).value.split('\n').length} 行 · ${$(id).value.length} 字符${dirty ? ' · 未保存' : ''}`
       const gutter = $(`${id}-lines`)
       if (gutter) gutter.textContent = Array.from({ length: $(id).value.split('\n').length }, (_, i) => i + 1).join('\n')
     }
@@ -1618,7 +1835,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     const note = $('code-note')
     note.textContent = text
     note.classList.toggle('error', isError)
-    if (isError && text.startsWith('保存失败')) {
+    if (isError && /^(保存失败|保存连接中断|保存超时)/.test(text)) {
       const retry = el('button', { type: 'button', className: 'btn tiny', textContent: '重试保存代码' })
       retry.addEventListener('click', () => { void saveCode() })
       note.append(' ', retry)
@@ -1660,7 +1877,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         if (!await saveNow()) {
           entry.code = previousCode
           entry.source = previousSource
-          setCodeNote('保存失败，代码草稿已保留，请重试。', true)
+          setCodeNote(lastSaveError || '保存失败，代码草稿已保留，请重试。', true)
           return
         }
         if (state.activeId !== entry.id || codeLoadedId !== entry.id) return
@@ -1688,7 +1905,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
         state.entries = state.entries.filter(item => item.id !== copy.id)
         delete state.overrides[copy.id]
         renderLibrary()
-        setCodeNote('保存失败，代码草稿已保留，请重试。', true)
+        setCodeNote(lastSaveError || '保存失败，代码草稿已保留，请重试。', true)
         return
       }
       codeDrafts.delete(builtin.id)
@@ -1791,49 +2008,25 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       $('project-new-form').hidden = false
       $('project-filename').value = ''; $('project-filename').focus()
     })
-    $('project-cancel').addEventListener('click', () => { $('project-new-form').hidden = true })
-    $('project-tabs').addEventListener('keydown', event => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-      const buttons = [...$('project-tabs').children]
-      const current = buttons.indexOf(document.activeElement)
-      if (current < 0) return
-      event.preventDefault()
-      const index = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
-      buttons[index].click(); buttons[index].focus()
-    })
+    $('project-cancel').addEventListener('click', () => { $('project-new-form').hidden = true; $('project-new').focus() })
+    bindFileKeys('project-tabs')
     $('project-filename').addEventListener('keydown', event => { if (event.key === 'Enter') $('project-create').click(); if (event.key === 'Escape') $('project-new-form').hidden = true })
     $('project-create').addEventListener('click', () => {
       if (!codeLoadedId || codeSaving) return
       const name = $('project-filename').value.trim()
       if (!name) return
       codeExtras = readExtraCode()
-      if (/^(image|sound)(?:\.glsl)?$/i.test(name)) { selectedFile = name.toLowerCase().split('.')[0]; if (selectedFile === 'sound' && !$('code-sound').value.trim()) $('code-sound').value = 'vec2 mainSound(float time) { return vec2(0.0); }' }
-      else if (/^common(?:\.glsl)?$/i.test(name)) { if (codeExtras.common !== undefined) return; codeExtras.common = '// Shared declarations\n'; selectedFile = 'common' }
-      else if (/^buffer[ _-]?([a-d])(?:\.glsl)?$/i.test(name)) {
-        const id = name.match(/^buffer[ _-]?([a-d])/i)[1].toUpperCase()
-        if (codeExtras.buffers?.[id] !== undefined) return
-        ;(codeExtras.buffers ??= {})[id] = 'void mainImage(out vec4 color, in vec2 pixel) { color = vec4(0.0, 0.0, 0.0, 1.0); }'
-        selectedFile = `buffers:${id}`
-      } else {
-        try { normalizeCode({ image: $('code-image').value, includes: { [name]: '// Include\n' } }) } catch (error) { setCodeNote(error.message, true); return }
-        if (Object.hasOwn(codeExtras.includes ?? {}, name)) return
-        ;(codeExtras.includes ??= {})[name] = '// Include\n'; selectedFile = `includes:${name}`
-      }
+      try { selectedFile = addProjectSource(codeExtras, name) }
+      catch (error) { setCodeNote(error.message, true); return }
       renderProjectFiles(); updateCodeInfo(); rememberDrafts()
       $('project-new-form').hidden = true
+      $('project-tabs').querySelector('[aria-selected=true]').focus()
     })
     $('project-delete').addEventListener('click', () => {
-      if (['all', 'image'].includes(selectedFile) || !window.confirm('删除当前文件？保存并运行后生效。')) return
+      if (['image', 'sound'].includes(selectedFile) || !window.confirm('删除当前文件？保存并运行后生效。')) return
       codeExtras = readExtraCode()
-      if (selectedFile === 'sound') $('code-sound').value = ''
-      else if (selectedFile === 'common') delete codeExtras.common
-      else {
-        const [kind, ...name] = selectedFile.split(':')
-        delete codeExtras[kind]?.[name.join(':')]
-        if (kind === 'buffers') delete codeExtras.bufferSettings?.[name[0]]
-        if (kind === 'buffers') for (const channels of Object.values(codeExtras.channels ?? {})) for (let i = 0; i < channels.length; i++) if (channels[i] === `buffer:${name[0]}`) channels[i] = null
-      }
-      selectedFile = 'all'; renderProjectFiles(); updateCodeInfo(); rememberDrafts()
+      removeProjectSource(codeExtras, selectedFile)
+      selectedFile = 'image'; renderProjectFiles(); updateCodeInfo(); rememberDrafts()
     })
     $('code-save').addEventListener('click', () => { void saveCode() })
     $('code-revert').addEventListener('click', () => {
@@ -1868,7 +2061,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     const sizeLabel = el('label', { textContent: '字号 ' }, size)
     const shortcut = el('span', { className: 'editor-shortcut', textContent: 'Ctrl / ⌘ + S 保存并运行' })
     toolbar.append(wrapLabel, sizeLabel, shortcut)
-    $('code-hint').after(toolbar)
+    $('code-workspace').querySelector('.file-strip').after(toolbar)
     let lastFocused = null
     const exitFocus = () => {
       const focused = document.querySelector('.code-card.focused')

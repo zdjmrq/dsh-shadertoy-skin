@@ -29,6 +29,9 @@ const ROUTE = '/shader-skin'
 const DIST = resolve(fileURLToPath(new URL('./native-dist/', import.meta.url)))
 const MAX_STATE_BYTES = 2 * 1024 * 1024
 let stateWrites = Promise.resolve()
+// A Desktop protocol proxy can lose the response after the atomic write.
+// Replaying the same save must not turn a successful write into an ETag conflict.
+const stateReceipts = new Map()
 const stateTag = body => `"${createHash('sha256').update(body).digest('hex')}"`
 const DEFAULT_LIMITS = JSON.parse(readFileSync(new URL('./native-dist/defaults.json', import.meta.url), 'utf8')).limits
 
@@ -322,12 +325,20 @@ async function handleState(req, res) {
     return fail(res, 400, `invalid state: ${error instanceof Error ? error.message : String(error)}`)
   }
   const target = statePath()
+  const saveId = String(req.headers['x-shader-save-id'] ?? '').slice(0, 128)
+  const payloadTag = stateTag(JSON.stringify({ ...state, updatedAt: 0 }))
   const temp = `${target}.${randomUUID()}.tmp`
   const body = `${JSON.stringify(state, null, 2)}\n`
   // A shared .tmp file lets concurrent PUTs rename or overwrite each other's
   // data. Queue complete atomic replacements, and recover the queue on errors.
   const write = stateWrites.then(async () => {
     try {
+      const receipt = saveId && stateReceipts.get(saveId)
+      if (receipt) {
+        const current = await readFile(target, 'utf8')
+        if (receipt.payloadTag !== payloadTag || receipt.etag !== stateTag(current)) throw Object.assign(new Error('state conflict'), { code: 'E_CONFLICT' })
+        return receipt.etag
+      }
       if (req.headers['if-match']) {
         const current = await readFile(target, 'utf8').catch(error => {
           if (error.code === 'ENOENT') return JSON.stringify(EMPTY_STATE)
@@ -338,19 +349,27 @@ async function handleState(req, res) {
       await mkdir(join(dirname(target), 'shader-skin'), { recursive: true })
       await writeFile(temp, body, 'utf8')
       await rename(temp, target)
+      const etag = stateTag(body)
+      if (saveId) {
+        stateReceipts.set(saveId, { payloadTag, etag })
+        if (stateReceipts.size > 128) stateReceipts.delete(stateReceipts.keys().next().value)
+      }
+      return etag
     } finally {
       await rm(temp, { force: true }).catch(() => {})
     }
   })
   stateWrites = write.catch(() => {})
+  let etag
   try {
-    await write
+    etag = await write
   } catch (error) {
     if (error.code === 'E_CONFLICT') return fail(res, 409, 'state changed in another window; reload before saving')
-    fail(res, 500, 'state write failed')
+    const storageCode = ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EBUSY'].includes(error.code) ? ` (${error.code})` : ''
+    fail(res, 500, `state write failed${storageCode}`)
     return
   }
-  finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag: stateTag(body) }, JSON.stringify({ ok: true }))
+  finish(res, 200, { 'content-type': 'application/json; charset=utf-8', etag }, JSON.stringify({ ok: true }))
 }
 
 export async function handler(req, res) {

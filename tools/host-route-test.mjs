@@ -181,6 +181,18 @@ try {
   await putState({ version: 2, activeId: 'aurora', entries: [], overrides: { aurora: { brightness: 999, glass: -100, speed: -10, fps: 99, scale: 0.333 } } })
   const bounded = (await json('/shader-skin/state')).overrides.aurora
   check('numeric settings stay within declared limits', bounded.brightness === 180 && bounded.glass === 20 && bounded.speed === 0 && bounded.fps === undefined && bounded.scale === undefined)
+  const originalTag = (await get('/shader-skin/state')).headers.get('etag')
+  const receiptHeaders = { 'content-type': 'application/json', 'if-match': originalTag, 'x-shader-save-id': 'lost-response-retry' }
+  const receiptBody = JSON.stringify({ version: 2, entries: [], settings: { glass: 47 } })
+  const replay = body => fetch(`${origin}/shader-skin/state`, { method: 'PUT', headers: receiptHeaders, body })
+  const receiptFirst = await replay(receiptBody)
+  const receiptDisk = await readFile(join(home, 'shader-skin.json'), 'utf8')
+  const receiptSecond = await replay(receiptBody)
+  check('a retried save is acknowledged without a false ETag conflict', receiptFirst.status === 200 && receiptSecond.status === 200 && receiptFirst.headers.get('etag') === receiptSecond.headers.get('etag'))
+  check('a retried save does not write twice', receiptDisk === await readFile(join(home, 'shader-skin.json'), 'utf8'))
+  check('reusing a save ID for a different payload is rejected', (await replay(JSON.stringify({ version: 2, entries: [], settings: { glass: 48 } }))).status === 409)
+  await putState({ version: 2, entries: [], settings: { glass: 49 } })
+  check('a delayed retry cannot overwrite a subsequent save', (await replay(receiptBody)).status === 409 && (await json('/shader-skin/state')).settings.glass === 49)
   await writeFile(join(home, 'shader-skin.json'), '{broken', 'utf8')
   check('corrupt state is reported instead of served as a valid document', (await get('/shader-skin/state')).status === 500)
   check('corrupt state is left untouched for recovery', await readFile(join(home, 'shader-skin.json'), 'utf8') === '{broken')

@@ -22,7 +22,16 @@ try {
     await panel.click('#tab-code')
     await panel.waitForFunction(() => document.querySelector('#code-image').value.includes('mainImage'))
   }
-  const heights = () => panel.evaluate(() => ['image', 'sound'].map(id => document.querySelector('#code-' + id).offsetHeight))
+  const heights = async () => {
+    const selected = await panel.getAttribute('#project-tabs [aria-selected=true]', 'data-file')
+    const sizes = []
+    for (const id of ['image', 'sound']) {
+      await panel.click(`#project-tabs [data-file=${id}]`)
+      sizes.push(await panel.locator(`#code-${id}`).evaluate(node => node.offsetHeight))
+    }
+    await panel.locator('#project-tabs [role=tab]').filter({ hasText: selected === 'image' ? /^Image$/ : /^Sound$/ }).click()
+    return sizes
+  }
   const key = 'shadertoy-skin.codeHeights'
   await load()
   assert.deepEqual(await heights(), [360, 360], 'fresh Image and Sound editors have equal defaults')
@@ -30,14 +39,19 @@ try {
   await load()
   assert.deepEqual(await heights(), [480, 480], 'legacy Sound size migrates to the current Image size')
   assert.equal(await panel.evaluate(key => JSON.parse(localStorage.getItem(key)).version, key), 2)
+  await panel.click('#project-tabs [data-file=sound]')
   await panel.locator('.code-grip').nth(1).press('ArrowDown')
   await load()
   assert.deepEqual(await heights(), [480, 496], 'subsequent independent user sizes survive reload')
   await panel.locator('.code-card').first().getByRole('button', { name: '收起', exact: true }).click()
+  await panel.click('#project-tabs [data-file=sound]')
   await panel.locator('.code-grip').nth(1).press('ArrowDown')
   await load()
   assert.deepEqual(await heights(), [480, 512], 'resizing Sound must not lose a collapsed Image size')
-  for (const grip of await panel.locator('.code-grip').all()) await grip.dblclick()
+  for (const id of ['image', 'sound']) {
+    await panel.click(`#project-tabs [data-file=${id}]`)
+    await panel.locator(`[data-code=code-${id}]`).dblclick()
+  }
   assert.deepEqual(await heights(), [360, 360], 'both grips reset to the same default')
   console.log('ok    equal defaults, legacy height migration, independent persistence and collapsed editor sizes')
 
@@ -115,6 +129,7 @@ try {
       if (!dark && mode === 'clear') await screenshot('library-light-clear')
       await panel.click('#tab-code')
       for (const id of ['image', 'sound']) {
+        await panel.click(`#project-tabs [data-file=${id}]`)
         assert.equal(await alpha(`#code-${id}-frame`), glass ? 0 : 1, 'no double-stacked code fill')
         await panel.click(`[data-focus="code-${id}"]`)
         assert.equal(await alpha('.code-card.focused'), glass ? (mode === 'half' ? .6 : 0) : 1)
@@ -152,6 +167,7 @@ try {
   await panel.evaluate(() => { document.body.scrollTop = 130 })
   await screenshot('editors-equal-height-half')
   await page.setViewportSize({ width: 390, height: 844 })
+  await panel.click('#project-tabs [data-file=sound]')
   await panel.click('[data-focus="code-sound"]')
   assert.ok(await panel.evaluate(() => document.body.scrollWidth <= innerWidth))
   assert.ok(await panel.locator('.focused .editor-focus-save').isVisible())

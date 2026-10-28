@@ -91,6 +91,7 @@ try {
   await page.keyboard.press('Escape')
   assert.equal(await frame.locator('.code-card.focused').count(), 0)
   assert.equal(await area.evaluate(node => node.offsetHeight), 360)
+  await frame.click('#project-tabs [data-file=sound]')
   await frame.locator('.code-card').nth(1).getByRole('button', { name: '收起', exact: true }).click()
   assert.ok(!await frame.locator('#code-sound-frame').isVisible())
   await frame.check('#code-wrap')

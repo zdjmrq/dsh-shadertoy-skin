@@ -74,6 +74,7 @@ jobs:
           npm run test:project
           npm run test:multi
           npm run test:worker
+          npm run test:editor
         env:
           PLAYWRIGHT_CHANNEL: chrome
 

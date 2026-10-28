@@ -110,6 +110,7 @@ try {
   }
   await panel.fill('#paste-name', 'invalid sound')
   await panel.fill('#paste-image', image)
+  await panel.click('#paste-tabs [data-file=sound]')
   await panel.fill('#paste-sound', 'broken sound')
   await panel.click('#paste-add')
   assert.match(await panel.textContent('#paste-error'), /mainSound/)
