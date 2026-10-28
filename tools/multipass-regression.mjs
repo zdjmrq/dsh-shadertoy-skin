@@ -80,7 +80,17 @@ try {
   const shots = fileURLToPath(new URL('../.tmp-validation/new-presets/', import.meta.url))
   await mkdir(shots, { recursive: true })
   const manifest = JSON.parse(await readFile(new URL('../native-dist/presets/index.json', import.meta.url), 'utf8'))
-  for (const id of ['take-on-me', 'never-gonna-give-you-up', 'rain-window', 'racing', 'voxel-world', 'tree-in-wind']) {
+  const rain = manifest.find(item => item.id === 'rain-window')
+  const rainNoLightning = manifest.find(item => item.id === 'rain-window-no-lightning')
+  assert.deepEqual({ ...rainNoLightning, id: rain.id, name: rain.name, file: rain.file }, rain, 'rain variant must preserve all original metadata, channels and duration')
+  const rainSource = (await readFile(new URL(`../native-dist/presets/${rain.file}`, import.meta.url), 'utf8')).replaceAll('\r\n', '\n')
+  const rainVariantSource = (await readFile(new URL(`../native-dist/presets/${rainNoLightning.file}`, import.meta.url), 'utf8')).replaceAll('\r\n', '\n')
+  const rainLines = rainSource.split('\n')
+  const withoutLightning = rainLines.filter(line => !/^\s*(?:float lightning =|lightning \*=|col \*= 1\.\+lightning)/.test(line))
+  assert.equal(rainLines.length - withoutLightning.length, 3)
+  assert.equal(rainVariantSource.split('\n').slice(1).join('\n'), withoutLightning.join('\n'), 'only the lightning statements change; all other shader code is identical')
+  console.log('ok    no-lightning rain variant differs only in its change notice and three removed lightning statements')
+  for (const id of ['take-on-me', 'never-gonna-give-you-up', 'rain-window', 'rain-window-no-lightning', 'racing', 'voxel-world', 'tree-in-wind']) {
     const item = manifest.find(item => item.id === id)
     const p = await browser.newPage({ viewport: { width: 640, height: 360 } })
     p.on('pageerror', error => errors.push(`${id}: ${error.message}`))

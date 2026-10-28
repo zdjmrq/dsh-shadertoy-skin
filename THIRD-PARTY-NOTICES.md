@@ -6,7 +6,7 @@ different licences:
 - **The plugin itself** (`index.js`, `client.js`, `native-dist/player.html`,
   `native-dist/panel.html`, `native-dist/defaults.json`, `tools/`, and the
   self-written presets `aurora` / `flow` / `pulse`) is **MIT** — see `LICENSE`.
-- **Eight bundled ShaderToy works** are **CC BY-NC-SA 3.0** and are **not MIT**.
+- **Eight bundled ShaderToy works and the no-lightning rain variant** are **CC BY-NC-SA 3.0** and are **not MIT**.
   They are included as ready-to-use presets, with attribution, because the
   upstream licences allow redistribution (non-commercially, share-alike).
 
@@ -30,6 +30,7 @@ or the source platform is recorded instead of inventing a shader ID.
 | `take-on-me` | Take On Me | Tonny Espeset, <https://www.shadertoy.com/view/fXc3RB> | Common / Buffer A / Image / Sound preserved separately; offline font input; image 209 s, music 180 s. |
 | `never-gonna-give-you-up` | Never Gonna Give You Up | Tonny Espeset, <https://www.shadertoy.com/view/fXdXR7> | Common / Image / Sound; 177 s duration. |
 | `rain-window` | 下雨的窗户 (Heartfelt) | Martijn Steinrucken aka BigWings, <https://www.shadertoy.com/user/BigWings> | Original rain code; plugin-written procedural city texture replaces the missing external photograph. |
+| `rain-window-no-lightning` | 下雨的窗户（无闪电） | Same Heartfelt author/source and CC BY-NC-SA 3.0 licence as `rain-window` | Remove only the three lightning flicker/flash/compositing statements. Rain, fog, heart animation, colour grading, fades, city texture, mouse interaction and 102 s duration are unchanged. Original remains bundled separately. |
 | `racing` | 赛车 | dathor / diatribes; Reinder & Effie (car models); PCrush & Mr Laine (music), <https://www.shadertoy.com/user/dathor> | Common / Buffer A / Buffer B / Image / Sound, feedback and font channels; remove an overwritten texture read in Buffer B. |
 | `voxel-world` | 我的世界 (Voxel Game) | fb39ca4, <https://www.shadertoy.com/user/fb39ca4> | Buffers A–D / Image; full precision state textures; guard zero-speed friction against NaN. Keyboard remains released in the DSH background. |
 | `tree-in-wind` | 风中的树 | Original author ASCII credit (Maurrourgilk), <https://www.shadertoy.com> | Common / shadow Buffer A / feedback Buffer B / Image; offline 2D and 3D noise inputs. |
@@ -61,7 +62,7 @@ What **CC BY-NC-SA 3.0** means for these third-party works:
 - **Attribution** — credit the authors listed above and keep the licence notice.
 - **NonCommercial** — you may not use these third-party shaders for commercial purposes.
   If you want to use this plugin commercially, delete `native-dist/presets/seascape.glsl`,
-  `native-dist/presets/mario.glsl` and `native-dist/presets/mario-sound.glsl`, plus the six project directories listed below
+  `native-dist/presets/mario.glsl` and `native-dist/presets/mario-sound.glsl`, plus the project and variant directories listed above
   (or ship your own MIT shaders only).
 - **ShareAlike** — if you redistribute modified versions of these shaders, they
   must stay under CC BY-NC-SA 3.0.

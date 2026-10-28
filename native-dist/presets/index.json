@@ -117,6 +117,24 @@
     }
   },
   {
+    "id": "rain-window-no-lightning",
+    "name": "下雨的窗户（无闪电）",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Martijn Steinrucken aka BigWings",
+    "sourceUrl": "https://www.shadertoy.com/user/BigWings",
+    "hasSound": false,
+    "file": "rain-window-no-lightning/image.glsl",
+    "channels": {
+      "image": [
+        "scene"
+      ]
+    },
+    "duration": {
+      "image": 102
+    }
+  },
+  {
     "id": "racing",
     "name": "赛车",
     "license": "CC BY-NC-SA 3.0",
