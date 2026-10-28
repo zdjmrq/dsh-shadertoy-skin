@@ -4,7 +4,7 @@
 
 | 工作流 | 触发 | 做什么 |
 |---|---|---|
-| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | `bundle` 检查（manifest、文件、许可证卫生、`npm pack` 内容、全部脚本 `node --check`）+ `test:host` + 12 个浏览器回归套件（每个套件一个并行 job） |
+| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | `bundle` 检查（manifest、文件、许可证卫生、`npm pack` 内容、全部脚本 `node --check`）+ `test:host` + 类型检查（TypeScript 7 `tsc --noEmit`）+ 12 个浏览器回归套件（每个套件一个并行 job） |
 | `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 先并行跑同一批 12 个套件 → 校验版本与 tag 一致 → 包与 Host 检查 → `npm publish`（OIDC，无 token） |
 
 npm 侧用 **Trusted Publisher（OIDC）**：不需要在仓库里放 `NPM_TOKEN`，发布时由 GitHub Actions 的 OIDC 身份换取短期凭证，并自动生成 provenance 证明。

@@ -35,6 +35,22 @@ jobs:
       - name: Host half route tests
         run: npm run test:host
 
+  typecheck:
+    name: typecheck (TypeScript 7, no emit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install dev dependencies
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: TypeScript type check (JSDoc, no build step)
+        run: npm run typecheck
+
   suites:
     name: test (${{ matrix.suite }})
     runs-on: ubuntu-latest
