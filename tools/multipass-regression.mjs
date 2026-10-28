@@ -89,6 +89,8 @@ try {
   const withoutLightning = rainLines.filter(line => !/^\s*(?:float lightning =|lightning \*=|col \*= 1\.\+lightning)/.test(line))
   assert.equal(rainLines.length - withoutLightning.length, 3)
   assert.equal(rainVariantSource.split('\n').slice(1).join('\n'), withoutLightning.join('\n'), 'only the lightning statements change; all other shader code is identical')
+  assert.equal(rain.duration, undefined, 'continuous rain must not replay the old 102-second story')
+  assert.ok(!/^\s*#define HAS_HEART\s*$/m.test(rainSource), 'the story ending must stay disabled')
   console.log('ok    no-lightning rain variant differs only in its change notice and three removed lightning statements')
   for (const id of ['take-on-me', 'never-gonna-give-you-up', 'rain-window', 'rain-window-no-lightning', 'racing', 'voxel-world', 'tree-in-wind']) {
     const item = manifest.find(item => item.id === id)
@@ -116,6 +118,52 @@ try {
       await p.waitForFunction(() => window.__player.preset === 'voxel-state-check' && window.__player.frames > 10)
       const value = await p.evaluate(() => window.__player.inspect('pixel'))
       assert.ok(value[0] < 5 && value[1] > 250, `persistent position must stay finite and unclamped: ${value}`)
+    }
+    if (id.startsWith('rain-window')) {
+      const late = await browser.newPage({ viewport: { width: 640, height: 360 } })
+      late.on('pageerror', error => errors.push(error.message))
+      await late.goto(`${h.url}/shader-skin/player.html?preset=${id}&time=85&speed=0&scale=1&fps=15&muted=1&dim=1&tintMix=0`)
+      await late.waitForFunction(() => window.__player?.ready && window.__player.frames >= 3)
+      await late.addStyleTag({ content: '#diag { display: none !important; }' })
+      const detail = async () => {
+        const png = (await late.screenshot()).toString('base64')
+        return late.evaluate(async png => {
+          const image = new Image(); image.src = 'data:image/png;base64,' + png; await image.decode()
+          const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
+          const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0)
+          const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+          let edges = 0, luminance = 0
+          const gray = i => (data[i] + data[i + 1] + data[i + 2]) / 3
+          for (let y = 20; y < canvas.height - 20; y++) for (let x = 20; x < canvas.width - 20; x++) {
+            const i = (y * canvas.width + x) * 4, value = gray(i)
+            luminance += value
+            edges += Math.abs(value - gray(i - 4)) + Math.abs(value - gray(i - canvas.width * 4))
+          }
+          return edges / Math.max(1, luminance)
+        }, png)
+      }
+      const currentDetail = await detail()
+      await late.screenshot({ path: join(shots, `${id}-85s.png`) })
+      // Reproduce the old ending at the identical shader time with the same
+      // offline city texture, renderer and viewport, rather than just checking
+      // whether new code contains a commented-out define.
+      const oldSource = (id === 'rain-window' ? rainSource : rainVariantSource).replace(/^\/\/#define HAS_HEART\s*$/m, '#define HAS_HEART')
+      await late.evaluate(({ oldSource, channels }) => window.postMessage({ type: 'init', preset: { name: 'old-rain-ending', code: { image: oldSource, channels } }, params: { speed: 0, dim: 1, tintMix: 0 } }, location.origin), { oldSource, channels: item.channels })
+      await late.waitForFunction(() => window.__player?.preset === 'old-rain-ending' && window.__player.frames >= 3)
+      const oldDetail = await detail()
+      await late.screenshot({ path: join(shots, `${id}-old-85s.png`) })
+      assert.ok(currentDetail > oldDetail * 1.5, `${id}: rain detail must survive beyond the old ending (${currentDetail} vs ${oldDetail})`)
+      await late.goto(`${h.url}/shader-skin/player.html?preset=${id}&time=3600&speed=1&scale=1&fps=15&muted=1&dim=1&tintMix=0`)
+      await late.waitForFunction(() => window.__player?.ready && window.__player.frames >= 3)
+      await late.waitForFunction(() => window.__player.playback?.time >= 3600)
+      assert.equal(await late.evaluate(() => window.__player.playback.duration), 0, 'auto playback must not rewind to the old story start')
+      await late.addStyleTag({ content: '#diag { display: none !important; }' })
+      const moving = await late.screenshot()
+      await late.waitForFunction(() => window.__player.frames >= 18)
+      assert.notDeepEqual(await late.screenshot(), moving, 'rain must keep animating after a simulated hour')
+      await late.screenshot({ path: join(shots, `${id}-3600s.png`) })
+      await late.close()
+      console.log(`ok    ${id}: 85 s rain detail ${(currentDetail / oldDetail).toFixed(1)}× old ending, still animating at 1 hour without a 102 s replay`)
     }
     console.log(`ok    ${item.name}: ${info.project.buffers.length} buffers, sound=${info.sound}, ${(info.project.bufferBytes / 1048576).toFixed(1)} MB, ${Math.round(info.render.submissionMs)} ms submission`)
     await p.close()

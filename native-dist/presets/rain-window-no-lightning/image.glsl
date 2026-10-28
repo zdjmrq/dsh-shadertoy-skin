@@ -25,7 +25,9 @@
 
 #define S(a, b, t) smoothstep(a, b, t)
 //#define CHEAP_NORMALS
-#define HAS_HEART
+// Desktop adaptation: keep the rain moving; disable the story ending that
+// freezes drops, removes refraction and progressively fogs the whole window.
+//#define HAS_HEART
 #define USE_POST_PROCESSING
 
 vec3 N13(float p) {
