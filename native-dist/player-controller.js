@@ -27,20 +27,39 @@ function send(data, transfer = []) { worker?.postMessage(data, transfer) }
 function audioClock() {
   if (audio) send({ kind: 'audio-clock', time: audio.currentTime, sampleRate: audio.sampleRate, state: audio.state })
 }
+/** Tear down only the audio pipeline; the wallpaper keeps rendering. */
+function audioFailure(reason) {
+  clearInterval(audioTimer); audioTimer = null
+  for (const source of sources.values()) { source.onended = null; try { source.stop(); source.disconnect() } catch {} }
+  sources.clear()
+  const broken = audio
+  audio = null; gain = null; limiter = null
+  if (broken) { broken.onstatechange = null; void broken.close().catch(() => {}) }
+  // Tell the worker to stop scheduling chunks and surface the error state.
+  send({ kind: 'audio-clock', time: 0, sampleRate: 44100, state: 'error' })
+  output({ type: 'audio', state: 'error', reason: `声音设备异常：${reason}` })
+}
 function createAudio() {
-  if (audio) return
-  // The worker schedules at this exact rate; never resample already synthesized
-  // ShaderToy samples because the device selected a different default rate.
-  audio = new AudioContext({ sampleRate: 44100, latencyHint: 'playback' })
-  gain = audio.createGain(); limiter = audio.createDynamicsCompressor()
-  limiter.threshold.value = -6; limiter.knee.value = 0; limiter.ratio.value = 20
-  limiter.attack.value = .003; limiter.release.value = .25
-  gain.connect(limiter); limiter.connect(audio.destination)
-  gain.gain.value = 0
-  audio.onstatechange = audioClock
-  audioTimer = setInterval(audioClock, 100)
-  void audio.resume().catch(() => {})
-  audioClock()
+  if (audio) return true
+  try {
+    // The worker schedules at this exact rate; never resample already synthesized
+    // ShaderToy samples because the device selected a different default rate.
+    audio = new AudioContext({ sampleRate: 44100, latencyHint: 'playback' })
+    gain = audio.createGain(); limiter = audio.createDynamicsCompressor()
+    limiter.threshold.value = -6; limiter.knee.value = 0; limiter.ratio.value = 20
+    limiter.attack.value = .003; limiter.release.value = .25
+    gain.connect(limiter); limiter.connect(audio.destination)
+    gain.gain.value = 0
+    audio.onstatechange = audioClock
+    audioTimer = setInterval(audioClock, 100)
+    void audio.resume().catch(() => {})
+    audioClock()
+    return true
+  } catch (error) {
+    // A missing/broken output device must never take the background down.
+    audioFailure(error.message)
+    return false
+  }
 }
 function audioCommand(data) {
   try {
@@ -62,7 +81,7 @@ function audioCommand(data) {
       source.onended = () => { source.disconnect(); sources.delete(data.id); if (owner === worker) send({ kind: 'audio-ended', id: data.id }) }
       sources.set(data.id, source); source.start(Math.max(data.when, audio.currentTime), late)
     }
-  } catch (error) { stop(`声音设备异常：${error.message}`) }
+  } catch (error) { audioFailure(error.message) }
 }
 
 function dispose() {
