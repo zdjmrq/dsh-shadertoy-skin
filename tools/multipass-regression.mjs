@@ -123,6 +123,36 @@ try {
   await player.waitForFunction(() => window.__player.frames > 10)
   const channelPixel = await pixelMatches(pixel => pixel[1] > 250 && pixel[0] < 5)
   assert.ok(channelPixel[1] > 250 && channelPixel[0] < 5, `texture channels must report iChannelTime 0: ${channelPixel}`)
+
+  // A piece with both timelines finite loops on the later one, so music and
+  // picture cannot drift apart (the bundled take-on-me has image 209 s / music
+  // 180 s; wrapping the music at 180 s would restart it under the visual ending).
+  for (const testCase of [
+    { name: 'joint-image-later', duration: { image: 3, sound: 2 }, expect: 3 },
+    { name: 'joint-music-later', duration: { image: 2, sound: 3 }, expect: 3 },
+  ]) {
+    const settled = await injectPreset({
+      name: testCase.name,
+      code: {
+        image: 'void mainImage(out vec4 c,in vec2 p){c=vec4(0.,1.,0.,1.);}',
+        sound: 'vec2 mainSound(float t){return vec2(0.0);}',
+        duration: testCase.duration,
+      },
+    }, { dim: 1, tintMix: 0 })
+    assert.ok(settled, `${testCase.name} must settle in the player`)
+    /** @type {{loopPeriod?: number, imageDuration?: number|null, musicDuration?: number|null}} */
+    let playback = {}
+    for (let attempt = 0; attempt < 10; attempt++) {
+      playback = await player.evaluate(() => window.__player.playback)
+      if (playback.loopPeriod === testCase.expect && playback.musicDuration === testCase.duration.sound) break
+      await panel.waitForTimeout(150)
+    }
+    assert.equal(playback.loopPeriod, testCase.expect, `${testCase.name}: ${JSON.stringify(playback)}`)
+    assert.equal(playback.imageDuration, testCase.duration.image, `${testCase.name} image duration: ${JSON.stringify(playback)}`)
+    assert.equal(playback.musicDuration, testCase.duration.sound, `${testCase.name} music duration: ${JSON.stringify(playback)}`)
+  }
+  console.log('ok    when image and music both end, the pair loops on the later timeline')
+
   assert.deepEqual(errors, [])
   console.log('ok    grouped file import, Common/Buffer tabs and channels reach the real player; texture channels report iChannelTime 0')
   await page.close()

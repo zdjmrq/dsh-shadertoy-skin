@@ -478,6 +478,21 @@ import { createPipeline } from './pipeline.js'
   let soundLastSignal = 0
   function musicDuration() { return params.audioDurationMode === 'manual' ? params.audioSeconds : soundDuration || Infinity }
 
+  /**
+   * Joint loop period for the *pair*: when both the image and the music have a
+   * finite end, the two timelines loop on the later one so they cannot drift
+   * apart. ShaderToy pieces often finish the music before the visual story
+   * (`take-on-me`: image 209 s, music 180 s) — wrapping the music at 180 s would
+   * restart it under the ending. Returns 0 when only one side (or neither) is
+   * finite, leaving each timeline on its own behaviour.
+   */
+  function jointLoopPeriod() {
+    const image = playback.duration > 0 ? playback.duration : 0
+    const music = musicDuration()
+    if (image > 0 && Number.isFinite(music) && music > 0) return Math.max(image, music)
+    return 0
+  }
+
   function targetGain() { return params.muted ? 0 : clamp(params.volume, 0, 100, 60) / 100 }
 
   function applyGain() {
@@ -513,7 +528,7 @@ import { createPipeline } from './pipeline.js'
       state: audio.state, sampleRate: audio.sampleRate, chunks: audio.chunks,
       chunkSize: audio.chunkSize, peak: audio.peak, rms: audio.rms, gain: targetGain(),
     }
-    p.playback = { time: state.time, frame: state.frame, duration: playback.duration, repeats: playback.repeats, mode: params.loopMode, musicDuration: Number.isFinite(musicDuration()) ? musicDuration() : null, musicTime: audio.time, musicAudibleTime: audibleMusicTime() }
+    p.playback = { time: state.time, frame: state.frame, duration: playback.duration, imageDuration: playback.duration || null, repeats: playback.repeats, mode: params.loopMode, loopPeriod: params.loop ? (params.loopMode === 'manual' ? params.loopSeconds : jointLoopPeriod()) : 0, musicDuration: Number.isFinite(musicDuration()) ? musicDuration() : null, musicTime: audio.time, musicAudibleTime: audibleMusicTime() }
     if (AUDIOPROBE) window.__audioProbe = { peak: audio.peak, rms: audio.rms, chunks: audio.chunks }
     window.__snapshot?.(p, window.__audioProbe)
   }
@@ -600,11 +615,16 @@ import { createPipeline } from './pipeline.js'
   /**
    * Loop period for the *music* timeline. ShaderToy sound passes are finite pieces
    * (they fade out and then stay silent), so "循环播放" cannot just keep feeding
-   * t=60,70,… — it has to wrap the audio clock at the configured length.
+   * t=60,70,… — it has to wrap the audio clock at the configured length. When the
+   * image also has a finite end, the pair wraps on the later one (joint period)
+   * so music and picture stay in sync across repeats.
    */
   function audioLoopPeriod() {
+    if (params.audioMode !== 'loop') return 0
+    const joint = jointLoopPeriod()
+    if (joint > 0) return joint
     const period = musicDuration()
-    return params.audioMode === 'loop' && Number.isFinite(period) && period > 0 ? period : 0
+    return Number.isFinite(period) && period > 0 ? period : 0
   }
 
   /** Per-sample gain that fades the music in/out at the loop seam and at "stop". */
@@ -698,7 +718,9 @@ import { createPipeline } from './pipeline.js'
     const period = audioLoopPeriod()
     let start = audio.time
     if (period > 0 && start >= period) start = start % period
-    let duration = musicDuration()
+    // In loop mode the scheduler fills the whole joint period (music end → silence
+    // tail → wrap with the picture); `once` keeps the pure music duration.
+    let duration = period > 0 ? period : musicDuration()
     if (params.audioMode === 'once' && start >= duration) return false
     if (!renderAudioChunk(start, chunkSeconds)) return abortAudioScheduler(audio.reason)
     if (params.audioDurationMode === 'auto' && !soundDuration) {
@@ -716,7 +738,7 @@ import { createPipeline } from './pipeline.js'
         // Detection includes a silence window; it is not part of the piece.
         // Start at sample zero, not silenceTime % the newly learned duration.
         start = 0
-        duration = musicDuration()
+        duration = audioLoopPeriod() || musicDuration()
         if (!renderAudioChunk(start, chunkSeconds)) return abortAudioScheduler(audio.reason)
       }
     }
@@ -1041,7 +1063,9 @@ import { createPipeline } from './pipeline.js'
     state.time += state.dt
     // Loop mode: shaders that animate once (and then sit still) replay from 0.
     // Audio keeps its own realtime timeline, so looping is image-only.
-    const period = params.loopMode === 'manual' ? params.loopSeconds : playback.duration
+    // `auto`: replay when the piece ends. With a finite music end, the pair loops
+    // on the later of image/music (joint period) so picture and sound stay in sync.
+    const period = params.loopMode === 'manual' ? params.loopSeconds : jointLoopPeriod() || playback.duration
     if (params.loop && period > 0 && state.time >= period) {
       replayImage(period)
     }
