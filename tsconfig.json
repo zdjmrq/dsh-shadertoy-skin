@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["native-dist/project.js"]
+  "include": ["native-dist/project.js", "native-dist/pipeline.js", "native-dist/textures.js"]
 }
