@@ -1,0 +1,29 @@
+// TypeScript is used as a *type checker only*: the package ships plain .js and
+// has no build step, so `tsc --noEmit` verifies the JSDoc types of the sources
+// that are loaded as-is (by Node, the browser, or the npm package).
+//
+// Covered: the host half and the pure/shared renderer modules. The browser-only
+// adapters (client.js, panel.html, player-controller/runtime) run against DOM
+// globals and the Harness/Worker shims; typing them would require hand-written
+// ambient declarations for third-party surfaces, so they stay out of scope.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "index.js",
+    "native-dist/project.js",
+    "native-dist/pipeline.js",
+    "native-dist/textures.js"
+  ]
+}

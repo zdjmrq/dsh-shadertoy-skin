@@ -4,7 +4,7 @@
 
 | 工作流 | 触发 | 做什么 |
 |---|---|---|
-| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | `bundle` 检查（manifest、文件、许可证卫生、`npm pack` 内容、全部脚本 `node --check`）+ `test:host` + 12 个浏览器回归套件（每个套件一个并行 job） |
+| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | `bundle` 检查（manifest、文件、许可证卫生、`npm pack` 内容、全部脚本 `node --check`）+ `test:host` + 类型检查（TypeScript 7 `tsc --noEmit`）+ 12 个浏览器回归套件（每个套件一个并行 job） |
 | `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 先并行跑同一批 12 个套件 → 校验版本与 tag 一致 → 包与 Host 检查 → `npm publish`（OIDC，无 token） |
 
 npm 侧用 **Trusted Publisher（OIDC）**：不需要在仓库里放 `NPM_TOKEN`，发布时由 GitHub Actions 的 OIDC 身份换取短期凭证，并自动生成 provenance 证明。
@@ -105,6 +105,8 @@ node tools/push-via-api.mjs --message "feat: ..."
   - 解析同时兼容 npm 11（数组）与 npm 12（以包名为键的对象）的 `--json` 输出；CI 用 Node 24 自带的 npm，本机 npm 升到 12 也不会把检查跑挂
 
 `bundle` job 用 `git ls-files '*.js' '*.mjs' '*.cjs'` 做语法检查，所以新增脚本自动纳入，不需要再维护一张文件清单。
+
+`typecheck` job 跑 `npm run typecheck`：TypeScript 7 以 `--noEmit` 检查 `index.js`、`native-dist/project.js`、`pipeline.js`、`textures.js` 的 JSDoc 类型（`allowJs` + `checkJs` + `strict`），**不产出任何构建物**，发布包仍是可直接运行的 `.js`。
 
 `suites` job 用真 Chromium + SwiftShader 并行跑 12 个套件（renderer / audio / panel / ui / audit / core / project / multi / worker / editor / surfaces / transparency）：aurora/flow 必须 ES3 在跑且像素不同、legacy 改写成 ES3、`gl_FragData` 回落 ES1、坏 shader 必须出现错误面板、`debug=bg` 生效、无未捕获异常；其余套件覆盖面板/编辑器交互、多文件项目、线程隔离与崩溃恢复、透明层与安全模式。
 

@@ -1,9 +1,24 @@
 // Offline channel resources. No external image, font or network dependency.
+
+/**
+ * @typedef {object} TextureSource
+ * @property {number} width
+ * @property {number} height
+ * @property {number} [depth]
+ * @property {Uint8Array} [data]  // raw RGBA rows, already bottom-up when required
+ * @property {() => void} [close]
+ */
+
+/**
+ * @param {string} id
+ * @param {Record<string, string>} [assets]
+ * @returns {Promise<TextureSource>}
+ */
 export async function makeTextureSource(id, assets) {
   if (id.startsWith('asset:')) {
     const data = assets?.[id.slice(6)]
     if (!/^data:image\/(png|jpeg|webp);base64,/.test(data ?? '')) throw new Error('无效图片资源')
-    const bitmap = await createImageBitmap(await (await fetch(data)).blob())
+    const bitmap = await createImageBitmap(await (await fetch(data ?? '')).blob())
     if (bitmap.width > 4096 || bitmap.height > 4096) { bitmap.close(); throw new Error('图片边长不能超过 4096') }
     return bitmap
   }
@@ -19,6 +34,7 @@ export async function makeTextureSource(id, assets) {
   const canvas = document.createElement('canvas')
   canvas.width = 512; canvas.height = id === 'font' ? 512 : 256
   const ctx = canvas.getContext('2d', { willReadFrequently: id === 'font' })
+  if (!ctx) throw new Error('无法创建 2D 画布')
   if (id === 'font') {
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 512, 512)
     ctx.fillStyle = '#fff'; ctx.font = '25px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'

@@ -288,6 +288,7 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 ```sh
 npm run dev              # http://127.0.0.1:8730/player.html?preset=aurora
 npm run check            # 包结构 / 许可卫生 / npm pack 内容检查（无依赖）
+npm run typecheck        # TypeScript 7 类型检查（JSDoc + checkJs，--noEmit，不产出构建物）
 npm run test:host        # Host 半路由 + 状态 v2 + 本地预设列表
 npm run test:renderer    # 真浏览器 WebGL2 渲染 + 设置页冒烟（需 playwright）
 npm run test:audio       # mainSound → readPixels → WebAudio 真实出声验证（需 playwright）
