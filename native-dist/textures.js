@@ -10,6 +10,16 @@
  */
 
 /**
+ * CPU-side cache for the generated atlases. Every pipeline still uploads its own
+ * GPU copy, but the font SDF (two 512² chamfer passes), the noise tables and the
+ * procedural city are identical for every project — regenerating them on every
+ * preset switch was wasted work. `keyboard` is excluded (mutable per pipeline)
+ * and imported images are not cached (they are per-preset and can be large).
+ * @type {Map<string, TextureSource>}
+ */
+const generated = new Map()
+
+/**
  * @param {string} id
  * @param {Record<string, string>} [assets]
  * @returns {Promise<TextureSource>}
@@ -23,13 +33,17 @@ export async function makeTextureSource(id, assets) {
     return bitmap
   }
   if (id === 'keyboard') return { width: 256, height: 3, data: new Uint8Array(256 * 3 * 4) }
+  const cached = generated.get(id)
+  if (cached) return cached
   if (id === 'noise' || id === 'noise3d') {
     const depth = id === 'noise3d' ? 32 : 1
     const width = depth === 1 ? 256 : 32
     const data = new Uint8Array(width * width * depth * 4)
     let seed = 0x51f15e
     for (let i = 0; i < data.length; i++) { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; data[i] = seed & 255 }
-    return { width, height: width, depth, data }
+    const source = { width, height: width, depth, data }
+    generated.set(id, source)
+    return source
   }
   const canvas = document.createElement('canvas')
   canvas.width = 512; canvas.height = id === 'font' ? 512 : 256
@@ -66,7 +80,9 @@ export async function makeTextureSource(id, assets) {
     // RGBA, so Canvas premultiplication cannot erase R where SDF alpha is zero.
     const data = new Uint8Array(pixels.data.length)
     for (let y = 0; y < 512; y++) data.set(pixels.data.subarray(y * 512 * 4, (y + 1) * 512 * 4), (511 - y) * 512 * 4)
-    return { width: 512, height: 512, data }
+    const source = { width: 512, height: 512, data }
+    generated.set('font', source)
+    return source
   } else if (id === 'scene') {
     const sky = ctx.createLinearGradient(0, 0, 0, 256)
     sky.addColorStop(0, '#263c67'); sky.addColorStop(.55, '#d68d73'); sky.addColorStop(1, '#14253c')
@@ -81,5 +97,6 @@ export async function makeTextureSource(id, assets) {
       }
     }
   } else throw new Error(`未知内置纹理：${id}`)
+  generated.set(id, canvas)
   return canvas
 }
