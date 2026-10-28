@@ -53,11 +53,6 @@ try {
   assert.equal(await frame.getAttribute('#tab-library', 'aria-selected'), 'true')
   assert.equal(await frame.locator('#note[role=status]').count(), 1, 'all tabs share an operational status region')
   await shot('library-dark')
-  assert.deepEqual(await frame.evaluate(() => {
-    const style = getComputedStyle(document.querySelector('#lib-search'))
-    const field = getComputedStyle(document.querySelector('#paste-name'))
-    return [style.backgroundColor, style.borderRadius, style.fontSize, style.minHeight].map((value, index) => value === [field.backgroundColor, field.borderRadius, field.fontSize, field.minHeight][index])
-  }), [true, true, true, true], 'search fields use the same themed surface and sizing as existing text fields')
   console.log('ok    parent theme changes and keyboard tab navigation')
 
   await frame.click('#tab-params')

@@ -54,7 +54,6 @@ try {
       image: '// @duration 2\nvoid mainImage(out vec4 c,in vec2 p){c=vec4(.5);}',
       sound: '// @duration 3\nvec2 mainSound(float t){return vec2(.1);}',
     } },
-    { id: 'silent-fixture', name: 'Quiet Fixture', code: { image: 'void mainImage(out vec4 c,in vec2 p){c=vec4(.5);}' } },
   ] } })
   assert.equal(response.status(), 200)
   await page.goto(h.url)
@@ -73,25 +72,7 @@ try {
   await panel.waitForFunction(() => document.querySelector('#playback-hint')?.textContent.includes('按 3 秒联播'))
   console.log('ok    the panel receives real runtime durations, ignores obsolete artwork status and resyncs after remount')
 
-  await panel.click('#tab-library')
-  await panel.selectOption('#lib-filter', 'mine')
-  assert.equal(await panel.locator('#lib-list .item').count(), 2)
-  await panel.fill('#lib-search', 'AUDIT SYNTH')
-  assert.equal(await panel.locator('#lib-list .item').count(), 1)
-  assert.match(await panel.textContent('#lib-list'), /Audit Song/)
-  await panel.fill('#lib-search', '<no matching background>')
-  assert.equal(await panel.locator('#lib-list .item').count(), 0)
-  assert.match(await panel.textContent('#lib-list'), /没有匹配/)
-  await panel.press('#lib-search', 'Escape')
-  assert.equal(await panel.locator('#lib-list .item').count(), 2)
-  await panel.selectOption('#lib-filter', 'builtin')
-  assert.equal(await panel.locator('#lib-list .item').count(), 12)
-  await panel.selectOption('#lib-filter', 'silent')
-  await panel.fill('#lib-search', 'silent-fixture')
-  assert.equal(await panel.locator('#lib-list .item').count(), 1)
-  assert.match(await panel.textContent('#lib-list'), /Quiet Fixture/)
   assert.deepEqual(errors, [])
-  console.log('ok    library search handles names, authors and ids, combining source/sound filters and empty/Escape states')
 } finally {
   await browser?.close()
   await h.close()

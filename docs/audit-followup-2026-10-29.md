@@ -12,7 +12,7 @@
 | ID 清洗保持引用 | 截短/去空格后同步映射 activeId 与 overrides，避免重新打开时跳回默认背景；清洗后的冲突明确拒绝。内置项目 Image/Common/Sound/Buffer 并行读取 | 同上 |
 | 联播边界 | 只在画面自动循环、音乐循环、1× 且声音 pass 有效时联播；关闭循环、手动画面周期、音乐只播一次和倍速保持独立语义。周期变化会重建音频预排队 | `fix/playback-mode-boundaries` |
 | 音乐尾段静音 | 联播等候画面的尾段原先仍可发声，现在对跨音乐结束点的样本淡出并归零，整块尾段跳过 GPU 合成。尾段切换静音保留实际播放位置，不提前重启音乐 | 同上 |
-| 背景库搜索 | 按名字/作者/ID 搜索，叠加内置/我的/有声/无声筛选，提供结果计数、空状态与 Esc 清空；使用 textContent，搜索文本不当作 HTML | `feat/library-search-playback-status` |
+| 背景库搜索（随后移除） | 曾实现搜索与筛选，后按用户要求完整移除控件、过滤逻辑、样式和专项测试；恢复直接展示全部背景，保留联播提示与状态同步 | `feat/library-search-playback-status` → `revert/library-search` |
 | 播放提示与状态同步 | 显示播放器确认的画面/音乐时长及联播周期；手动、非 1×、音乐只播一次分别说明。仅在时长或模式变化时发送状态，忽略旧作品消息；设置页重新打开后恢复当前音频/播放/错误状态 | 同上 |
 | 图片解码与方向 | PNG/JPEG/WebP 在解码前读取尺寸，限制文件 2 MB、边长 4096，避免小压缩文件先解码成巨图；保留解码后复核。ImageBitmap 显式 flipY，修复实际上传纹理的上下颠倒 | `fix/imported-texture-safety` |
 | 保存响应正文超时 | 错误响应头到达后、正文不结束时原先会卡住整个保存队列。现在请求截止时间覆盖正文，只读 1 KB 前缀并取消流，保留 HTTP/磁盘错误；临时 Host 故障的重试仍有上限 | `fix/save-response-body-deadline` |
@@ -26,7 +26,7 @@
 
 - `npm test`：302 项打包/许可检查、TypeScript 类型检查、Host 路由/原子保存/并发/容量/路径边界测试、项目格式与解码前尺寸限制测试通过。
 - 14 项浏览器套件逐项通过：renderer、audio、panel、ui、audit、core、project、multi、worker、editor、surfaces、transparency、startup、playback。修改后重跑受影响套件；测试使用临时配置、真实 Chromium/WebGL2/Worker/SwiftShader。
-- 新回归涵盖：慢请求时主栏不闪按钮、启动并发、8 秒悬挂读取、503/离线/坏 JSON 不覆盖状态、HTTP 错误正文悬挂、静音尾段和队列重配置、重开面板状态恢复、搜索筛选、PNG/JPEG/WebP 实际 UV 方向。
+- 新回归涵盖：慢请求时主栏不闪按钮、启动并发、8 秒悬挂读取、503/离线/坏 JSON 不覆盖状态、HTTP 错误正文悬挂、静音尾段和队列重配置、重开面板状态恢复、PNG/JPEG/WebP 实际 UV 方向。
 - 原有雨窗持续降雨、无闪电差异、多 pass、GPU 崩溃熔断、卡死 Worker 终止、旧画面编译失败保留、输入/选区隔离和六种主题表面回归通过。
 - `actionlint 1.7.12` 和 `git diff --check` 通过；npm 仍打包 50 个文件，不包含工具、审查文档或开发依赖。
 

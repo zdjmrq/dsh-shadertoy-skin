@@ -151,11 +151,11 @@
   input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5.5px; border: 0; border-radius: 50%; background: var(--accent); }
   input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
-  input[type=text], input[type=search], textarea, input[type=file] {
+  input[type=text], textarea, input[type=file] {
     width: 100%; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line);
     background: var(--control-fill); color: var(--fg); font: inherit;
   }
-  input[type=text]:focus, input[type=search]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input[type=text]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   textarea { resize: vertical; min-height: 92px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.5; }
 
   /* code tab: editable shader source of the running skin.
@@ -323,7 +323,7 @@
   #preset-kind, #scale-out, #fps-out, #panels-out, #audio-mode-out { display: none; }
   .hint, .note { font-size: 12px; color: var(--faint); line-height: 1.7; }
   .hint { margin-top: 8px; }
-  .dd-trigger, input[type=text], input[type=search], input[type=file] { min-height: 40px; padding: 9px 12px; font-size: 13px; }
+  .dd-trigger, input[type=text], input[type=file] { min-height: 40px; padding: 9px 12px; font-size: 13px; }
   .dd-trigger { gap: 16px; }
   .dd-trigger::after { flex: 0 0 6px; }
   .dd-item { padding: 9px 10px; font-size: 13px; }
@@ -404,10 +404,6 @@
   body.mode-main .boot-status { display: block; max-width: 780px; margin: 40px auto; padding: 24px; color: var(--fg); }
   body.mode-main:not(.loading) .boot-status { display: none; }
   .boot-status p { color: var(--muted); line-height: 1.7; }
-  .library-search { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
-  .library-search input { flex: 1; min-width: 160px; }
-  .library-search select { color: var(--fg); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; color-scheme: inherit; font: inherit; }
-  .library-search option { background: var(--bg); color: var(--fg); }
 </style>
 </head>
 <body>
@@ -551,11 +547,6 @@ window.addEventListener('error', () => window.__panelBootFailure(navigator.onLin
       <span>内置 + 我的背景</span>
       <button class="btn tiny" id="lib-reload" type="button">刷新</button>
     </div>
-    <div class="library-search">
-      <input id="lib-search" type="search" aria-label="搜索背景" placeholder="搜索名字、作者或 ID" autocomplete="off">
-      <select id="lib-filter" aria-label="筛选背景"><option value="all">全部背景</option><option value="builtin">内置背景</option><option value="mine">我的背景</option><option value="sound">有声背景</option><option value="silent">无声背景</option></select>
-    </div>
-    <p class="note" id="lib-count" role="status"></p>
     <div class="list" id="lib-list"></div>
 
     <div class="import-box">
@@ -1388,15 +1379,10 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   function renderLibrary() {
     const list = $('lib-list')
     const rows = [
-      ...manifest.map(item => ({ id: item.id, name: item.name || item.id, author: item.author, kind: '内置', license: item.license, sound: Boolean(item.hasSound), entry: null })),
-      ...state.entries.map(item => ({ id: item.id, name: item.name, author: item.author, kind: '我的', license: item.license, sound: Boolean(item.code?.sound), entry: item })),
+      ...manifest.map(item => ({ id: item.id, name: item.name || item.id, kind: '内置', license: item.license, sound: Boolean(item.hasSound), entry: null })),
+      ...state.entries.map(item => ({ id: item.id, name: item.name, kind: '我的', license: item.license, sound: Boolean(item.code?.sound), entry: item })),
     ]
-    const terms = $('lib-search').value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
-    const filter = $('lib-filter').value
-    const visible = rows.filter(row => (filter === 'all' || filter === 'builtin' && !row.entry || filter === 'mine' && row.entry || filter === 'sound' && row.sound || filter === 'silent' && !row.sound)
-      && terms.every(term => `${row.name} ${row.author ?? ''} ${row.id}`.toLocaleLowerCase().includes(term)))
-    $('lib-count').textContent = `显示 ${visible.length} / ${rows.length} 个背景`
-    list.replaceChildren(...visible.map(row => {
+    list.replaceChildren(...rows.map(row => {
       const name = el('span', { className: 'name' })
       name.textContent = row.name
       name.title = row.name
@@ -1475,7 +1461,6 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       }
       return el('div', { className: `item${state.activeId === row.id ? ' active' : ''}` }, name, sound, licence, badge, tools)
     }))
-    if (!visible.length) list.append(el('p', { className: 'note', textContent: '没有匹配的背景，请调整搜索或筛选条件。' }))
   }
 
   async function loadLocalPresets(force = false) {
@@ -1527,11 +1512,6 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   }
 
   function bindLibrary() {
-    $('lib-search').addEventListener('input', renderLibrary)
-    $('lib-filter').addEventListener('change', renderLibrary)
-    $('lib-search').addEventListener('keydown', event => {
-      if (event.key === 'Escape') { $('lib-search').value = ''; renderLibrary() }
-    })
     let stagedFiles = []
     const roles = [['image', 'Image'], ['sound', 'Sound'], ['common', 'Common'], ...BUFFER_IDS.map(id => [id, `Buffer ${id}`]), ['include', 'Include 文件'], ['asset', '图片资源'], ['ignore', '不导入']]
     const showStaging = () => {

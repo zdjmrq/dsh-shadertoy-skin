@@ -109,7 +109,7 @@ node tools/push-via-api.mjs --message "feat: ..."
 
 `typecheck` job 跑 `npm run typecheck`：TypeScript 7 以 `--noEmit` 检查 `index.js`、`native-dist/project.js`、`pipeline.js`、`textures.js` 的 JSDoc 类型（`allowJs` + `checkJs` + `strict`），**不产出任何构建物**，发布包仍是可直接运行的 `.js`。
 
-`suites` 和发布前的 `verify` 调用同一个 `browser-tests.yml`，用真 Chromium + SwiftShader 并行跑 14 个套件（renderer / audio / panel / ui / audit / core / project / multi / worker / editor / surfaces / transparency / startup / playback）。覆盖着色器兼容、面板/编辑器、多文件项目、线程隔离与恢复、透明层、安全模式，以及启动超时、网络报错、联播静音尾段、独立循环模式、背景库搜索。每个套件独立超时；失败时保留合成测试页面的截图。OIDC 写权限只给实际发布 job。
+`suites` 和发布前的 `verify` 调用同一个 `browser-tests.yml`，用真 Chromium + SwiftShader 并行跑 14 个套件（renderer / audio / panel / ui / audit / core / project / multi / worker / editor / surfaces / transparency / startup / playback）。覆盖着色器兼容、面板/编辑器、多文件项目、线程隔离与恢复、透明层、安全模式，以及启动超时、网络报错、联播静音尾段、独立循环模式和重开面板状态同步。每个套件独立超时；失败时保留合成测试页面的截图。OIDC 写权限只给实际发布 job。
 
 ---
 
