@@ -154,9 +154,9 @@ export function sourceFor(code, role) {
  */
 export async function loadBuiltin(item, fetchText) {
   /** @type {ShaderCode} */
-  const code = { image: await fetchText(item.file) }
+  const code = { image: '' }
   /** @type {Promise<void>[]} */
-  const reads = []
+  const reads = [fetchText(item.file).then(text => { code.image = text })]
   if (item.commonFile) reads.push(fetchText(item.commonFile).then(text => { code.common = text }))
   if (item.soundFile) reads.push(fetchText(item.soundFile).then(text => { code.sound = text }))
   for (const [id, file] of Object.entries(item.bufferFiles ?? {})) reads.push(fetchText(file).then(text => { (code.buffers ??= {})[id] = text }))
@@ -186,25 +186,47 @@ export function parseDocument(text) {
     code = next
     const bufferPasses = passes.filter(pass => String(pass?.type).toLowerCase() === 'buffer')
     if (bufferPasses.length > 4) throw new Error('最多支持 Buffer A–D')
-    const ids = new Map(bufferPasses.map((pass, index) => [pass.outputs?.[0]?.id ?? pass.id, BUFFER_IDS[index]]))
+    // Missing ids must never become Map's shared `undefined` key: otherwise
+    // every id-less input silently samples the last buffer in the document.
+    const ids = new Map()
+    for (const [index, pass] of bufferPasses.entries()) {
+      if (pass.outputs !== undefined && !Array.isArray(pass.outputs)) throw new Error('Buffer outputs 必须是数组')
+      const id = pass.outputs?.[0]?.id ?? pass.id
+      if (id === undefined || id === null) continue
+      if (!['number', 'string'].includes(typeof id)) throw new Error('无效 Buffer id')
+      const key = String(id)
+      if (ids.has(key)) throw new Error(`Buffer id 重复：${key}`)
+      ids.set(key, BUFFER_IDS[index])
+    }
     let bufferIndex = 0
+    const seen = new Set()
     for (const pass of passes) {
+      if (!object(pass)) throw new Error('Pass 必须是对象')
       const type = String(pass?.type ?? 'image').toLowerCase()
       if (!['common', 'image', 'buffer', 'sound'].includes(type)) throw new Error(`暂不支持 ${type} pass`)
       if (typeof pass.code !== 'string') throw new Error('Pass 缺少代码')
       if (type === 'common') { next.common = (next.common ?? '') + pass.code + '\n'; continue }
+      if (type !== 'buffer' && seen.has(type)) throw new Error(`${type} Pass 重复，无法确定运行入口`)
+      seen.add(type)
       const role = type === 'buffer' ? BUFFER_IDS[bufferIndex++] : type
       if (type === 'buffer') (next.buffers ??= {})[role] = pass.code
       else if (type === 'sound') next.sound = pass.code
       else next.image = pass.code
+      if (pass.inputs !== undefined && !Array.isArray(pass.inputs)) throw new Error('Pass inputs 必须是数组')
+      const usedChannels = new Set()
       for (const input of pass.inputs ?? []) {
+        if (!object(input)) throw new Error('通道输入必须是对象')
         const channel = input.channel
         if (!Number.isInteger(channel) || /** @type {number} */ (channel) < 0 || /** @type {number} */ (channel) > 3) throw new Error('无效通道编号')
         const index = /** @type {number} */ (channel)
+        if (usedChannels.has(index)) throw new Error(`iChannel${index} 重复`)
+        usedChannels.add(index)
         /** @type {string | undefined} */
         let ref
-        if (String(input.ctype ?? input.type).toLowerCase() === 'buffer' && ids.has(input.id)) ref = `buffer:${ids.get(input.id)}`
-        else if (/font/i.test(input.src ?? '')) ref = 'font'
+        if (String(input.ctype ?? input.type).toLowerCase() === 'buffer') {
+          if (input.id === undefined || input.id === null || !ids.has(String(input.id))) throw new Error('Buffer 通道缺少有效 id 或找不到对应输出，请补全导出文件的 id 或手动指定通道')
+          ref = `buffer:${ids.get(String(input.id))}`
+        } else if (/font/i.test(input.src ?? '')) ref = 'font'
         else throw new Error('暂不支持这个外部输入，请导入图片文件并手动指定通道')
         const channels = (next.channels ??= {})
         const slots = (channels[role] ??= [null, null, null, null])

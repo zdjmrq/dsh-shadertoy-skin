@@ -347,6 +347,7 @@ function sanitizeState(raw) {
   }
   const entries = (Array.isArray(input.entries) ? input.entries : []).map(sanitizeEntry)
   if (new Set(entries.map(entry => entry.id)).size !== entries.length) throw new Error('duplicate entry ids')
+  const entryIds = new Map((/** @type {Entry[]} */ (input.entries ?? [])).map((entry, index) => [entry.id, entries[index].id]))
   if (entries.length > 200) throw new Error('too many entries (max 200)')
   const totalCodeBytes = entries.reduce((total, entry) => total + codeBytes(entry.code), 0)
   if (totalCodeBytes > 1_500_000) throw new Error('shader code too large (max 1.5 MB in total)')
@@ -357,10 +358,12 @@ function sanitizeState(raw) {
   if (rawOverrides !== undefined) {
     for (const [id, value] of Object.entries(rawOverrides)) {
       const params = sanitizeParams(value)
-      if (Object.keys(params).length > 0) overrides[id] = params
+      const key = entryIds.get(id) ?? id
+      if (Object.hasOwn(overrides, key)) throw new Error('duplicate override ids after normalization')
+      if (Object.keys(params).length > 0) overrides[key] = params
     }
   }
-  const activeId = typeof input.activeId === 'string' && input.activeId !== '' ? input.activeId : null
+  const activeId = typeof input.activeId === 'string' && input.activeId !== '' ? entryIds.get(input.activeId) ?? input.activeId : null
 
   // v1 kept one global `params` object; fold it into the active preset's override.
   if (input.version !== 2 && activeId !== null) {

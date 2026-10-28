@@ -193,6 +193,13 @@ try {
   check('reusing a save ID for a different payload is rejected', (await replay(JSON.stringify({ version: 2, entries: [], settings: { glass: 48 } }))).status === 409)
   await putState({ version: 2, entries: [], settings: { glass: 49 } })
   check('a delayed retry cannot overwrite a subsequent save', (await replay(receiptBody)).status === 409 && (await json('/shader-skin/state')).settings.glass === 49)
+  const rawId = `  ${'project-'.repeat(31)}  `
+  const normalizedId = rawId.trim().slice(0, 200)
+  const remapped = await putState({ version: 2, activeId: rawId, entries: [{ id: rawId, code: { image: seascape } }], overrides: { [rawId]: { speed: 1.5 } } })
+  const remappedState = await json('/shader-skin/state')
+  check('normalizing long or padded entry ids preserves the active artwork and its overrides', remapped.status === 200 && remappedState.activeId === normalizedId && remappedState.entries[0].id === normalizedId && remappedState.overrides[normalizedId]?.speed === 1.5 && !(rawId in remappedState.overrides))
+  const colliding = await putState({ version: 2, entries: [{ id: ' a ', code: { image: seascape } }, { id: 'a', code: { image: seascape } }] })
+  check('ids that collide after normalization are rejected without touching saved state', colliding.status === 400 && (await json('/shader-skin/state')).activeId === normalizedId)
   await writeFile(join(home, 'shader-skin.json'), '{broken', 'utf8')
   check('corrupt state is reported instead of served as a valid document', (await get('/shader-skin/state')).status === 500)
   check('corrupt state is left untouched for recovery', await readFile(join(home, 'shader-skin.json'), 'utf8') === '{broken')

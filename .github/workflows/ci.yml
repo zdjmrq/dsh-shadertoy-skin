@@ -34,6 +34,8 @@ jobs:
         run: npm run check
       - name: Host half route tests
         run: npm run test:host
+      - name: Project format tests
+        run: node tools/project-format-test.mjs
 
   typecheck:
     name: typecheck (TypeScript 7, no emit)
