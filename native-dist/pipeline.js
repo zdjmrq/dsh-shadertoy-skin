@@ -39,7 +39,7 @@ export async function createPipeline(gl, code, compile) {
   const floating = !!gl.getExtension('EXT_color_buffer_float')
   const linear = !!gl.getExtension('OES_texture_float_linear')
   const dimensions = new Float32Array(12), times = new Float32Array(4)
-  let width = 0, height = 0, keyboardDirty = false
+  let width = 0, height = 0, keyboardDirty = false, keyboardPressed = false
 
   /** Bytes retained per pixel for one target, mip levels included. */
   function bytesPerTarget() {
@@ -167,22 +167,24 @@ export async function createPipeline(gl, code, compile) {
   }
 
   function endFrame() {
+    if (!keyboardPressed) return
+    keyboardPressed = false
     const keyboard = textures.get('keyboard')
     if (!keyboard || !keyboard.data) return
-    // Row 1 is the single-frame "pressed" flag. Upload only when it was set
-    // last frame; clearing an already-empty row scheduled a 3 KB
-    // texSubImage2D on every rendered frame.
-    const pressed = keyboard.data.subarray(256 * 4, 512 * 4).some(value => value !== 0)
+    // Only a new key-down can set the one-frame pulse row. Track that event
+    // instead of scanning/clearing 1 KB and allocating a view on every idle frame.
     keyboard.data.fill(0, 256 * 4, 512 * 4)
-    if (pressed) keyboardDirty = true
+    keyboardDirty = true
   }
 
   /** @param {number} code @param {boolean} down */
   function key(code, down) {
     const keyboard = textures.get('keyboard')
-    if (!keyboard || !keyboard.data || code < 0 || code > 255) return
+    if (!keyboard || !keyboard.data || !Number.isInteger(code) || code < 0 || code > 255) return
     const offset = code * 4
+    if (keyboard.data[offset] === (down ? 255 : 0)) return
     if (down && keyboard.data[offset] === 0) {
+      keyboardPressed = true
       keyboard.data[offset + 256 * 4] = 255
       keyboard.data[offset + 512 * 4] ^= 255
     }
@@ -191,6 +193,7 @@ export async function createPipeline(gl, code, compile) {
   }
 
   function releaseKeys() {
+    keyboardPressed = false
     const keyboard = textures.get('keyboard')
     if (keyboard?.data) { keyboard.data.fill(0, 0, 512 * 4); keyboardDirty = true }
   }

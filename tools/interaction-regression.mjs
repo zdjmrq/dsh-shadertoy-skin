@@ -117,7 +117,34 @@ try {
   await player.waitForFunction(() => window.__player.ready && window.__player.preset === 'Keyboard From UI')
   await enter(); await page.keyboard.down('a'); await aDown(); await page.keyboard.up('a'); await released()
   await page.keyboard.press('Escape')
+  const keyboardWork = await page.evaluate(async () => {
+    const { createPipeline } = await import('/shader-skin/pipeline.js')
+    const gl = new OffscreenCanvas(16, 16).getContext('webgl2')
+    const pipeline = await createPipeline(gl, { image: 'unused', channels: { image: ['keyboard'] } }, () => ({}))
+    const data = pipeline.textures.get('keyboard').data
+    let clears = 0, uploads = 0
+    const fill = data.fill.bind(data), upload = gl.texSubImage2D.bind(gl)
+    data.fill = (...args) => { clears++; return fill(...args) }
+    gl.texSubImage2D = (...args) => { uploads++; return upload(...args) }
+    const frame = () => { pipeline.channels('image', {}, 1); pipeline.endFrame() }
+    for (let i = 0; i < 120; i++) frame()
+    const idle = { clears, uploads }
+    pipeline.key(65, true)
+    const pressed = [data[65 * 4], data[(65 + 256) * 4], data[(65 + 512) * 4]]
+    frame(); frame()
+    for (let i = 0; i < 120; i++) { pipeline.key(65, true); frame() }
+    const held = { clears, uploads, pulse: data[(65 + 256) * 4] }
+    pipeline.key(65, false); pipeline.key(65, true)
+    const toggled = data[(65 + 512) * 4]
+    pipeline.releaseKeys()
+    const released = [data[65 * 4], data[(65 + 256) * 4]]
+    pipeline.dispose()
+    gl.getExtension('WEBGL_lose_context')?.loseContext()
+    return { idle, pressed, held, toggled, released }
+  })
+  assert.deepEqual(keyboardWork, { idle: { clears: 0, uploads: 0 }, pressed: [255, 255, 255], held: { clears: 1, uploads: 2, pulse: 0 }, toggled: 0, released: [0, 0] })
   assert.deepEqual(errors, [])
   console.log('ok    panel reloads release held keys; interaction is not remembered and unarmed key messages are ignored')
   console.log('ok    grouped channel controls retain current connections; keyboard imports without Buffer passes reach the real renderer')
+  console.log('ok    idle/held keyboard channels do zero per-frame clearing or uploads, while press/toggle/release semantics remain intact')
 } finally { await browser?.close(); await h.close() }
