@@ -106,6 +106,8 @@ node tools/push-via-api.mjs --message "feat: ..."
 
 `bundle` job 用 `git ls-files '*.js' '*.mjs' '*.cjs'` 做语法检查，所以新增脚本自动纳入，不需要再维护一张文件清单。
 
+`typecheck` job 跑 `npm run typecheck`：TypeScript 7 以 `--noEmit` 检查 `index.js`、`native-dist/project.js`、`pipeline.js`、`textures.js` 的 JSDoc 类型（`allowJs` + `checkJs` + `strict`），**不产出任何构建物**，发布包仍是可直接运行的 `.js`。
+
 `suites` job 用真 Chromium + SwiftShader 并行跑 12 个套件（renderer / audio / panel / ui / audit / core / project / multi / worker / editor / surfaces / transparency）：aurora/flow 必须 ES3 在跑且像素不同、legacy 改写成 ES3、`gl_FragData` 回落 ES1、坏 shader 必须出现错误面板、`debug=bg` 生效、无未捕获异常；其余套件覆盖面板/编辑器交互、多文件项目、线程隔离与崩溃恢复、透明层与安全模式。
 
 ---
