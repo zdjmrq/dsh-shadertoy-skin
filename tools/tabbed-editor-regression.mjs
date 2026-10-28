@@ -147,6 +147,29 @@ try {
   await panel.waitForFunction(() => document.querySelector('#note').textContent === '已保存')
   console.log('ok    offline network, missing route, permission, disk capacity and temporary Host failure have distinct actionable errors')
 
+  // Headers arrive, but the error body never closes. Exercise the real abort
+  // signal with an accelerated deadline; the save queue must still settle.
+  await panel.evaluate(() => {
+    window.__actualFetch = window.fetch
+    window.__actualTimeout = window.setTimeout
+    window.setTimeout = (fn, ms, ...args) => window.__actualTimeout(fn, ms === 12000 ? 120 : ms, ...args)
+    window.fetch = async (url, options) => {
+      if (options?.method !== 'PUT') return window.__actualFetch(url, options)
+      return new Response(new ReadableStream({ start(controller) {
+        controller.enqueue(new TextEncoder().encode('state write failed (ENOSPC)'))
+        options.signal.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')), { once: true })
+      } }), { status: 500 })
+    }
+  })
+  await panel.fill('#glass', '46')
+  await panel.waitForFunction(() => document.querySelector('#note').textContent.includes('磁盘空间不足'))
+  assert.equal((await disk()).settings.glass, 45)
+  await panel.evaluate(() => { window.fetch = window.__actualFetch; window.setTimeout = window.__actualTimeout })
+  await panel.click('#note button')
+  await panel.waitForFunction(() => document.querySelector('#note').textContent === '已保存')
+  assert.equal((await disk()).settings.glass, 46)
+  console.log('ok    stalled error bodies retain HTTP/storage causes, respect the request deadline and release the save queue')
+
   const shots = new URL('../.tmp-validation/tabbed-editor/', import.meta.url)
   await mkdir(shots, { recursive: true })
   for (const dark of [true, false]) {

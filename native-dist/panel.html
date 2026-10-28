@@ -862,7 +862,28 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       const timeout = setTimeout(() => controller.abort(), 12000)
       try {
         const response = await fetch(`${BASE}/state`, { method: 'PUT', headers, body, signal: controller.signal })
-        if (![502, 503, 504].includes(response.status) || attempt) return response
+        if (![502, 503, 504].includes(response.status) || attempt) {
+          // Keep the deadline alive through error-body consumption: a proxy
+          // can send headers and then stall forever. Read only a small prefix.
+          let detail = ''
+          const reader = response.ok ? null : response.body?.getReader()
+          if (reader) {
+            const decoder = new TextDecoder()
+            let size = 0
+            try {
+              while (size < 1024) {
+                const { value, done } = await reader.read()
+                if (done) break
+                const part = value.subarray(0, 1024 - size)
+                size += part.length
+                detail += decoder.decode(part, { stream: true })
+              }
+            } catch { /* HTTP status and any received storage detail remain useful. */ }
+            finally { void reader.cancel().catch(() => {}) }
+          }
+          return { response, detail }
+        }
+        void response.body?.cancel().catch(() => {})
       } catch (error) {
         failure = error
         if (attempt) throw error
@@ -917,7 +938,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       if (stateEtag) headers['if-match'] = stateEtag
       return putState(body, headers)
     })
-      .then(async response => {
+      .then(({ response, detail }) => {
         if (response.status === 409) stateConflict = true
         if (response.ok) stateEtag = response.headers.get('etag')
         if (response.ok) persistedActiveId = activeId
@@ -929,7 +950,6 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
             else if (pending?.owner === journalOwner && pending.etag === requestEtag) { pending.etag = stateEtag; localStorage.setItem(JOURNAL_KEY, JSON.stringify(pending)) }
           } catch { /* recovery is best effort */ }
         }
-        const detail = response.ok ? '' : (await response.text()).slice(0, 180)
         if (revision === saveRevision) {
           lastSaveError = response.ok ? '' : saveResponseError(response.status, detail)
           setNote(response.ok ? '已保存' : lastSaveError, !response.ok)
