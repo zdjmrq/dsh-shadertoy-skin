@@ -323,9 +323,11 @@ npm run test:editor      # 多文件标签编辑器、保存失败/重试/回滚
 npm run test:surfaces    # 设置页自身透明度与 iframe 合成
 npm run test:transparency # 18 组语义表面组合
 npm run test:community   # 新内置项目、造山笔刷与地牢实际键盘玩法
+npm run test:adversarial # 恶意/畸形 Host 输入、坏 GLSL、伪造交互消息、连续切换
+npm run test:soak        # 可选长跑：反复切作品/开关背景/改窗口大小并检查页面堆增长（不进 CI）
 ```
 
-CI（`.github/workflows/ci.yml`）把上面除 `dev` / `check` / `test:host` 之外的套件**各开一个 job 并行跑**；`publish.yml` 在发布前再并行跑同一批套件，全部通过才 `npm publish`。
+CI（`.github/workflows/ci.yml`）把浏览器套件**各开一个 job 并行跑**；只有源码/测试/预设/工作流改动才会跑浏览器矩阵，纯文档提交只跑静态检查（包检查、语法、Host、项目格式、TypeScript）。`publish.yml` 在发布前再并行跑同一批套件，全部通过才 `npm publish`。
 
 Windows 上已装 Edge 可以跳过浏览器下载：`PLAYWRIGHT_CHANNEL=msedge npm run test:renderer`。
 

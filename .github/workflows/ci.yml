@@ -14,15 +14,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Fast, dependency-free checks plus the TypeScript pass. The browser matrix
+  # only runs when a source/test/preset/workflow file changed: docs-only commits
+  # used to spin up 17 runners for no coverage gain.
   bundle:
-    name: bundle checks
+    name: static checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      browser: ${{ steps.changes.outputs.browser }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
+          cache: npm
+      - name: Decide whether the browser matrix is affected
+        id: changes
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "manual run: browser matrix forced"
+            echo "browser=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="origin/${{ github.base_ref }}"
+          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            base="${{ github.event.before }}"
+          else
+            base="HEAD^"
+          fi
+          changed="$(git diff --name-only "$base" HEAD 2>/dev/null || git diff --name-only HEAD^ HEAD)"
+          echo "$changed"
+          if printf '%s\n' "$changed" | grep -Eq '^(index\.js|client\.js|package(-lock)?\.json|native-dist/|locale/|tools/|\.github/workflows/)'; then
+            echo "browser=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "browser=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Syntax check (every tracked script)
         # Derive the list from git instead of maintaining one: new tools and
         # renderer modules used to be silently left out of this step.
@@ -36,16 +67,6 @@ jobs:
         run: npm run test:host
       - name: Project format tests
         run: node tools/project-format-test.mjs
-
-  typecheck:
-    name: typecheck (TypeScript 7, no emit)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
       - name: Install dev dependencies
         run: npm ci
         env:
@@ -54,4 +75,7 @@ jobs:
         run: npm run typecheck
 
   suites:
+    name: browser regressions
+    needs: bundle
+    if: needs.bundle.outputs.browser == 'true'
     uses: ./.github/workflows/browser-tests.yml

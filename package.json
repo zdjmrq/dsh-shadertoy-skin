@@ -137,7 +137,9 @@
     "test:startup": "node tools/startup-regression.mjs",
     "test:playback": "node tools/playback-regression.mjs && node tools/audio-continuity-regression.mjs && node tools/preset-settings-regression.mjs",
     "test:interaction": "node tools/interaction-regression.mjs",
-    "test:community": "node tools/community-presets-regression.mjs"
+    "test:community": "node tools/community-presets-regression.mjs",
+    "test:adversarial": "node tools/adversarial-regression.mjs",
+    "test:soak": "node tools/soak-regression.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
