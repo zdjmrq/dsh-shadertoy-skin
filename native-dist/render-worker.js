@@ -111,7 +111,10 @@ self.addEventListener('message', async ({ data }) => {
     self.__inspectRenderer?.(data.command, (value, error) => send({ kind: 'inspect', id: data.id, value, error }))
   } else if (data.kind === 'audio-clock' && context) {
     const previous = context.state
-    context.clock = data.time; context.stamp = performance.now(); context.sampleRate = data.sampleRate; context.state = data.state
+    // Account for message delivery delay: a busy GPU may hold the worker for
+    // longer than the clock interval. Using stale device time drains the queue.
+    const delay = data.state === 'running' && Number.isFinite(data.stamp) ? Math.max(0, (performance.timeOrigin + performance.now() - data.stamp) / 1000) : 0
+    context.clock = data.time + delay; context.stamp = performance.now(); context.sampleRate = data.sampleRate; context.state = data.state
     if (previous !== context.state) context.onstatechange?.()
   } else if (data.kind === 'audio-ended') {
     const source = sources.get(data.id); sources.delete(data.id); source?.onended?.()

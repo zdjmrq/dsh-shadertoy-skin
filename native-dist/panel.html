@@ -475,6 +475,7 @@ window.addEventListener('error', () => window.__panelBootFailure(navigator.onLin
     <div class="row">
       <div class="head"><label>背景作品</label><output id="preset-kind"></output></div>
       <div id="preset-dd"></div>
+      <p class="hint">外观、性能、播放和声音设置按当前背景分别记忆；启用背景为全局开关。</p>
     </div>
 
     <div class="row">
@@ -637,7 +638,8 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   const $ = id => document.getElementById(id)
   const panel = $('panel')
 
-  const GLOBAL_KEYS = ['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted']
+  const LEGACY_GLOBAL_KEYS = ['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted']
+  const GLOBAL_KEYS = ['enabled']
   const state = { activeId: null, entries: [], overrides: {}, settings: {} }
   let defaults = { params: { enabled: true, glass: 60, brightness: 100, panels: 'half', blur: 0, scale: 1, fps: 30, speed: 1, loop: true, loopMode: 'auto', loopSeconds: 20, audioMode: 'loop', audioDurationMode: 'auto', audioSeconds: 60, volume: 60, muted: false }, limits: {} }
   let manifest = []
@@ -660,10 +662,22 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   let libraryBusy = false
   const JOURNAL_KEY = 'shadertoy-skin.pending-state'
   const journalOwner = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
-  const snapshot = () => ({ version: 2, activeId: state.activeId, entries: state.entries, overrides: state.overrides, settings: state.settings })
+  const snapshot = () => ({ version: 3, activeId: state.activeId, entries: state.entries, overrides: state.overrides, settings: state.settings })
   const validStateShape = value => value && typeof value === 'object' && !Array.isArray(value)
     && (value.entries === undefined || Array.isArray(value.entries) && value.entries.every(entry => entry && typeof entry.id === 'string' && typeof entry.code?.image === 'string'))
     && ['settings', 'overrides', 'params'].every(key => value[key] === undefined || value[key] && typeof value[key] === 'object' && !Array.isArray(value[key]))
+  function normalizePreferences(raw) {
+    const activeId = typeof raw.activeId === 'string' ? raw.activeId : null
+    const overrides = raw.overrides ?? (raw.params && activeId ? { [activeId]: raw.params } : {})
+    const preferences = raw.version === 3 ? { ...raw.settings } : { ...overrides[activeId], ...raw.settings }
+    const settings = Object.fromEntries(LEGACY_GLOBAL_KEYS.filter(key => key in preferences).map(key => [key, preferences[key]]))
+    return { activeId, entries: raw.entries ?? [], settings,
+      overrides: Object.fromEntries(Object.entries(overrides).map(([id, params]) => {
+        const own = raw.version === 3 ? { ...params } : { ...params, ...settings }
+        delete own.enabled
+        return [id, own]
+      })) }
+  }
   /**
    * The journal stores the exact JSON that would be PUT, as a string: serializing
    * the whole library twice per autosave (request body + journal) was measurable
@@ -842,7 +856,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
   }
   const channelCount = refs => (refs ?? []).filter(Boolean).length
 
-  const effective = () => ({ ...defaults.params, ...(state.overrides[state.activeId] ?? {}), ...state.settings })
+  const effective = () => ({ ...defaults.params, ...state.settings, ...(state.overrides[state.activeId] ?? {}), enabled: state.settings.enabled ?? defaults.params.enabled })
   const builtinById = id => manifest.find(item => item.id === id)
   const entryById = id => state.entries.find(item => item.id === id)
   const activePreset = () => entryById(state.activeId) ?? builtinById(state.activeId) ?? manifest[0] ?? null
@@ -1241,7 +1255,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     else if (!hasSound()) hint.textContent = image ? `画面每 ${seconds(image)} 秒重播。` : '自动检测画面结束；持续运动的背景会持续播放。'
     else if (p.audioMode === 'once') hint.textContent = '画面自动重播；音乐只播放一次。'
     else if (p.speed !== 1) hint.textContent = `当前为 ${Number(p.speed).toFixed(2)}×，画面和音乐按各自时长循环。`
-    else if (image > 0 && music > 0) hint.textContent = `画面 ${seconds(image)} 秒 / 音乐 ${seconds(music)} 秒 → 按 ${seconds(Math.max(image, music))} 秒联播。音乐先结束时保持静音，等待画面。`
+    else if (image > 0 && music > 0) hint.textContent = `画面 ${seconds(image)} 秒 / 音乐 ${seconds(music)} 秒 → 按 ${seconds(Math.max(image, music))} 秒联播。${image > music ? `音乐播完后等待 ${seconds(image - music)} 秒，再与画面一起重播。` : '画面和音乐一起重播。'}`
     else hint.textContent = '自动识别结束；画面和音乐的时长确定后，按较晚结束的一方联播。'
   }
 
@@ -1408,7 +1422,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     $('volume').addEventListener('input', event => setParam('volume', clamp(event.target.value, 0, 100, 60)))
     $('muted').addEventListener('change', event => setParam('muted', event.target.checked))
     $('reset').addEventListener('click', () => {
-      delete state.overrides[state.activeId]
+      state.overrides[state.activeId] = Object.fromEntries(Object.entries(defaults.params).filter(([key]) => !GLOBAL_KEYS.includes(key)))
       sync()
       publishParams()
       setNote('已恢复为默认参数。')
@@ -2447,6 +2461,9 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
       readHost(`${BASE}/state`, 'json', true),
       fetchJson(`${BASE}/health`),
     ])
+    if ((health?.stateVersion ?? 2) < (loadedDefaults?.minStateVersion ?? 2)) {
+      throw new Error('Host 尚未加载支持独立背景设置的版本，请完全退出并重新启动 DSH；原配置不会被覆盖')
+    }
     if (typeof loadedDefaults?.minHostVersion === 'string') {
       const parts = version => /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(String(version))?.slice(1).map(Number)
       const have = parts(health?.version), need = parts(loadedDefaults.minHostVersion)
@@ -2461,13 +2478,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
     {
       try {
         if (remote && typeof remote === 'object') {
-          state.activeId = typeof remote.activeId === 'string' ? remote.activeId : null
-          state.entries = Array.isArray(remote.entries) ? remote.entries : []
-          if (remote.overrides && typeof remote.overrides === 'object') state.overrides = remote.overrides
-          else if (remote.params && typeof remote.params === 'object' && state.activeId) state.overrides[state.activeId] = remote.params
-          const legacy = state.overrides[state.activeId] ?? {}
-          const preferences = { ...legacy, ...remote.settings }
-          state.settings = Object.fromEntries(GLOBAL_KEYS.filter(key => key in preferences).map(key => [key, preferences[key]]))
+          Object.assign(state, normalizePreferences(remote))
         }
         stateEtag = response.headers.get('etag')
         stateLoaded = true
@@ -2479,7 +2490,7 @@ import { normalizeCode, codeBytes, sourceFor, loadBuiltin, parseDocument, BUFFER
           if (validStateShape(pendingState)) {
             const same = JSON.stringify(snapshot()) === JSON.stringify(pendingState)
             if (same) localStorage.removeItem(JOURNAL_KEY)
-            else if (pending.etag === stateEtag) { Object.assign(state, pendingState); recoveredState = true }
+            else if (pending.etag === stateEtag) { Object.assign(state, normalizePreferences(pendingState)); recoveredState = true }
             // Never overwrite a newer disk revision with an old recovery record.
           }
         } catch { /* invalid recovery record */ }

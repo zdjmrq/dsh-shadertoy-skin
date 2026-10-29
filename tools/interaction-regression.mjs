@@ -27,7 +27,7 @@ try {
   await panel.click('#fps-dd .dd-trigger')
   await panel.getByRole('option', { name: '120 fps', exact: true }).click()
   await panel.waitForFunction(() => document.querySelector('#note').textContent === '已保存')
-  assert.equal((await (await page.request.get(`${h.url}/shader-skin/state`)).json()).settings.fps, 120)
+  assert.equal((await (await page.request.get(`${h.url}/shader-skin/state`)).json()).overrides['keyboard-test'].fps, 120)
   await page.evaluate(() => { const frame = document.querySelector('iframe[title="ShaderToy 背景设置"]'); frame.src = frame.src })
   await page.waitForTimeout(150)
   panel = page.frames().find(frame => frame.url().includes('panel.html'))

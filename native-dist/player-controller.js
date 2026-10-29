@@ -7,6 +7,9 @@ let canvas = document.getElementById('c'), worker, audio, gain, limiter, audioTi
 let generation = 0, heartbeat = performance.now(), ready = false, compiling = false, failed = false
 let lastInit, fingerprint, pendingInit, initTimer, recoveryAt = -Infinity, jobStarted = performance.now()
 let inspectId = 0
+// Producer timestamps use a virtual audio clock. Rebase it on an underrun so
+// delayed chunks remain consecutive instead of dropping whole musical phrases.
+let audioOffset = 0, underruns = 0, deviceQueuedUntil = 0
 // Init and params are two independent message streams; a retried init must not be
 // invalidated by a newer params update (and vice versa). Anything older than the
 // newest applied revision of its own stream is dropped as stale.
@@ -30,7 +33,7 @@ function output(message) {
 
 function send(data, transfer = []) { worker?.postMessage(data, transfer) }
 function audioClock() {
-  if (audio) send({ kind: 'audio-clock', time: audio.currentTime, sampleRate: audio.sampleRate, state: audio.state })
+  if (audio) send({ kind: 'audio-clock', time: audio.currentTime - audioOffset, stamp: performance.timeOrigin + performance.now(), sampleRate: audio.sampleRate, state: audio.state })
 }
 /** Tear down only the audio pipeline; the wallpaper keeps rendering. */
 function audioFailure(reason) {
@@ -50,6 +53,7 @@ function createAudio() {
     // The worker schedules at this exact rate; never resample already synthesized
     // ShaderToy samples because the device selected a different default rate.
     audio = new AudioContext({ sampleRate: 44100, latencyHint: 'playback' })
+    audioOffset = 0; underruns = 0; deviceQueuedUntil = 0
     gain = audio.createGain(); limiter = audio.createDynamicsCompressor()
     limiter.threshold.value = -6; limiter.knee.value = 0; limiter.ratio.value = 20
     limiter.attack.value = .003; limiter.release.value = .25
@@ -72,11 +76,21 @@ function audioCommand(data) {
     if (!audio) return
     if (data.action === 'resume') { void audio.resume().then(audioClock, audioClock); return }
     if (data.action === 'gain') { gain.gain.setTargetAtTime(Math.max(0, Math.min(1, data.value)), audio.currentTime, .02); return }
-    if (data.action === 'stop') { const source = sources.get(data.id); source?.stop(); source?.disconnect(); sources.delete(data.id); return }
+    if (data.action === 'stop') {
+      const source = sources.get(data.id); source?.stop(); source?.disconnect(); sources.delete(data.id)
+      if (!sources.size) deviceQueuedUntil = audio.currentTime
+      return
+    }
     if (data.action === 'start') {
       const duration = data.data[0].length / data.sampleRate
-      const late = Math.max(0, audio.currentTime - data.when)
-      if (late >= duration) { send({ kind: 'audio-ended', id: data.id }); return }
+      let when = data.when + audioOffset
+      if (when < audio.currentTime) {
+        const resumed = Math.max(audio.currentTime + .03, deviceQueuedUntil)
+        audioOffset += resumed - when
+        when = resumed
+        underruns++
+        audioClock()
+      }
       // Bound device allocations even if a faulty producer floods messages.
       if (sources.size >= 32) throw new Error('声音队列超过安全上限')
       const buffer = audio.createBuffer(2, data.data[0].length, data.sampleRate)
@@ -84,7 +98,8 @@ function audioCommand(data) {
       const source = audio.createBufferSource(); source.buffer = buffer; source.connect(gain)
       const owner = worker
       source.onended = () => { source.disconnect(); sources.delete(data.id); if (owner === worker) send({ kind: 'audio-ended', id: data.id }) }
-      sources.set(data.id, source); source.start(Math.max(data.when, audio.currentTime), late)
+      sources.set(data.id, source); source.start(when)
+      deviceQueuedUntil = when + duration
     }
   } catch (error) { audioFailure(error.message) }
 }
@@ -128,7 +143,7 @@ function start(init) {
         }
         output(data.message)
       } else if (data.kind === 'snapshot') {
-        window.__player = { ...data.player, workerGeneration: generation, isolated: true, inspect }
+        window.__player = { ...data.player, audio: { ...data.player.audio, underruns, queuedSeconds: audio ? Math.max(0, deviceQueuedUntil - audio.currentTime) : 0 }, workerGeneration: generation, isolated: true, inspect }
         if (standalone) { window.__audioProbe = data.probe; window.__audioInternals = { time: data.player.playback?.musicTime } }
         const preset = lastInit?.preset
         // Send only changes to durations/modes, never producer-clock ticks. A

@@ -28,7 +28,7 @@ import { normalizeCode, codeBytes, parseDocument as parseShaderDocument } from '
 /** @typedef {'paste' | 'file' | 'local' | 'edit'} EntrySource */
 /** @typedef {{ id: string, name: string, source: EntrySource, code: ShaderCode, license?: string, origin?: string, author?: string, sourceUrl?: string, licenseUrl?: string }} Entry */
 /** @typedef {Record<string, number | boolean | string>} Params */
-/** @typedef {{ version: 2, activeId: string | null, settings: Params, overrides: Record<string, Params>, entries: Entry[], updatedAt?: number }} SkinState */
+/** @typedef {{ version: 3, activeId: string | null, settings: Params, overrides: Record<string, Params>, entries: Entry[], updatedAt?: number }} SkinState */
 /** @typedef {{ file: string, name: string, kind: 'shadertoy' | 'glsl', hasSound: boolean, size: number }} LocalPreset */
 /** @typedef {{ min?: number, max?: number, values?: readonly unknown[] }} ParamLimit */
 /** @typedef {Record<string, ParamLimit>} Limits */
@@ -76,7 +76,7 @@ const MIME = Object.freeze({
 })
 
 const EMPTY_STATE = Object.freeze({
-  version: 2,
+  version: 3,
   activeId: null,
   entries: [],
   overrides: {},
@@ -257,10 +257,10 @@ async function readJsonBody(req, limit = MAX_STATE_BYTES) {
   return JSON.parse(text)
 }
 
-const GLOBAL_KEYS = new Set(['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted'])
+const LEGACY_GLOBAL_KEYS = new Set(['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted'])
 // Retain earlier saved choices without continuing to offer arbitrary tiers.
 const LEGACY_SCALES = new Set([0.35, 0.4, 0.6, 1.75])
-const PARAM_KEYS = new Set([...GLOBAL_KEYS, 'brightness', 'speed', 'loop', 'loopMode', 'loopSeconds', 'audioMode', 'audioDurationMode', 'audioSeconds'])
+const PARAM_KEYS = new Set([...LEGACY_GLOBAL_KEYS, 'brightness', 'speed', 'loop', 'loopMode', 'loopSeconds', 'audioMode', 'audioDurationMode', 'audioSeconds'])
 const PANEL_LEVELS = new Set(['opaque', 'half', 'clear'])
 const AUDIO_MODES = new Set(['loop', 'once'])
 
@@ -369,15 +369,20 @@ function sanitizeState(raw) {
   const activeId = typeof input.activeId === 'string' && input.activeId !== '' ? entryIds.get(input.activeId) ?? input.activeId : null
 
   // v1 kept one global `params` object; fold it into the active preset's override.
-  if (input.version !== 2 && activeId !== null) {
+  if (input.version !== 2 && input.version !== 3 && activeId !== null) {
     const legacy = sanitizeParams(input.params)
     if (Object.keys(legacy).length > 0) overrides[activeId] = { ...legacy, ...(overrides[activeId] ?? {}) }
   }
 
-  // Migrate appearance from the active artwork once. Explicit saved choices,
-  // including opaque, survive upgrades; changing artwork no longer changes them.
-  const settings = Object.fromEntries(Object.entries(sanitizeParams({ ...overrides[/** @type {string} */ (activeId)], ...asObject(input.settings) })).filter(([key]) => GLOBAL_KEYS.has(key)))
-  return { version: 2, activeId, settings, overrides, entries, updatedAt: Date.now() }
+  // v2 appearance was global and won over every artwork override. Preserve that
+  // exact look on migration; thereafter these values are only a legacy baseline,
+  // and each artwork's own choices win. Only enabled remains a global switch.
+  const settings = Object.fromEntries(Object.entries(sanitizeParams(input.version === 3 ? input.settings : { ...overrides[/** @type {string} */ (activeId)], ...asObject(input.settings) })).filter(([key]) => LEGACY_GLOBAL_KEYS.has(key)))
+  for (const id of Object.keys(overrides)) {
+    if (input.version !== 3) overrides[id] = { ...overrides[id], ...settings }
+    delete overrides[id].enabled
+  }
+  return { version: 3, activeId, settings, overrides, entries, updatedAt: Date.now() }
 }
 
 /**
@@ -492,7 +497,7 @@ export async function handler(req, res) {
   if (suffix === '/state') return handleState(req, res)
   if (req.method !== 'GET' && req.method !== 'HEAD') return finish(res, 405, { allow: 'GET, HEAD' })
   if (suffix === '/health') {
-    finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify({ ok: true, name, version: VERSION }))
+    finish(res, 200, { 'content-type': 'application/json; charset=utf-8' }, JSON.stringify({ ok: true, name, version: VERSION, stateVersion: 3 }))
     return
   }
   // Escape hatch for iterating on UI that lives inside #root: create

@@ -125,12 +125,12 @@ try {
   await panel.fill('#glass', '44')
   await panel.waitForFunction(() => document.querySelector('#note').textContent.includes('连接中断'))
   assert.equal(attempts, 2, 'bounded retry rather than an automatic infinite loop')
-  assert.equal((await disk()).settings.glass, 43)
+  assert.equal((await disk()).overrides[(await disk()).activeId].glass, 43)
   assert.ok(await panel.evaluate(() => localStorage.getItem('shadertoy-skin.pending-state')))
   await page.unroute('**/shader-skin/state')
   await panel.click('#note button')
   await panel.waitForFunction(() => document.querySelector('#note').textContent === '已保存')
-  assert.equal((await disk()).settings.glass, 44)
+  assert.equal((await disk()).overrides[(await disk()).activeId].glass, 44)
   console.log('ok    persistent failure stops after two attempts, preserves recovery and supports manual retry')
 
   for (const [status, body, expected] of [[404, 'missing route', '保存路由不存在'], [403, 'forbidden', '没有保存权限'], [500, 'state write failed (ENOSPC)', '磁盘空间不足'], [503, 'unavailable', 'Host 服务暂不可用']]) {
@@ -164,11 +164,11 @@ try {
   })
   await panel.fill('#glass', '46')
   await panel.waitForFunction(() => document.querySelector('#note').textContent.includes('磁盘空间不足'))
-  assert.equal((await disk()).settings.glass, 45)
+  assert.equal((await disk()).overrides[(await disk()).activeId].glass, 45)
   await panel.evaluate(() => { window.fetch = window.__actualFetch; window.setTimeout = window.__actualTimeout })
   await panel.click('#note button')
   await panel.waitForFunction(() => document.querySelector('#note').textContent === '已保存')
-  assert.equal((await disk()).settings.glass, 46)
+  assert.equal((await disk()).overrides[(await disk()).activeId].glass, 46)
   console.log('ok    stalled error bodies retain HTTP/storage causes, respect the request deadline and release the save queue')
 
   const shots = new URL('../.tmp-validation/tabbed-editor/', import.meta.url)

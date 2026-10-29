@@ -1,5 +1,6 @@
 {
   "minHostVersion": "0.4.4",
+  "minStateVersion": 3,
   "params": {
     "enabled": true,
     "glass": 60,

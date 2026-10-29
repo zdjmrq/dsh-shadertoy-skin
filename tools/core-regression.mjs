@@ -29,10 +29,10 @@ try {
   await panel.click('#preset-dd .dd-trigger')
   await panel.locator('#preset-dd .dd-item').nth(1).click()
   await panel.waitForFunction(() => document.querySelector('#note').textContent === '已保存')
-  assert.equal(await panel.inputValue('#glass'), '47')
-  assert.equal((await stored()).settings.glass, 47)
+  assert.equal(await panel.inputValue('#glass'), '60')
+  assert.equal((await stored()).overrides.aurora.glass, 47)
   assert.equal(await panel.evaluate(() => document.documentElement.dataset.panels), 'half')
-  console.log('ok    appearance stays global when changing artwork, default surfaces are translucent')
+  console.log('ok    appearance is saved per artwork when changing artwork, default surfaces are translucent')
 
   // An obsolete renderer init acknowledgement cannot change the panel owner.
   await page.evaluate(() => document.querySelector('iframe[title="ShaderToy 背景设置"]').contentWindow.postMessage({ type: 'preset', id: 'aurora' }, location.origin))
@@ -43,7 +43,7 @@ try {
   await page.evaluate(() => document.body.style.setProperty('--dsw-alias-bg-base', '#fff'))
   await page.waitForFunction(() => document.body.style.getPropertyValue('--dsw-alias-bg-base') === 'transparent')
   await page.evaluate(() => document.body.style.setProperty('--dsw-alias-bg-layer-1', '#fff'))
-  await page.waitForFunction(() => document.body.style.getPropertyValue('--dsw-alias-bg-layer-1').includes('0.47'))
+  await page.waitForFunction(() => document.body.style.getPropertyValue('--dsw-alias-bg-layer-1').includes('0.6'))
   console.log('ok    late shell/theme style resets are repaired by value')
 
   // A page can disappear before debounce dispatch. Abort the write, retain the

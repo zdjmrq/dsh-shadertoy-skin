@@ -12,7 +12,7 @@
  *      darkening ("glass") is painted ONCE by the player itself as a tint mix.
  *      See the glass section below for why alpha-only tokens are not enough.
  *
- * State (`$DSH_HOME/shader-skin.json`, v2) is owned by the settings surface;
+ * State (`$DSH_HOME/shader-skin.json`, v3) is owned by the settings surface;
  * this half reads it to boot and follows its messages.
  */
 window.__ModuleLoader__.load({
@@ -21,7 +21,8 @@ window.__ModuleLoader__.load({
     const BASE = '/shader-skin'
     const BG_ID = 'shadertoy-skin-bg'
     const FALLBACK_DEFAULTS = { enabled: true, glass: 60, brightness: 100, panels: 'half', blur: 0, scale: 1, fps: 30, speed: 1, loop: true, loopMode: 'auto', audioDurationMode: 'auto', volume: 60, muted: false }
-    const GLOBAL_KEYS = ['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted']
+    const LEGACY_GLOBAL_KEYS = ['enabled', 'glass', 'panels', 'blur', 'scale', 'fps', 'volume', 'muted']
+    const GLOBAL_KEYS = ['enabled']
     const FALLBACK_PRESET = 'aurora'
     // The settings surface is independent of whether the background is enabled.
     const ENABLE_SIDEBAR_ENTRY = true
@@ -339,7 +340,7 @@ window.__ModuleLoader__.load({
 
           // ------------------------------------------------------------ parameters
           function effective() {
-            return { ...store.defaults, ...(store.overrides[store.activeId] ?? {}), ...store.settings }
+            return { ...store.defaults, ...store.settings, ...(store.overrides[store.activeId] ?? {}), enabled: store.settings.enabled ?? store.defaults.enabled }
           }
 
           /**
@@ -359,7 +360,7 @@ window.__ModuleLoader__.load({
           }
 
           function normalizeState(raw) {
-            const state = { version: 2, activeId: null, entries: [], overrides: {}, settings: {} }
+            const state = { version: 3, activeId: null, entries: [], overrides: {}, settings: {} }
             if (!raw || typeof raw !== 'object') return state
             state.activeId = typeof raw.activeId === 'string' ? raw.activeId : null
             if (Array.isArray(raw.entries)) {
@@ -371,8 +372,13 @@ window.__ModuleLoader__.load({
               state.overrides[state.activeId] = raw.params // v1 migration
             }
             const legacy = state.overrides[state.activeId] ?? {}
-            const preferences = { ...legacy, ...raw.settings }
-            state.settings = Object.fromEntries(GLOBAL_KEYS.filter(key => key in preferences).map(key => [key, preferences[key]]))
+            const preferences = raw.version === 3 ? { ...raw.settings } : { ...legacy, ...raw.settings }
+            state.settings = Object.fromEntries(LEGACY_GLOBAL_KEYS.filter(key => key in preferences).map(key => [key, preferences[key]]))
+            state.overrides = Object.fromEntries(Object.entries(state.overrides).map(([id, params]) => {
+              const own = raw.version === 3 ? { ...params } : { ...params, ...state.settings }
+              delete own.enabled
+              return [id, own]
+            }))
             return state
           }
 

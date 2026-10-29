@@ -74,6 +74,7 @@ try {
   check('health returns 200', health.status === 200)
   const healthBody = await health.json()
   check('health reports name and version', healthBody.ok === true && healthBody.name === 'shadertoy-skin' && /\d+\.\d+\.\d+/.test(healthBody.version))
+  check('health declares the independent-settings protocol', healthBody.stateVersion === 3)
 
   // --- safe-mode escape hatch (skips the sidebar entry when the flag file exists)
   check('safe mode defaults to off', (await json('/shader-skin/safe-mode')).on === false)
@@ -117,9 +118,9 @@ try {
   const localFile = await get('/shader-skin/local/my-shader.glsl')
   check('local preset file is served', localFile.status === 200 && (await localFile.text()).includes('mainImage'))
 
-  // --- state v2: default, round-trip, migration
+  // --- state v3: default, round-trip, v1/v2 migration
   const empty = await json('/shader-skin/state')
-  check('state defaults to v2 empty document', empty.version === 2 && empty.activeId === null && Array.isArray(empty.entries) && typeof empty.overrides === 'object')
+  check('state defaults to v3 empty document', empty.version === 3 && empty.activeId === null && Array.isArray(empty.entries) && typeof empty.overrides === 'object')
 
   const entryCode = 'void mainImage(out vec4 c, in vec2 p) { c = vec4(0.1, 0.2, 0.3, 1.0); }'
   const next = {
@@ -148,10 +149,15 @@ try {
   await putState({ ...next, settings: { enabled: false }, overrides: { 'user-1': { glass: 44, fps: 15 } } })
   const partial = await json('/shader-skin/state')
   check('partial global settings retain unmigrated appearance choices', partial.settings.enabled === false && partial.settings.glass === 44 && partial.settings.fps === 15)
+  await putState({ version: 3, activeId: 'flow', entries: [], settings: { enabled: false, glass: 44 },
+    overrides: { aurora: { glass: 71, speed: .5, enabled: true }, flow: { glass: 38, speed: 1.5 } } })
+  const independent = await json('/shader-skin/state')
+  check('v3 artwork choices win independently without being remigrated from the legacy baseline', independent.overrides.aurora.glass === 71 && independent.overrides.flow.glass === 38 && independent.settings.glass === 44)
+  check('v3 enabled remains a global switch and is stripped from artwork overrides', independent.settings.enabled === false && !('enabled' in independent.overrides.aurora))
   await putState(next)
   check('state drops unknown override keys', stored.overrides?.['user-1']?.nonsense === undefined)
   const onDisk = JSON.parse(await readFile(join(home, 'shader-skin.json'), 'utf8'))
-  check('state is written to $DSH_HOME/shader-skin.json', onDisk.version === 2 && onDisk.activeId === 'user-1')
+  check('state is written to $DSH_HOME/shader-skin.json', onDisk.version === 3 && onDisk.activeId === 'user-1')
   check('state file is not left behind as .tmp', !(await readFile(join(home, 'shader-skin.json.tmp'), 'utf8').then(() => true).catch(() => false)))
   const bogusLevel = await putState({ version: 2, entries: [], overrides: { x: { panels: 'nope', brightness: 'bright', audioMode: 'forever', loop: 'yes' } } })
   check('unknown card transparency / non-numeric brightness are dropped', bogusLevel.status === 200 && (await json('/shader-skin/state')).overrides?.x === undefined)
@@ -159,14 +165,14 @@ try {
   const legacy = await putState({ version: 1, activeId: 'aurora', params: { glass: 50 }, entries: [] })
   check('legacy v1 state is accepted', legacy.status === 200)
   const migrated = await json('/shader-skin/state')
-  check('v1 params migrate into an override', migrated.version === 2 && migrated.overrides?.aurora?.glass === 50)
+  check('v1 params migrate into an override', migrated.version === 3 && migrated.overrides?.aurora?.glass === 50)
 
   const parallel = await Promise.all(Array.from({ length: 24 }, (_, i) => putState({
     version: 2, activeId: `concurrent-${i}`, entries: [], overrides: {},
   })))
   check('concurrent state replacements all succeed', parallel.every(response => response.status === 200), parallel.map(response => response.status).join(','))
   const afterParallel = JSON.parse(await readFile(join(home, 'shader-skin.json'), 'utf8'))
-  check('concurrent saves leave a complete valid document', /^concurrent-\d+$/.test(afterParallel.activeId) && afterParallel.version === 2)
+  check('concurrent saves leave a complete valid document', /^concurrent-\d+$/.test(afterParallel.activeId) && afterParallel.version === 3)
 
   const currentResponse = await get('/shader-skin/state')
   const etag = currentResponse.headers.get('etag')

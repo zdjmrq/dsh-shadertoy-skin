@@ -11,7 +11,7 @@ import { createPipeline } from './pipeline.js'
  *        {type:'stats', fps, ms, w, h} | {type:'diag', text}
  *        {type:'audio', state:'none'|'running'|'suspended'|'error', sampleRate?, chunks?, reason?}
  * Audio: mainSound(t) -> 4096x1 RGBA8 (16-bit L/R) -> readPixels -> WebAudio
- * lookahead scheduling (400 ms ahead, 500 ms prebuffer, 120 ms timer).
+ * lookahead scheduling (1.2 s ahead, 500 ms prebuffer, 120 ms timer).
  */
 (() => {
   'use strict'
@@ -437,11 +437,11 @@ import { createPipeline } from './pipeline.js'
   // mainSound(t) is evaluated one sample per pixel into a 4096x1 RGBA8 target:
   // R/G = high/low byte of the left sample, B/A = the right one. readPixels then
   // moves 16 KB per chunk (~92.9 ms at 44.1 kHz ≈ 10.8 syncs/s), which the
-  // 400 ms lookahead + 500 ms prebuffer absorb. Scheduling runs on its own timer
+  // 1.2 s lookahead + 500 ms prebuffer absorb. Scheduling runs on its own timer
   // so a hitching rAF can never starve the audio thread.
 
   const AUDIO_CHUNK = 4096
-  const AUDIO_LOOKAHEAD = 0.4
+  const AUDIO_LOOKAHEAD = 1.2
   const AUDIO_PREBUFFER = 0.5
   const AUDIO_TICK_MS = 120
   const AUDIOPROBE = q.get('audioprobe') === '1'
@@ -482,11 +482,9 @@ import { createPipeline } from './pipeline.js'
 
   /**
    * Joint loop period for the *pair*: when both the image and the music have a
-   * finite end, the two timelines loop on the later one so they cannot drift
-   * apart. ShaderToy pieces often finish the music before the visual story
-   * (`take-on-me`: image 209 s, music 180 s) — wrapping the music at 180 s would
-   * restart it under the ending. Returns 0 when only one side (or neither) is
-   * finite, leaving each timeline on its own behaviour.
+   * finite end, the pair loops on the later one to preserve the visual story.
+   * Take On Me intentionally holds its silent ending for 29 s (image 209 s,
+   * music 180 s); independent repeats would drift on every cycle.
    */
   function jointLoopPeriod() {
     // state.time is the *image* clock scaled by `speed`, while the music runs on
@@ -793,6 +791,13 @@ import { createPipeline } from './pipeline.js'
     // past the new seam — restart the piece instead of playing silence forever
     const period = audioLoopPeriod()
     if (period > 0 && audio.time >= period) audio.time = audio.time % period
+    // The first start can happen long after the project loaded: autoplay policy
+    // keeps the device suspended until a real gesture, while the picture has
+    // already been running. Automatic 1× playback follows the audible clock, so
+    // starting the music at 0 would snap the picture back to the beginning;
+    // join at the picture's position instead (the music was never heard anyway).
+    const joint = jointLoopPeriod()
+    if (joint > 0 && audio.time === 0 && state.time > 1) audio.time = state.time % joint
     audio.running = true
     const startAt = audio.ctx.currentTime + AUDIO_PREBUFFER
     audio.scheduledUntil = startAt
@@ -1070,14 +1075,24 @@ import { createPipeline } from './pipeline.js'
     const dt = state.last ? Math.min((now - state.last) / 1000, 1) : 0
     lastFrameStamp = now
     state.last = now
+    const previousTime = state.time
     state.dt = dt * Math.max(params.speed, 0)
     state.time += state.dt
-    // Loop mode: shaders that animate once (and then sit still) replay from 0.
-    // Audio keeps its own realtime timeline, so looping is image-only.
+    // Manual/non-1x playback keeps separate clocks. Automatic 1x playback with
+    // known ends follows one audible clock for the whole pair.
     // `auto`: replay when the piece ends. With a finite music end, the pair loops
     // on the later of image/music (joint period) so picture and sound stay in sync.
-    const period = params.loopMode === 'manual' ? params.loopSeconds : jointLoopPeriod() || playback.duration
-    if (params.loop && period > 0 && state.time >= period) {
+    const joint = jointLoopPeriod()
+    const period = params.loopMode === 'manual' ? params.loopSeconds : joint || playback.duration
+    if (joint > 0 && audio.running && audio.ctx?.state === 'running') {
+      // Equal period lengths alone do not synchronize two independently ticking
+      // clocks. Follow the *audible* cursor, not the lookahead producer: a slow
+      // frame or a recovered audio underrun must not accumulate lasting drift.
+      const next = audibleMusicTime() % joint
+      if (previousTime - next > joint / 2) { replayImage(); state.dt = next }
+      else state.dt = Math.max(0, Math.min(1, next - previousTime))
+      state.time = next
+    } else if (params.loop && period > 0 && state.time >= period) {
       replayImage(period)
     }
     draw()
