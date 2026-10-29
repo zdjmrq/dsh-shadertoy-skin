@@ -23,7 +23,12 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('Performance.enable').catch(() => {})
+  await cdp.send('HeapProfiler.enable').catch(() => {})
   const heap = async () => {
+    // The test harness records every same-origin message in window.__messages;
+    // drop it (and force GC) so the metric reflects the plugin, not the harness.
+    await page.evaluate(() => { if (Array.isArray(window.__messages)) window.__messages.length = 0 }).catch(() => {})
+    await cdp.send('HeapProfiler.collectGarbage').catch(() => {})
     try {
       const { metrics } = await cdp.send('Performance.getMetrics')
       const value = metrics.find(metric => metric.name === 'JSHeapUsedSize')?.value

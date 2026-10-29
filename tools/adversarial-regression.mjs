@@ -71,7 +71,17 @@ try {
   assert.equal((await put({ ...empty, settings: { glass: 50 } }, { 'if-match': '"stale"' })).status(), 409)
   assert.equal((await put({ ...empty, settings: { glass: 50 } }, { 'if-match': etag })).status(), 200)
   assert.equal((await api.request.get(`${h.url}/shader-skin/..%2findex.js`)).status(), 403, 'encoded traversal must be refused')
-  console.log('ok    ids are bounded, stale ETags conflict, fresh writes win and traversal is refused')
+
+  // Twelve writers sharing one ETag: the queued atomic writes may let exactly
+  // one win, everyone else must conflict instead of silently overwriting.
+  assert.equal((await put({ ...empty })).status(), 200)
+  const baseEtag = (await api.request.get(`${h.url}/shader-skin/state`)).headers()['etag']
+  const writers = await Promise.all(Array.from({ length: 12 }, () => put({ ...empty, settings: { glass: 55 } }, { 'if-match': baseEtag })))
+  const writerStatuses = writers.map(response => response.status())
+  assert.equal(writerStatuses.filter(status => status === 200).length, 1, `exactly one writer may win: ${writerStatuses}`)
+  assert.equal(writerStatuses.filter(status => status === 409).length, 11, `the rest must conflict: ${writerStatuses}`)
+  assert.equal((await (await api.request.get(`${h.url}/shader-skin/state`)).json()).settings.glass, 55, 'the winner must be persisted')
+  console.log('ok    ids are bounded, stale ETags conflict, concurrent writers cannot silently overwrite and traversal is refused')
 
   // -------------------------------------------------------------- hostile GLSL
   const player = await browser.newPage({ viewport: { width: 480, height: 320 } })
@@ -136,6 +146,35 @@ try {
   await player.waitForFunction(() => window.__player?.preset === 'silent-broken-sound' && window.__player.ready, null, { timeout: 30000 })
   assert.ok(pixelGreen(await player.evaluate(() => window.__player.inspect('pixel'))))
   console.log('ok    huge sources, NaN/Inf output and broken sound passes stay contained')
+
+  // ------------------------------------------------- audio device loss mid-play
+  // A crash-prone environment can lose the output device while a piece plays:
+  // the audio pipeline must fail loudly but the picture must keep going.
+  const audioPage = await browser.newPage({ viewport: { width: 320, height: 200 } })
+  const audioErrors = []
+  audioPage.on('pageerror', error => audioErrors.push(error.message))
+  await audioPage.addInitScript(() => {
+    const RealContext = window.AudioContext
+    window.__breakAudio = false
+    const original = RealContext.prototype.createBufferSource
+    RealContext.prototype.createBufferSource = function (...args) {
+      if (window.__breakAudio) throw new Error('device removed')
+      return original.apply(this, args)
+    }
+  })
+  await audioPage.goto(`${h.url}/shader-skin/player.html?preset=take-on-me&scale=0.5&fps=20`)
+  await audioPage.waitForFunction(() => window.__player?.ready, null, { timeout: 60000 })
+  await audioPage.waitForFunction(() => window.__player.audio.state === 'running', null, { timeout: 30000 })
+  const audioFrames = await audioPage.evaluate(() => window.__player.frames)
+  await audioPage.evaluate(() => { window.__breakAudio = true })
+  await audioPage.waitForFunction(() => ['error', 'suspended'].includes(window.__player.audio.state), null, { timeout: 30000 })
+  await audioPage.waitForTimeout(600)
+  const audioState = await audioPage.evaluate(() => ({ frames: window.__player.frames, ready: window.__player.ready, audio: window.__player.audio.state }))
+  assert.equal(audioState.ready, true, `the player must survive the device loss: ${JSON.stringify(audioState)}`)
+  assert.ok(audioState.frames > audioFrames, `the picture must continue after the device loss: ${JSON.stringify(audioState)}`)
+  assert.deepEqual(audioErrors, [])
+  await audioPage.close()
+  console.log('ok    losing the audio device mid-playback keeps the picture running')
 
   // ------------------------------------------------- rapid preset churn/abuse
   for (let i = 0; i < 40; i++) {
