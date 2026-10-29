@@ -17,6 +17,14 @@ Derived from https://www.shadertoy.com/view/7ljcRW by Fewes.
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     if (DISCARD_MAP) {
+        fragColor = vec4(0.0);
+        return;
+    }
+
+    // This detail map is static unless scrolling is enabled. Keep the exact
+    // first-frame result instead of repeating eight noise octaves every frame.
+    if (iFrame > 0 && all(equal(TIME_SCROLL_OFFSET, vec2(0.0)))) {
+        fragColor = texelFetch(iChannel0, ivec2(fragCoord), 0);
         return;
     }
 

@@ -5,10 +5,18 @@
 // Existing component licences and author notices below remain in force.
 
 // Adaptation: guard a degenerate segment during feedback initialization.
+// Wrap discrete particle indices so the closed curve never reads inactive texels.
 
 #define sqrt(a) clamp(sqrt(abs(a)),.1,1e3) // morimea stability fix
 
 vec2 R; int I;
+float particleCount() { return max(2.0, floor(0.02 * R.x * R.y)); }
+float particleIndex(float i) { return mod(i, particleCount()); }
+// Positions and neighbour ids are discrete state, never interpolated pixels.
+vec4 particle(float i) {
+    float n = floor(particleIndex(i));
+    return texelFetch(iChannel0, ivec2(mod(n, R.x), floor(n / R.x)), 0);
+}
 #define A(U) texture(iChannel0,(U)/R)
 #define B(U) texture(iChannel1,(U)/R)
 #define C(U) texture(iChannel2,(U)/R)

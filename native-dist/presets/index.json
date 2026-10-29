@@ -319,19 +319,19 @@
         "buffer:D"
       ],
       "image": [
-        null,
+        "buffer:A",
         "buffer:B"
       ]
     },
     "bufferSettings": {
       "A": {
         "format": "float32",
-        "filter": "linear",
+        "filter": "nearest",
         "mipmaps": false
       },
       "B": {
         "format": "float32",
-        "filter": "linear",
+        "filter": "nearest",
         "mipmaps": false
       },
       "C": {

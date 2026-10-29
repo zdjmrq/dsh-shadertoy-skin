@@ -52,6 +52,64 @@ try {
     console.log(`ok    ${name}: ${count} buffers, real pixels, memory bound, no renderer error`)
   }
 
+  // Sample a known height/detail ramp through the real terrain lookup helpers.
+  // The image canvas and capped float buffers differ at desktop resolutions.
+  const sampling = structuredClone(codes.get('mountain-paint'))
+  sampling.buffers.B = 'void mainImage(out vec4 c,in vec2 p){c=vec4(.4+.2*p.x/BUFFER_SIZE.x,pack4(vec4(127.,255.,64.,192.)/255.),0.);}'
+  sampling.buffers.C = 'void mainImage(out vec4 c,in vec2 p){c=vec4(.3*p.y/BUFFER_SIZE.y,0.,0.,1.);}'
+  sampling.image = sampling.image.slice(0, sampling.image.indexOf('void mainImage(')) + `
+    void mainImage(out vec4 c,in vec2 p){
+      vec2 uv=vec2(.4,.6); vec4 data;
+      vec3 v=GetChannel0Data(uv,data);
+      float h=GetChannel0(uv).x;
+      float n=GetChannel1(uv).x;
+      vec4 expected=vec4(127.,255.,64.,192.)/255.;
+      float materialError=length(data-expected);
+      c=vec4(abs(h-.48)*10.,abs(n-.18)*10.,materialError*10.,1.);
+    }`
+  for (const [width,height] of [[1920,1080],[720,1280],[320,200]]) {
+    await page.setViewportSize({ width,height })
+    await page.goto(`${h.url}/shader-skin/player.html?preset=aurora&muted=1&dim=1&tintMix=0`)
+    await page.waitForFunction(() => window.__player?.ready)
+    await page.evaluate(code => window.postMessage({type:'init',preset:{name:'terrain-sampling',code},params:{dim:1,tintMix:0,fps:15}},location.origin),sampling)
+    await page.waitForFunction(() => window.__player?.preset==='terrain-sampling' && window.__player.frames>4)
+    const pixel=await page.evaluate(() => window.__player.inspect('pixel'))
+    assert.ok(pixel.slice(0,3).every(v=>v<=2), `height/detail/material lookups at ${width}x${height}: ${pixel}`)
+    assert.ok((await page.evaluate(() => window.__player.project.bufferBytes))<=96*1024*1024)
+  }
+  console.log('ok    terrain height/detail/material sampling agrees at capped desktop, portrait and small resolutions')
+
+  // Force the actual reset path to hold a circle, then check that neither the
+  // first nor last segment escapes it. Inspect output pixels, not ready flags.
+  await page.setViewportSize({width:1920,height:1080})
+  await page.goto(`${h.url}/shader-skin/player.html?preset=strange-lines&scale=1&fps=30&muted=1&dim=1&tintMix=0`)
+  await page.waitForFunction(() => window.__player?.ready && window.__player.frames>5)
+  await page.keyboard.down('Space')
+  const resetFrame=await page.evaluate(() => window.__player.frames)
+  await page.waitForFunction(frame => window.__player.frames>frame+26,resetFrame,{timeout:90000})
+  const circleSize=await page.evaluate(() => window.__player.project)
+  assert.ok(circleSize.width<1920,'line test must hit buffer cap')
+  const circlePng=(await page.screenshot()).toString('base64')
+  await page.keyboard.up('Space')
+  const circle=await page.evaluate(async ({png,w,h})=>{
+    const image=new Image();image.src=`data:image/png;base64,${png}`;await image.decode()
+    const c=document.createElement('canvas');c.width=image.width;c.height=image.height
+    const ctx=c.getContext('2d');ctx.drawImage(image,0,0)
+    const data=ctx.getImageData(0,0,c.width,c.height).data
+    let lit=0,outside=0
+    for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++){
+      if(data[(y*c.width+x)*4]<32)continue
+      lit++
+      const radius=Math.hypot((x+.5)/c.width*w-w*.5,(y+.5)/c.height*h-h*.5)
+      if(Math.abs(radius-h*.25)>4)outside++
+    }
+    return {lit,outside}
+  },{png:circlePng,w:circleSize.width,h:circleSize.height})
+  assert.ok(circle.lit>1000 && circle.outside===0,`closed ring without stray spikes: ${JSON.stringify(circle)}`)
+  await page.screenshot({path:fileURLToPath(new URL('strange-lines-1080p.png',shots))})
+  console.log('ok    line ring stays closed without stray segments under the memory cap; output segments are antialiased')
+  await page.setViewportSize({width:640,height:400})
+
   // Missing iFrameRate previously made the terrain brush fail to compile. Check
   // every pass receives a finite positive rate, including speed=0.
   await page.goto(`${h.url}/shader-skin/player.html?preset=aurora&muted=1`)

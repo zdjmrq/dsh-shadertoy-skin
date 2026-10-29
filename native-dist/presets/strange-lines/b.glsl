@@ -6,10 +6,10 @@
 
 
 void XY (vec2 U, inout vec4 Q, vec4 q) {
-    if (length(U-A(_21(q.x)).xy)<length(U-A(_21(Q.x)).xy)) Q.x = q.x;
+    if (length(U-particle(q.x).xy)<length(U-particle(Q.x).xy)) Q.x = particleIndex(q.x);
 }
 void ZW (vec2 U, inout vec4 Q, vec4 q) {
-    if (length(U-A(_21(q.y)).xy)<length(U-A(_21(Q.y)).xy)) Q.y = q.y;
+    if (length(U-particle(q.y).xy)<length(U-particle(Q.y).xy)) Q.y = particleIndex(q.y);
 }
 Main
     Q = B(U);
@@ -22,7 +22,7 @@ Main
     XY(U,Q,vec4(Q.x-7.));
     XY(U,Q,vec4(Q.x+7.));
     if (I%12==0) 
-        Q.y = _12(U);
+        Q.y = particleIndex(_12(U));
     else
     {
         float k = exp2(float(11-(I%12)));
@@ -32,15 +32,15 @@ Main
         ZW(U,Q,B(U-vec2(k,0)));
     }
     XY(U,Q,Q.yxzw);
-    if (I<1) Q = vec4(_12(U));
+    if (I<1) Q = vec4(particleIndex(_12(U)));
     
-    vec4 a1 = A(_21(Q.x));
-    vec4 a2 = A(_21(Q.x+1.));
-    vec4 a3 = A(_21(Q.x-1.));
+    vec4 a1 = particle(Q.x);
+    vec4 a2 = particle(Q.x+1.);
+    vec4 a3 = particle(Q.x-1.);
     float l1 = sg(U,a1.xy,a2.xy);
     float l2 = sg(U,a1.xy,a3.xy);
     float l = min(l1,l2);
-    Q.z = Q.w = smoothstep(2.,1.,l);
+    Q.z = Q.w = 1.0-smoothstep(1.,2.,l);
     Q.w -= .2*heart(U);
     
 }

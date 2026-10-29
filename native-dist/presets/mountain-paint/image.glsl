@@ -4,6 +4,8 @@
 // https://creativecommons.org/licenses/by-nc-sa/3.0/
 // Existing component licences and author notices below remain in force.
 
+// Adaptation: sample each input at its actual size, decode finite material pairs,
+// and initialize/use the surface normal before calculating reflections.
 
 /*
 =====================================================================================
@@ -43,13 +45,13 @@ A few of the changes implemented:
 // Get the map channels from Buffer B, except the packed data.
 // This is cheaper for usages that don't need the packed data anyway.
 vec3 GetChannel0(vec2 uv) {
-    uv *= BUFFER_SIZE / iResolution.xy;
+    uv *= BUFFER_SIZE / iChannelResolution[0].xy;
     return texture(iChannel0, uv).xyz;
 }
 
 // Get detail texture from Buffer C.
 vec4 GetChannel1(vec2 uv) {
-    uv *= BUFFER_SIZE / iResolution.xy;
+    uv *= BUFFER_SIZE / iChannelResolution[1].xy;
     return texture(iChannel1, uv);
 }
 
@@ -66,15 +68,14 @@ vec3 GetChannel0Data(vec2 uv, out vec4 data) {
     vec4 AB = texelFetch(iChannel0, i + ivec2(0, 1), 0);
     vec4 BA = texelFetch(iChannel0, i + ivec2(1, 0), 0);
     vec4 BB = texelFetch(iChannel0, i + ivec2(1, 1), 0);
-    // Use regular interpolation for the normal return value.
-    // The w channel should not be used.
+    // Only x is a height; packed yz must be decoded before interpolation.
     vec4 ret = (AA * a.y + AB * b.y) * a.x + (BA * a.y + BB * b.y) * b.x;
     
     // Unpack each of the four samples into a vec4.
-    vec4 AAdata = unpack4(AA.w);
-    vec4 ABdata = unpack4(AB.w);
-    vec4 BAdata = unpack4(BA.w);
-    vec4 BBdata = unpack4(BB.w);
+    vec4 AAdata = unpack4(AA.yz);
+    vec4 ABdata = unpack4(AB.yz);
+    vec4 BAdata = unpack4(BA.yz);
+    vec4 BBdata = unpack4(BB.yz);
     // Interpolate the four vec4s so each piece of data is correctly interpolated.
     data = (AAdata * a.y + ABdata * b.y) * a.x + (BAdata * a.y + BBdata * b.y) * b.x;
     
@@ -243,7 +244,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // ------------------------------------------------------------------------
     
     vec4 foo;
-    vec3 normal;
+    vec3 normal = vec3(0.0, 1.0, 0.0);
     int material;
     float t = march(ro, rd, normal, material, foo.w);
     
@@ -277,6 +278,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         float trees;
         float debug;
         vec4 mapData = map(GetUV(pos), erosion, ridgemap, trees, debug);
+        if (material == M_GROUND) normal = mapData.yzw;
         float drainage = clamp01((1.0 - clamp01(ridgemap / DRAINAGE_WIDTH)) * 1.5);
         float diff = pos.y - mapData.x;
         

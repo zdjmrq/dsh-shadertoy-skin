@@ -442,20 +442,21 @@ vec4 Heightmap(vec2 p) {
         }
     #endif
 
-    // Pack four floats into a single channel to be able to get more data out of this buffer.
-    float packed = pack4(vec4(
+    // Pack four bytes into two finite, exactly represented integer pairs.
+    vec2 packed = pack4(vec4(
         clamp01(h.x / max(h.w, 1e-8) * 0.5 + 0.5), // Erosion delta as [0, 1] value.
         clamp01(ridgeMap * 0.5 + 0.5),  // Ridge map as [0, 1] value.
         clamp01(trees * 0.5 + 0.5),     // Tree value as [0, 1] value.
         clamp01(debug * 0.5 + 0.5)      // Debug value.
     ));
     
-    return vec4(eroded, 0.0, 0.0, packed);
+    return vec4(eroded, packed, 0.0);
     
 }
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     if (DISCARD_MAP) {
+        fragColor = vec4(0.0);
         return;
     }
     vec2 uv = fragCoord / BUFFER_SIZE;    

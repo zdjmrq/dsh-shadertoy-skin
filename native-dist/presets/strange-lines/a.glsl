@@ -7,17 +7,22 @@
 
 #define keyClick(a)   ( texelFetch(iChannel2,ivec2(a,0),0).x > 0.)
 
-#define  k ( .02 * R.x*R.y )
+#define k particleCount()
 Main 
     float i = _12(U);
-    Q = A(U);
+    if (i >= k) { Q = vec4(0.0); return; }
+    if (iFrame < 1 || keyClick(32)) {
+        Q = vec4(.5*R + .25*R.y * cos(6.28318530718*i/k + vec2(0,1.57079632679)), 0,0);
+        return;
+    }
+    Q = particle(i);
     
     vec2 f = vec2(0);
     
     if ( i < k ) {
     for (float j = -20.; j <= 20.; j++) 
         if (j!=0.) {//  && j+i>=0. && j+i<R.x*R.y) {
-        vec4 a = A(_21(mod(i+j,k)));
+        vec4 a = particle(i+j);
         //if (j!=0. && j+i>=0. && j+i<R.x*R.y) {
         //vec4 a = A(_21(i+j));
         vec2 r = a.xy-Q.xy;
@@ -34,18 +39,11 @@ Main
     Q.zw += f-.03*Q.zw;
     Q.xy += f+1.5*Q.zw*inversesqrt(1.+dot(Q.zw,Q.zw));
     
-    vec4 m = .5*( A(_21(i-1.)) + A(_21(i+1.)) );
+    vec4 m = .5*(particle(i-1.) + particle(i+1.));
     Q.zw = mix(Q.zw,m.zw,0.1);
     Q.xy = mix(Q.xy,m.xy,0.01);
     if (Q.x>R.x)Q.y=.5*R.y,Q.z=-10.;
     if (Q.x<0.)Q.y=.5*R.y,Q.z=10.;
-    }
-     if (iFrame < 1 || keyClick(32)) {
-        if ( i > k ) 
-          Q = vec4(R+i,0,0); 
-        else
-          Q = vec4(.5*R + .25*R.y* cos( 6.28*i/k + vec2(0,1.57)), 0,0 );
-    //  Q = vec4(i-.5*R.x*R.y,.5*R.y,0,0);
     }
     
 

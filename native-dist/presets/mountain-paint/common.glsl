@@ -5,6 +5,7 @@
 // Existing component licences and author notices below remain in force.
 
 // Adaptation: derive the map extent from the actual Buffer size under the memory cap.
+// Store material bytes as finite integer pairs in Buffer B's spare channels.
 
 /*
 ====================================================================================
@@ -333,23 +334,15 @@ float PhaseMie(float costh, float g) {
 // Packing
 // ------------------------------------------------------------------------------
 
-// Some methods to package colours from a vec4 (0-1) into a single 32-bit float.
-float pack4(in vec4 rgba) {
-    lowp int red = clamp(int(rgba.r * 255.0), 0, 255);
-    lowp int green = clamp(int(rgba.g * 255.0), 0, 255);
-    lowp int blue = clamp(int(rgba.b * 255.0), 0, 255);
-    lowp int alpha = clamp(int(rgba.a * 255.0), 0, 255);
-
-    return intBitsToFloat((red << 24) | (green << 16) | (blue << 8) | alpha);
+// Keep all four 8-bit material values without constructing NaN/subnormal floats.
+// Arbitrary intBitsToFloat payloads can be canonicalized or flushed by drivers.
+// Buffer B has two spare channels; 16-bit integer pairs are exact in float32.
+vec2 pack4(in vec4 rgba) {
+    vec4 bytes = floor(clamp(rgba, 0.0, 1.0) * 255.0);
+    return vec2(dot(bytes.xy, vec2(256.0, 1.0)), dot(bytes.zw, vec2(256.0, 1.0)));
 }
 
-vec4 unpack4(in float col) {
-    highp int val = floatBitsToInt(col);
-
-    return vec4(
-        float((val >> 24) & 255) / 255.0,
-        float((val >> 16) & 255) / 255.0,
-        float((val >> 8) & 255) / 255.0,
-        float(val & 255) / 255.0
-    );
+vec4 unpack4(in vec2 col) {
+    return vec4(floor(col.x / 256.0), mod(col.x, 256.0),
+                floor(col.y / 256.0), mod(col.y, 256.0)) / 255.0;
 }
