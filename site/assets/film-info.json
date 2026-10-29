@@ -1,6 +1,6 @@
 {
-  "revision": 3,
-  "duration": 126.5,
+  "revision": 4,
+  "duration": 123.4,
   "width": 1280,
   "height": 720,
   "greeting": "各位人类和ai大家好呀。",
@@ -22,31 +22,31 @@
       "title": "声音，也是代码实时合成的"
     },
     {
-      "start": 45.4,
+      "start": 48.8,
       "title": "已上架 dshmarket，也能填包名安装"
     },
     {
-      "start": 58.7,
+      "start": 60.9,
       "title": "自己调外观，交互按需开启"
     },
     {
-      "start": 69.733,
+      "start": 66.633,
       "title": "去 ShaderToy 找自己喜欢的作品"
     },
     {
-      "start": 77.4,
+      "start": 74.3,
       "title": "喜欢的作品，放进自己的背景库"
     },
     {
-      "start": 87.6,
+      "start": 84.5,
       "title": "在原作上，加一点自己的想法"
     },
     {
-      "start": 97.8,
+      "start": 94.7,
       "title": "有些作品，还能玩一会儿"
     },
     {
-      "start": 115.2,
+      "start": 112.1,
       "title": "把你找到和改过的作品，也分享出来"
     }
   ]

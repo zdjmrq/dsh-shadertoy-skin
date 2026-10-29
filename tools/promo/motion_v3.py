@@ -11,6 +11,7 @@ NAVY='#101a2e';WHITE='#f3f6ff';BLUE='#87a9ff';MINT='#7ce4ce';GRAY='#a5b3cd'
 
 @lru_cache(maxsize=8)
 def photo(name,size):
+    if name=='intro-mario':return ImageOps.fit(Image.open(WORK/'intro-mario.png').convert('RGB'),size)
     return ImageOps.fit(Image.open(ROOT/f'site/assets/{name}.webp').convert('RGB'),size)
 
 def rain_lines():
@@ -35,7 +36,7 @@ def pill(d,box,label,color=MINT,light=False):
 
 @lru_cache(maxsize=16)
 def static(name):
-    light=name in ['purpose','market','install','discover','files','share']
+    light=name in ['purpose','purpose-clean','intro-rich','market','install','discover','files','share']
     im=background(light);d=ImageDraw.Draw(im)
     if name=='intro':
         heading(d,'DSH × SHADERTOY','代码会画画，')
@@ -43,15 +44,28 @@ def static(name):
         text(d,(98,430),'给 AI 桌面，换一个有意思的世界。',39,GRAY)
         for i,label in enumerate(['实时画面','代码音乐','鼠标与键盘交互']):
             x=98+i*565;pill(d,(x,775,x+520,874),label,BLUE if i==1 else MINT)
-    elif name=='purpose':
+    elif name=='intro-rich':
+        heading(d,'DSH × SHADERTOY / 让桌面有一点新鲜感','代码会画画，也会作曲。',True)
+        text(d,(98,250),'从一扇雨窗，到一个能玩的世界。',39,'#68778d')
+        cards=[('rain','画面','几行代码，雨就落下来。','#315fe9','Image'),('intro-mario','音乐','旋律，也在实时生成。','#8247d5','Sound'),('mountain','交互','鼠标一划，山脉就长出来。','#087f74','Input')]
+        for i,(slug,label,copy,color,role) in enumerate(cards):
+            x=82+i*590
+            d.rounded_rectangle((x,355,x+555,942),radius=24,fill='white',outline='#d5ddec',width=2)
+            im.paste(photo(slug,(523,328)),(x+16,372));d=ImageDraw.Draw(im)
+            d.rounded_rectangle((x+25,719,x+150,762),radius=10,fill=color)
+            text(d,(x+39,725),role,24,'white')
+            text(d,(x+27,781),label,49,'#17253a',bold=True)
+            text(d,(x+27,870),copy,29,'#68778d')
+    elif name in ['purpose','purpose-clean']:
         heading(d,'HOW IT WORKS / 工作原理示意','聊天照常，背景换一个世界。',True)
         image=photo('rain',(1640,555)).copy();image=Image.blend(image,Image.new('RGB',image.size,'#17253a'),.24)
         im.paste(image,(140,305));d=ImageDraw.Draw(im)
-        text(d,(205,365),'DeepSeek Harness',40,WHITE,bold=True)
-        d.rounded_rectangle((205,510,1040,594),radius=18,fill='#37455e')
-        text(d,(235,531),'聊天、输入、选中内容，照常。',31,WHITE)
-        d.rounded_rectangle((205,641,1638,766),radius=26,fill='#26364c',outline='#73839b',width=2)
-        text(d,(239,680),'你想一起做点什么？',32,'#b4c3d5')
+        if name=='purpose':
+            text(d,(205,365),'DeepSeek Harness',40,WHITE,bold=True)
+            d.rounded_rectangle((205,510,1040,594),radius=18,fill='#37455e')
+            text(d,(235,531),'聊天、输入、选中内容，照常。',31,WHITE)
+            d.rounded_rectangle((205,641,1638,766),radius=26,fill='#26364c',outline='#73839b',width=2)
+            text(d,(239,680),'你想一起做点什么？',32,'#b4c3d5')
         text(d,(300,899),'ShaderToy 代码   →   实时渲染   →   DSH 背景',35,'#315fe9',mono=False)
     elif name=='code':
         heading(d,'SMALL CODE / BIG IDEAS','一两百行，画出一个背景。')
@@ -122,10 +136,19 @@ def frame(name,t,length):
             x=1430+math.cos(a)*r*.75;y=445+math.sin(a)*r*.65
             s=6+4*math.sin(t*1.7+i)**2;d.rounded_rectangle((x,y,x+s,y+s),radius=2,fill=MINT if i%3 else BLUE)
         text(d,(1242,342),'{ }',151,BLUE,mono=True)
+    elif name=='intro-rich':
+        # Reveal actual images without scaling or moving their sharp edges.
+        for i in range(3):
+            alpha=max(0,min(1,(t-.12-i*.16)/.35));x=82+i*590
+            if alpha<1:
+                box=(x,355,x+556,943);image=im.crop(box)
+                im.paste(Image.blend(Image.new('RGB',image.size,'#f3f5f9'),image,alpha),box)
     elif name=='purpose':
         for i in range(28):
             x=180+(i*163)%1550;y=310+(i*37+int(t*80))%520
             d.line((x,y,x-5,y+24),fill='#b9c9e0',width=2)
+        x=300+(t*.17%1)*1250;d.ellipse((x,970,x+13,983),fill='#315fe9')
+    elif name=='purpose-clean':
         x=300+(t*.17%1)*1250;d.ellipse((x,970,x+13,983),fill='#315fe9')
     elif name=='code':
         n=round(100+100*min(1,t/1.7));text(d,(99,306),str(n),143,MINT,mono=True,bold=True)
@@ -151,7 +174,7 @@ def frame(name,t,length):
             d.rounded_rectangle((x,520,x+535,705),radius=22,outline='#315fe9',width=4)
     # A short fade-in and an eased rise give headings room to arrive.
     if t<.22:
-        blank=background(name in ['purpose','market','install','discover','files','share']);im=Image.blend(blank,im,min(1,t/.22))
+        blank=background(name in ['purpose','purpose-clean','intro-rich','market','install','discover','files','share']);im=Image.blend(blank,im,min(1,t/.22))
     return im
 
 def render(name,length):

@@ -1,48 +1,59 @@
 # 宣传网页与视频
 
-网页：<https://zdjmrq.github.io/dsh-shadertoy-skin/>
+网页：https://zdjmrq.github.io/dsh-shadertoy-skin/
 
-`site/` 是静态网站；GitHub Actions 先运行 `tools/site-smoke.mjs` 检查布局、录屏切换、复制、键盘导航、字幕和视频播放，再发布到 GitHub Pages。无远程字体、追踪脚本或在线着色器负载。展示区可见时才播放一个静音录屏；减少动态效果或省流量时保留静态封面。
+发布包：https://github.com/zdjmrq/dsh-shadertoy-skin/releases/tag/promo-2026-10-29
 
-网页修改走分支，验证后合并 main，Pages 自动更新。网站及制作工具不在 npm 的 `files` 中，不增加插件安装包体积。
+## 当前定稿：v4
 
-## 第三版视频（当前线上版）
+用户已确认约 2 分 3 秒的第四版视频。1080p 成片位于 `artifacts/promo-v4/DSH-ShaderToy-介绍片-v4-1080p.mp4`；宣传包上传独立 GitHub Release，不改变插件 0.4.6 的版本，也不将宣传包标为插件的 latest release。
 
-使用作者于 2026-10-29 提供的八段录屏：雨窗、造山、海面、Take On Me、地牢、马里奥、我的世界和 Never Gonna Give You Up。第三版精选使用其中六段，海面仅用于封面和改编对比；马里奥仅作为静态推荐图。原始视频只读，不提交仓库。另通过隔离的浏览器测试环境录制实际插件设置、导入和代码标签页，不访问已安装 DSH 的个人配置。
+- 固定封面开场，检查前 150 帧封面标牌边缘位置一致，修复逐帧缩放产生的跳动。
+- 标题页改为画面、音乐、交互三张实图卡片；删除雨窗说明中遮挡图片的人工框。
+- 设置部分使用用户提供的风中树景截图，约 6 秒概括功能。
+- Take On Me、Never Gonna Give You Up、马里奥三个音乐作品保留同步原录屏声音，留有无旁白试听；旁白期间降低音乐音量。
+- 造山、像素世界和地牢的交互演示保留，支持导入、改代码及 ShaderToy 推荐。
 
-第三版约 2 分 7 秒：先用封面轻推和图形动画开场，解释代码生成画面与音乐，留出原作品音乐试听，再介绍市场安装、ShaderToy、导入、修改与交互。说明动画、图片占多数，不再反复播放海面。海面加星光使用实际着色器改编的前后画面。开头为「各位人类和ai大家好呀」。
+旁白为 Edge TTS `zh-CN-XiaoyiNeural` 合成女声，语速不变、音高 +2 Hz。字幕根据 WordBoundary 元数据对齐。开头为「各位人类和ai大家好呀」。
 
-旁白使用 Edge TTS `zh-CN-XiaoyiNeural`，语速不变、音高 +2 Hz；清亮、亲切的合成女声。仅发送旁白文字，不上传录屏。音乐作品片段保留同步录屏声音；Take On Me 接 Never Gonna Give You Up，留有无旁白试听。其余镜头静音，无另加配乐。中间剪辑使用 PCM，避免分段 AAC 编码填充造成音画漂移；最终混音通过旁白侧链压低作品音乐。字幕依据语音返回的 WordBoundary 元数据对齐。
+## 发布资料
 
-正式交付在本地 `artifacts/promo-v3/`（Git 忽略）：
+`artifacts/promo-v4/发布包/` 和 `dsh-shadertoy-bilibili-kit-v4.zip` 包含：
 
-- `DSH-ShaderToy-介绍片-v3-1080p.mp4`：1920×1080、30 fps、H.264、AAC 48 kHz 立体声、硬字幕。
-- `B站封面.png`、`字幕.srt`、`B站发布文案.md`。
-- `剪辑时间线.json`、`制作说明.json`、`成片检查图-1.jpg`、`成片检查图-2.jpg`、`技术检查.txt`。
+- 已确认的 1080p MP4、16:9 PNG 封面、SRT/VTT 字幕。
+- 标题、完整简介、章节、标签、置顶评论。
+- 发布指南、作品与许可、SHA256 校验表。
 
-网页使用 720p 压缩版、VTT 字幕与封面。旧版保留于本地 `artifacts/promo/`、`artifacts/promo-v2/` 和备份目录，不再用于网站。
+文案的仓库版本：[bilibili-promo.md](bilibili-promo.md)。简介包含作品署名及完整第三方说明链接。包内不含私人原始录屏、设置原图和内部剪辑缓存。成片已有硬字幕，无需再烧录一层字幕。
 
-## 重建第三版
+## 维护网页和发布包
 
-`site/assets/film-info.json` 记录线上视频版本、时长和章节，网页测试据此核对实际媒体。
-
-Windows / Python 3.11+，使用系统雅黑和 Consolas 字体。npm 开发依赖提供 Playwright；第一次录制需安装浏览器及 Playwright FFmpeg。
+`tools/promo/publish_v4.py` 直接读取已确认的视频，只转码网页播放副本，不重新渲染成片。导出前后核对 1080p 文件 SHA256：
 
 ```powershell
-python -m pip install -r tools/promo/requirements.txt
-npm ci
-npx playwright install msedge ffmpeg
-node tools/promo/capture-ui.mjs
-python tools/promo/narration_v2.py --story tools/promo/storyboard-v3.json --output .tmp-validation/promo-v3/narration
-python tools/promo/build_v3.py --sources 'D:\HUAWEI\Videos\屏幕录制'
-python tools/promo/qa_v3.py
+python tools/promo/publish_v4.py --site
 node tools/site-smoke.mjs
 ```
 
-`storyboard-v3.json` 保存旁白、字幕和素材时间戳；`build_v3.py` 定义剪辑点与混音；`motion_v3.py` 生成说明动画，市场搜索界面和声音波形均标注为示意。缓存位于 `.tmp-validation/promo-v3/`。旁白修改会重新生成对应语音；剪辑以实际输出帧对齐，原片不足时仅轻微放慢或补尾帧，不循环拼接。
+网页使用 720p 播放副本、VTT 和封面，媒体链接带版本参数，避免浏览器混用旧视频与新字幕。`site/assets/film-info.json` 保存当前版本、实际时长和章节，网页测试核对媒体元信息、字幕、拖动播放、移动布局及减少动态效果。GitHub Pages 工作流验证后部署。
 
-网页版六个短片及海报沿用首版资源；首次重建这些资源可使用旧工具的 `build.py --sources ... --stage prepare`，第三版成片复用 `capture-ui.mjs` 生成的实际界面素材，其余图形由代码生成，不依赖旧版成片。B站发布文案源文件为 [bilibili-promo.md](bilibili-promo.md)。
+网页无远程字体、追踪脚本或在线着色器负载。展示区可见时才播放一个静音录屏；减少动态效果或省流量时保留静态封面。网站和制作工具均不在 npm 发布清单中。
 
-## 作品署名
+## 从原始素材重建（供后续修改）
 
-网页「作品与许可」、发布简介和第三方说明保留原作者。录屏作品采用 CC BY-NC-SA 3.0；造山侵蚀算法组件另保留 MPL 2.0。完整信息见 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)。自写网页与制作脚本采用 MIT，第三方作品保留原许可。
+原始录屏和树景截图只读，位于用户本地。v4 共接收九段录屏，实际使用其中七段；海面仅用于封面和改编对比，原马里奥片段由新录屏替代。旧成片保留在各自 artifacts 目录。
+
+```powershell
+python -m pip install -r tools/promo/requirements.txt
+python tools/promo/narration_v2.py --story tools/promo/storyboard-v4.json --output .tmp-validation/promo-v4/narration
+python tools/promo/build_v3.py --revision 4 --local-only --sources '原始录屏目录' --settings-image '树景设置截图.png'
+python tools/promo/qa_v3.py --revision 4
+```
+
+`storyboard-v4.json` 保存旁白、字幕和素材文件时间戳；`motion_v3.py` 生成说明动画；`build_v3.py` 支持 v3/v4 剪辑。音乐单独渲染为精确长度的 PCM 再合成，避免剪辑边界少一帧音频造成后续音轨提前。中间产物在 `.tmp-validation/promo-v4/`。
+
+海面改编对比图来自隔离浏览器测试环境的实际着色器截图；首次重建这两张图时可运行 `node tools/promo/capture-ui.mjs`。重建后需要重新审片；已确认成片的发布应使用 publish 工具，避免意外替换定稿。
+
+## 作品与许可
+
+第三方作品保留作者、来源和许可；造山侵蚀算法、风中树景的部分组件等另有自身声明。详见发布包和 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)。网页、制作脚本及插件自写代码采用 MIT。

@@ -9,9 +9,18 @@ import build_v2 as old
 import motion_v3 as motion
 
 ROOT=old.ROOT;WORK=ROOT/'.tmp-validation/promo-v3';OUT=ROOT/'artifacts/promo-v3';ASSETS=ROOT/'site/assets'
+REVISION=3
 STORY=json.loads(Path(__file__).with_name('storyboard-v3.json').read_text(encoding='utf-8'))
 FFMPEG=old.FFMPEG;run=old.run;duration=old.duration
 for folder in [WORK/'renders',OUT]:folder.mkdir(parents=True,exist_ok=True)
+
+def configure(revision):
+    global REVISION,STORY,WORK,OUT
+    REVISION=revision
+    STORY=json.loads(Path(__file__).with_name(f'storyboard-v{revision}.json').read_text(encoding='utf-8'))
+    WORK=ROOT/f'.tmp-validation/promo-v{revision}';OUT=ROOT/f'artifacts/promo-v{revision}'
+    motion.WORK=WORK
+    for folder in [WORK/'renders',OUT]:folder.mkdir(parents=True,exist_ok=True)
 
 def timings(scene):
     chars=[]
@@ -67,6 +76,7 @@ def clip(spec,length,index):
     if spec.get('zoom'):
         resize="scale=2304:1296,zoompan=z='1+0.025*on/"+str(max(1,round(length*30)-1))+"':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=1920x1080:fps=30"
     elif layout=='contain':resize='scale=1920:900:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:60:color=0x0d1524'
+    elif layout=='photo':resize='scale=1920:960:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:20:color=0x0d1524'
     else:resize='scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080:0:(ih-1080)*0.35'
     graph=f'[0:v]{timing}{resize},setsar=1,fps=30[v0];[v0][1:v]overlay=0:0[v];'
     if music:
@@ -75,7 +85,16 @@ def clip(spec,length,index):
     temporary=dest.with_suffix('.partial.mov')
     # PCM keeps every edit on an exact 48 kHz boundary, avoiding per-clip AAC padding.
     run([*args,'-filter_complex',graph,'-map','[v]','-map','[a]','-t',length,'-c:v','libx264','-preset','fast','-crf','19','-pix_fmt','yuv420p','-threads','4','-c:a','pcm_s16le','-ar','48000','-ac','2','-y',temporary])
-    temporary.replace(dest);print('shot ready',index,round(length,2),'music' if music else '',flush=True);return dest
+    if music:
+        # Render sound independently of the video's end-of-stream scheduling.
+        # This guarantees an exact PCM sample count at every musical edit.
+        wave=dest.with_suffix('.wav');samples=round(length*48000)
+        audio_filter=f'atrim=duration={length},asetpts=PTS-STARTPTS,loudnorm=I=-18:TP=-3:LRA=9,aresample=48000,afade=t=in:d=0.08,afade=t=out:st={max(0,length-.18)}:d=0.18,apad,atrim=end_sample={samples}'
+        run(['-ss',start,'-i',source,'-vn','-af',audio_filter,'-c:a','pcm_s16le','-ar','48000','-ac','2','-y',wave])
+        run(['-i',temporary,'-i',wave,'-map','0:v','-map','1:a','-c','copy','-y',dest])
+        temporary.unlink();wave.unlink()
+    else:temporary.replace(dest)
+    print('shot ready',index,round(length,2),'music' if music else '',flush=True);return dest
 
 def plan(scene,length,sources,capture):
     def graphic(name,seconds):return {'file':motion.render(name,seconds),'kind':'motion'},seconds
@@ -84,16 +103,21 @@ def plan(scene,length,sources,capture):
         c=capture[name];return {'file':Path(c['file']),'in':c['marks']['start'] if start is None else start,'out':c['marks']['end'] if end is None else end,'label':'实际插件界面 · 演示配置','layout':'contain','kind':'ui'}
     def image(name):return {'file':old.card(name),'kind':'card'}
     sid=scene['id']
-    if sid=='intro':return [({'file':OUT/'B站封面.png','zoom':True,'kind':'cover'},5.2),graphic('intro',length-5.2)]
-    if sid=='purpose':return [graphic('purpose',length-1.9),(raw(1,2.05,3.95,'下雨的窗户 · DSH 实录'),1.9)]
+    if sid=='intro':return [({'file':OUT/'B站封面.png','zoom':REVISION==3,'kind':'cover'},5.2),graphic('intro' if REVISION==3 else 'intro-rich',length-5.2)]
+    if sid=='purpose':return [graphic('purpose' if REVISION==3 else 'purpose-clean',length-1.9),(raw(1,2.05,3.95,'下雨的窗户 · DSH 实录'),1.9)]
     if sid=='code':return [graphic('code',length)]
-    if sid=='music':return [graphic('music',5),(raw(4,6.8,10.2,'Take On Me · 原作品的代码合成音乐',music=True),3.4),(raw(8,1.0,1.0+length-8.4,'Never Gonna Give You Up · 原作品的代码合成音乐',music=True),length-8.4)]
+    if sid=='music':
+        extra=3.4 if REVISION>=4 else 0
+        shots=[graphic('music',5),(raw(4,6.8,10.2,'Take On Me · 原作品的代码合成音乐',music=True),3.4),(raw(8,1.0,1.0+length-8.4-extra,'Never Gonna Give You Up · 原作品的代码合成音乐',music=True),length-8.4-extra)]
+        if extra:shots.append((raw(9,1.2,4.6,'马里奥 · 原作品的代码合成音乐',music=True),extra))
+        return shots
     if sid=='install':
         split=round(cue(scene,'也可以在插件页')*30)/30
+        if REVISION>=4:return [graphic('market',split),graphic('install',length-split)]
         return [graphic('market',split),graphic('install',length-split-3.2),(ui('select',2.37,5.57),3.2)]
-    if sid=='settings':return [(ui('settings'),length)]
+    if sid=='settings':return [({'file':OUT/'背景设置原图.png','kind':'user-photo','layout':'photo'},length)] if REVISION>=4 else [(ui('settings'),length)]
     if sid=='discover':return [graphic('discover',length)]
-    if sid=='import':return [graphic('files',length-3.7),(ui('multi-import',2.1,5.8),3.7)]
+    if sid=='import':return [graphic('files',length)] if REVISION>=4 else [graphic('files',length-3.7),(ui('multi-import',2.1,5.8),3.7)]
     if sid=='modify':
         split=round(cue(scene,'不会写的话')*30)/30
         return [(image('compare'),split),(image('ai'),length-split)]
@@ -104,11 +128,26 @@ def plan(scene,length,sources,capture):
     raise ValueError(sid)
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--sources',type=Path,required=True);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--sources',type=Path,required=True)
+    parser.add_argument('--revision',type=int,choices=[3,4],default=3)
+    parser.add_argument('--settings-image',type=Path)
+    parser.add_argument('--local-only',action='store_true',help='Export review files without changing any website assets')
+    args=parser.parse_args();configure(args.revision)
     sources={i:args.sources/f'屏幕录制 2026-10-29 {stamp}.mp4' for i,stamp in enumerate(STORY['sourceStamps'],1)}
     for source in sources.values():assert source.is_file(),source
-    old.cover(sources);shutil.copyfile(old.OUT/'B站封面.png',OUT/'B站封面.png')
-    capture=json.loads((ROOT/'.tmp-validation/promo-v2/captures/captures.json').read_text(encoding='utf-8'))
+    if args.local_only:
+        previous_out,previous_assets=old.OUT,old.ASSETS
+        try:
+            old.OUT,old.ASSETS=OUT,WORK
+            old.cover(sources)
+        finally:old.OUT,old.ASSETS=previous_out,previous_assets
+    else:
+        old.cover(sources);shutil.copyfile(old.OUT/'B站封面.png',OUT/'B站封面.png')
+    if REVISION>=4:
+        if args.settings_image and args.settings_image.resolve()!=(OUT/'背景设置原图.png').resolve():shutil.copyfile(args.settings_image,OUT/'背景设置原图.png')
+        assert (OUT/'背景设置原图.png').is_file(),'Pass --settings-image for the first v4 build'
+        run(['-ss',2,'-i',sources[9],'-frames:v','1','-y',WORK/'intro-mario.png'])
+    capture=json.loads((ROOT/'.tmp-validation/promo-v2/captures/captures.json').read_text(encoding='utf-8')) if REVISION==3 else {}
     parts=[];voices=[];events=[];srt=[];timeline=[];offset=0
     for scene in STORY['scenes']:
         voice=WORK/f'narration/{scene["id"]}.mp3';length=math.ceil((duration(voice)+.45+scene.get('holdAfter',0))*30)/30
@@ -136,22 +175,29 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ass=WORK/'subtitles.ass';ass.write_text(header+'\n'.join(events)+'\n',encoding='utf-8-sig')
     (OUT/'字幕.srt').write_text('\n'.join(srt),encoding='utf-8-sig')
     vtt=re.sub(r'(?m)^\d+\n','','\n'.join(srt));vtt=re.sub(r'(\d\d:\d\d:\d\d),(\d{3})',r'\1.\2',vtt)
-    (ASSETS/'film.vtt').write_text('WEBVTT\n\n'+vtt,encoding='utf-8')
+    (OUT/'字幕.vtt').write_text('WEBVTT\n\n'+vtt,encoding='utf-8')
+    if not args.local_only:shutil.copyfile(OUT/'字幕.vtt',ASSETS/'film.vtt')
     (OUT/'剪辑时间线.json').write_text(json.dumps(timeline,ensure_ascii=False,indent=2),encoding='utf-8')
     concat=WORK/'concat.txt';concat.write_text('\n'.join(f"file '{p.as_posix()}'" for p in parts),encoding='utf-8')
     run(['-f','concat','-safe','0','-i',concat,'-c','copy','-y',WORK/'picture-with-music.mov'])
-    inputs=['-i',WORK/'picture-with-music.mov'];filters=[];names=[]
+    # Honour edit-list gaps before mixing. Some filtered audio tails finish one
+    # video frame early; plain decoding would otherwise close that timestamp gap.
+    run(['-i',WORK/'picture-with-music.mov','-map','0:v','-map','0:a','-c:v','copy','-af','aresample=48000:async=1:first_pts=0','-c:a','pcm_s16le','-y',WORK/'aligned-picture.mov'])
+    inputs=['-i',WORK/'aligned-picture.mov'];filters=[];names=[]
     for i,(voice,start) in enumerate(voices,1):
         inputs+=['-i',voice];filters.append(f'[{i}:a]adelay={round(start*1000)}:all=1[a{i}]');names.append(f'[a{i}]')
     filters.append(''.join(names)+f'amix=inputs={len(names)}:duration=longest:normalize=0,apad,atrim=duration={offset},asplit=2[voice][control]')
     filters.append('[0:a][control]sidechaincompress=threshold=0.025:ratio=8:attack=15:release=280:makeup=1[ducked]')
     filters.append('[voice][ducked]amix=inputs=2:duration=longest:normalize=0,loudnorm=I=-17:TP=-2:LRA=9[a]')
-    ass_path=ass.as_posix().replace(':',r'\:');final=OUT/'DSH-ShaderToy-介绍片-v3-1080p.mp4'
+    ass_path=ass.as_posix().replace(':',r'\:');final=OUT/f'DSH-ShaderToy-介绍片-v{REVISION}-1080p.mp4'
     run([*inputs,'-filter_complex',';'.join(filters),'-map','0:v','-map','[a]','-vf',f"ass=filename='{ass_path}',setsar=1",'-t',offset,'-c:v','libx264','-preset','medium','-crf','19','-threads','4','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-ar','48000','-ac','2','-movflags','+faststart','-metadata','title='+STORY['title'],'-y',final])
-    run(['-i',final,'-vf','scale=1280:720','-c:v','libx264','-preset','medium','-crf','26','-threads','4','-c:a','aac','-b:a','128k','-movflags','+faststart','-y',ASSETS/'film.mp4'])
-    summary={kind:round(sum(s['duration'] for scene in timeline for s in scene['shots'] if s['kind']==kind),2) for kind in ['cover','motion','card','ui','recording']}
+    if not args.local_only:run(['-i',final,'-vf','scale=1280:720','-c:v','libx264','-preset','medium','-crf','26','-threads','4','-c:a','aac','-b:a','128k','-movflags','+faststart','-y',ASSETS/'film.mp4'])
+    summary={kind:round(sum(s['duration'] for scene in timeline for s in scene['shots'] if s['kind']==kind),2) for kind in ['cover','motion','card','ui','user-photo','recording']}
     (OUT/'制作说明.json').write_text(json.dumps({'duration':offset,'secondsByKind':summary,'music':'Original recordings, synchronous cuts; no background music elsewhere; voice sidechain ducking'},ensure_ascii=False,indent=2),encoding='utf-8')
-    (ASSETS/'film-info.json').write_text(json.dumps({'revision':3,'duration':round(offset,4),'width':1280,'height':720,'greeting':STORY['scenes'][0]['captions'][0],'chapters':[{'start':round(s['start'],3),'title':s['heading']} for s in timeline]},ensure_ascii=False,indent=2),encoding='utf-8')
+    (OUT/'film-info.json').write_text(json.dumps({'revision':REVISION,'duration':round(offset,4),'width':1280,'height':720,'greeting':STORY['scenes'][0]['captions'][0],'chapters':[{'start':round(s['start'],3),'title':s['heading']} for s in timeline]},ensure_ascii=False,indent=2),encoding='utf-8')
+    if not args.local_only:
+        shutil.copyfile(OUT/'film-info.json',ASSETS/'film-info.json')
+        shutil.copyfile(ROOT/'docs/bilibili-promo.md',OUT/'B站发布文案.md')
     print('FINAL',final,round(offset,2),summary,flush=True)
 
 if __name__=='__main__':main()
