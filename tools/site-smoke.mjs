@@ -12,7 +12,14 @@ const server=createServer(async(req,res)=>{
     const path=resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname.replace(/\/$/,'/index.html')))
     if(!path.startsWith(root+sep)){res.writeHead(403).end();return}
     const bytes=await readFile(path)
-    res.writeHead(200,{'Content-Type':`${types[extname(path)]??'application/octet-stream'}${extname(path)==='.mp4'?'':'; charset=utf-8'}`});res.end(bytes)
+    const headers={'Content-Type':`${types[extname(path)]??'application/octet-stream'}${extname(path)==='.mp4'?'':'; charset=utf-8'}`,'Accept-Ranges':'bytes'}
+    const range=/^bytes=(\d+)-(\d*)$/.exec(req.headers.range??'')
+    if(range){
+      const start=Number(range[1]),end=Math.min(bytes.length-1,range[2]?Number(range[2]):bytes.length-1)
+      if(start>end){res.writeHead(416,{'Content-Range':`bytes */${bytes.length}`}).end();return}
+      res.writeHead(206,{...headers,'Content-Range':`bytes ${start}-${end}/${bytes.length}`,'Content-Length':end-start+1});res.end(bytes.subarray(start,end+1));return
+    }
+    res.writeHead(200,{...headers,'Content-Length':bytes.length});res.end(req.method==='HEAD'?undefined:bytes)
   }catch{res.writeHead(404).end('Not found')}
 })
 await new Promise(done=>server.listen(0,'127.0.0.1',done))
@@ -49,9 +56,19 @@ try{
   await page.keyboard.press('Escape')
   assert.equal(await page.locator('#credits').evaluate(d=>d.open),false)
   console.log('ok    code examples, copy actions and accessible credits dialog work')
-  await page.locator('#code-image').click()
-  await page.waitForFunction(()=>!document.querySelector('#toast').classList.contains('visible'))
-  await page.evaluate(()=>scrollTo(0,0))
+  await page.locator('.film').scrollIntoViewIfNeeded()
+  await page.locator('.film').evaluate(v=>{v.load();v.textTracks[0].mode='hidden'})
+  await page.waitForFunction(()=>document.querySelector('.film').readyState>=2)
+  const film=await page.locator('.film').evaluate(v=>({width:v.videoWidth,height:v.videoHeight,duration:v.duration}))
+  assert.equal(film.width,1280);assert.equal(film.height,720);assert.ok(film.duration>79&&film.duration<82)
+  await page.locator('.film').evaluate(v=>{v.currentTime=53;return v.play()})
+  await page.waitForFunction(()=>document.querySelector('.film').currentTime>53)
+  await page.waitForFunction(()=>document.querySelector('.film').textTracks[0].cues?.length>10)
+  assert.equal(await page.locator('#showcase-video').evaluate(v=>v.paused),true)
+  await page.locator('.film').evaluate(v=>v.pause())
+  console.log('ok    80-second film decodes with Chinese captions; long-form playback pauses background clips')
+  await page.goto(url)
+  await page.locator('#scene-ocean').waitFor()
   await page.screenshot({path:resolve(output,'desktop.png'),fullPage:true})
   await page.emulateMedia({reducedMotion:'reduce'})
   for(const width of [390,320,768]){
