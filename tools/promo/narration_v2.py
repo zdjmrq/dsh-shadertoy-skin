@@ -1,10 +1,14 @@
 """Generate clear, friendly female narration and its real word timings."""
-import asyncio,json,hashlib
+import asyncio,json,hashlib,argparse
 from pathlib import Path
 import edge_tts
 ROOT=Path(__file__).resolve().parents[2]
-story=json.loads(Path(__file__).with_name('storyboard-v2.json').read_text(encoding='utf-8'))
-out=ROOT/'.tmp-validation/promo-v2/narration'
+parser=argparse.ArgumentParser()
+parser.add_argument('--story',type=Path,default=Path(__file__).with_name('storyboard-v2.json'))
+parser.add_argument('--output',type=Path,default=ROOT/'.tmp-validation/promo-v2/narration')
+args=parser.parse_args()
+story=json.loads(args.story.read_text(encoding='utf-8'))
+out=args.output
 out.mkdir(parents=True,exist_ok=True)
 async def main():
     for scene in story['scenes']:

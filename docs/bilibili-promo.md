@@ -2,7 +2,7 @@
 
 ## 标题
 
-把 AI 桌面变成游乐场：会下雨，能造山，还能逛地牢
+把 AI 桌面变成游乐场：代码会画画，也会作曲
 
 ## 简介（可直接复制）
 
@@ -10,11 +10,15 @@
 
 给 DeepSeek Harness 做了一个 ShaderToy 背景插件：聊天窗口可以浮在海面上，也可以隔着雨窗看城市。点「预览并交互」，还能用鼠标造山、用方向键逛地牢。
 
+有些画面，一两百行着色器代码就能做出来。雨窗、海面是实时计算的；音乐也可以由 Sound 代码实时合成。视频里留了一小段原作品音乐，听听看。
+
 15 个内置作品；支持导入自己的多文件项目，切换 Image / Sound / Common / Buffer 标签修改代码。透明度、亮度、速度和画质可调，设置自动记忆。背景交互需要主动开启，Esc 退出，平时打字互不打扰。
 
 开源仓库：https://github.com/zdjmrq/dsh-shadertoy-skin
 宣传页与演示：https://zdjmrq.github.io/dsh-shadertoy-skin/
 npm 包名：dsh-shadertoy-skin
+
+已上架 dshmarket 插件市场，可以搜索 dsh-shadertoy-skin 安装：https://dshmarket.com/
 
 桌面版安装：
 dsh plugin --profile desktop add dsh-shadertoy-skin
@@ -27,7 +31,9 @@ dsh plugin --profile desktop add dsh-shadertoy-skin
 
 —— 视频说明与作品署名 ——
 
-视频包含本人 DSH 录屏与实际插件界面的演示配置。海面加星光为实际代码改编示例。旁白为 AI 合成女声，录屏原声已静音，无背景配乐。
+视频包含说明动画、本人 DSH 录屏与实际插件界面演示配置。海面加星光为实际代码改编示例。旁白为 AI 合成女声。Take On Me、Never Gonna Give You Up 片段保留原录屏中的代码合成音乐，旁白期间降低音乐音量；其余片段无额外背景配乐。
+
+行数说明：雨窗 Image 145 行、海面 Image 176 行，去掉空行与注释，不包含音频、纹理和插件代码。不是所有复杂项目都只有这个体量。
 
 插件自写代码 MIT。所示第三方 ShaderToy 作品及改编为 CC BY-NC-SA 3.0；造山的侵蚀算法组件另保留 MPL 2.0。感谢原作者：
 
@@ -49,6 +55,9 @@ https://www.shadertoy.com/view/Xs2fWD
 Mario — Inigo Quilez (iq)
 https://www.shadertoy.com/user/iq
 
+Never Gonna Give You Up — Tonny Espeset
+https://www.shadertoy.com/view/fXdXR7
+
 我的世界 / Voxel World — fb39ca4；噪声算法：Ashima Arts
 https://www.shadertoy.com/user/fb39ca4
 
@@ -58,14 +67,16 @@ https://github.com/zdjmrq/dsh-shadertoy-skin/blob/main/THIRD-PARTY-NOTICES.md
 ## 章节
 
 - 00:00 各位人类和ai大家好呀
-- 00:13 这个插件是做什么的
-- 00:25 安装和选择背景
-- 00:39 调设置、进入交互与退出
-- 00:55 去 ShaderToy 找喜欢的作品
-- 01:08 粘贴导入与多文件项目
-- 01:22 改代码、加星光，也可以让 AI 帮忙
-- 01:38 造山、像素世界和地牢
-- 01:56 分享作品与项目地址
+- 00:09 聊天界面后面，是实时生成的世界
+- 00:18 小段代码，也能藏着一个世界
+- 00:31 声音，也是代码实时合成的
+- 00:45 已上架 dshmarket，也能填包名安装
+- 00:58 自己调外观，交互按需开启
+- 01:09 去 ShaderToy 找自己喜欢的作品
+- 01:17 喜欢的作品，放进自己的背景库
+- 01:27 在原作上，加一点自己的想法
+- 01:37 有些作品，还能玩一会儿
+- 01:55 把你找到和改过的作品，也分享出来
 
 ## 建议标签
 

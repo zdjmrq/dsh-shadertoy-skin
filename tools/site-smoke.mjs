@@ -6,7 +6,7 @@ import { chromium } from 'playwright'
 
 const root=resolve('site'), output=resolve('.tmp-validation/site')
 await mkdir(output,{recursive:true})
-const types={'.html':'text/html','.css':'text/css','.js':'text/javascript','.mp4':'video/mp4','.webp':'image/webp','.svg':'image/svg+xml','.jpg':'image/jpeg','.vtt':'text/vtt','.txt':'text/plain','.xml':'application/xml'}
+const types={'.html':'text/html','.css':'text/css','.js':'text/javascript','.mp4':'video/mp4','.webp':'image/webp','.svg':'image/svg+xml','.jpg':'image/jpeg','.vtt':'text/vtt','.txt':'text/plain','.xml':'application/xml','.json':'application/json'}
 const server=createServer(async(req,res)=>{
   try{
     const path=resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname.replace(/\/$/,'/index.html')))
@@ -60,11 +60,13 @@ try{
   await page.locator('.film').evaluate(v=>{v.load();v.textTracks[0].mode='hidden'})
   await page.waitForFunction(()=>document.querySelector('.film').readyState>=2)
   const film=await page.locator('.film').evaluate(v=>({width:v.videoWidth,height:v.videoHeight,duration:v.duration}))
-  assert.equal(film.width,1280);assert.equal(film.height,720);assert.ok(film.duration>132&&film.duration<133)
+  const expectedFilm=JSON.parse(await readFile(resolve(root,'assets/film-info.json'),'utf8'))
+  assert.equal(film.width,expectedFilm.width);assert.equal(film.height,expectedFilm.height);assert.ok(Math.abs(film.duration-expectedFilm.duration)<.1)
   await page.locator('.film').evaluate(v=>{v.currentTime=53;return v.play()})
   await page.waitForFunction(()=>document.querySelector('.film').currentTime>53)
   await page.waitForFunction(()=>document.querySelector('.film').textTracks[0].cues?.length>10)
   assert.equal(await page.locator('.film').evaluate(v=>v.textTracks[0].cues[0].text),'各位人类和ai大家好呀。')
+  assert.equal(expectedFilm.greeting,'各位人类和ai大家好呀。')
   assert.equal(await page.locator('#showcase-video').evaluate(v=>v.paused),true)
   await page.locator('.film').evaluate(v=>v.pause())
   console.log('ok    revised film decodes with the requested greeting; captions and seeking work; background clips pause')

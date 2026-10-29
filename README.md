@@ -9,7 +9,7 @@
 
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
-**[宣传网页与安装使用介绍片 ↗](https://zdjmrq.github.io/dsh-shadertoy-skin/)** · 雨窗、海面、造山、地牢等真实录屏；附一键复制的安装命令。
+**[宣传网页与安装使用介绍片 ↗](https://zdjmrq.github.io/dsh-shadertoy-skin/)** · 看代码如何实时生成画面与音乐，附真实交互演示和安装方法。
 
 > **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的 15 个预设只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
 > **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库自写代码是 MIT，十二个第三方预设按各自许可证收录）。
@@ -190,6 +190,8 @@ Shader 没有通用的“播完”事件，因此自动模式是一种保守判�
 - 支持 **WebGL2** 的显卡/驱动（Electron 走 ANGLE，绝大多数机器可用）
 
 ## 安装
+
+**插件市场**：已上架 [dshmarket](https://dshmarket.com/)，搜索 `dsh-shadertoy-skin` 即可安装。
 
 **桌面版（推荐）**：侧栏「插件」→「添加插件」→ 填 `dsh-shadertoy-skin` → 安装 → **完全退出并重启客户端**（首次安装需要，页面刷新不够）。
 
