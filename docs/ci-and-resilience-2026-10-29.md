@@ -48,4 +48,6 @@ ok    repeated switching/enable/resize cycles keep the settings page and rendere
 ## 三、验证
 
 - 本机：`npm test`（419/419 + TypeScript + Host + 项目格式）、17 个浏览器套件（新增 adversarial）、`test:soak` 均通过。
-- CI：改动推送后由 GitHub Actions 实际执行（见对应 commit 的运行记录）。
+- CI（`4cf725b`）：静态检查 + 17 个浏览器套件全绿；新增的 `adversarial` 在 Chrome + SwiftShader 下通过。
+- 文档提交跳过验证：本条更新只改 `docs/`，推送后的 CI 应只跑静态检查、跳过整个浏览器矩阵（见该 commit 的运行记录）。
+
