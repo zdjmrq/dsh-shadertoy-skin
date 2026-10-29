@@ -110,6 +110,20 @@ try {
   console.log('ok    line ring stays closed without stray segments under the memory cap; output segments are antialiased')
   await page.setViewportSize({width:640,height:400})
 
+  // Also exercise free simulation: resetting every frame would hide a broken
+  // first/last neighbour inside Buffer A's velocity/position averaging.
+  const endpoints=structuredClone(codes.get('strange-lines'))
+  endpoints.image=`void mainImage(out vec4 c,in vec2 p){
+    R=iChannelResolution[0].xy;
+    vec4 a=particle(0.),b=particle(particleCount()-1.);
+    c=vec4(length(a.xy-b.xy)/R.y,any(isnan(a))||any(isnan(b))?1.:0.,any(isinf(a))||any(isinf(b))?1.:0.,1.);
+  }`
+  await page.evaluate(code=>window.postMessage({type:'init',preset:{name:'line-endpoints',code},params:{dim:1,tintMix:0,fps:30}},location.origin),endpoints)
+  await page.waitForFunction(()=>window.__player?.preset==='line-endpoints'&&window.__player.frames>40,null,{timeout:90000})
+  const gap=await page.evaluate(()=>window.__player.inspect('pixel'))
+  assert.ok(gap[0]<8 && gap[1]===0 && gap[2]===0,`simulated endpoints stay adjacent and finite: ${gap}`)
+  console.log('ok    line first/last particles remain adjacent during free simulation')
+
   // Missing iFrameRate previously made the terrain brush fail to compile. Check
   // every pass receives a finite positive rate, including speed=0.
   await page.goto(`${h.url}/shader-skin/player.html?preset=aurora&muted=1`)
