@@ -27,6 +27,10 @@ jobs:
   # The same browser suites CI runs, fanned out so a release is gated on the
   # complete matrix without one 15-minute job near its timeout.
   verify:
+    # Only package releases are published. The repo also publishes promo/asset
+    # releases (e.g. `promo-2026-10-29`); without this guard those turn into a
+    # failed Publish run because their tag cannot match any package version.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     uses: ./.github/workflows/browser-tests.yml
 
   publish:
