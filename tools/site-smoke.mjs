@@ -61,6 +61,8 @@ try{
   await page.waitForFunction(()=>document.querySelector('.film').readyState>=2)
   const film=await page.locator('.film').evaluate(v=>({width:v.videoWidth,height:v.videoHeight,duration:v.duration}))
   const expectedFilm=JSON.parse(await readFile(resolve(root,'assets/film-info.json'),'utf8'))
+  assert.equal(await page.locator('.film source').getAttribute('src'),`assets/film.mp4?v=${expectedFilm.revision}`)
+  assert.equal(await page.locator('.film track').getAttribute('src'),`assets/film.vtt?v=${expectedFilm.revision}`)
   assert.equal(film.width,expectedFilm.width);assert.equal(film.height,expectedFilm.height);assert.ok(Math.abs(film.duration-expectedFilm.duration)<.1)
   await page.locator('.film').evaluate(v=>{v.currentTime=53;return v.play()})
   await page.waitForFunction(()=>document.querySelector('.film').currentTime>53)
