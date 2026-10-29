@@ -195,13 +195,21 @@ try {
   const before = await pixel()
   assert.ok(Math.abs(before[0] - 24) <= 1 && Math.abs(before[1] - 16) <= 1 && before[2] < 5, `game initializes at (3,2): ${before}`)
   await panel.locator('.wallpaper-preview').click()
+  await panel.locator('.wallpaper-preview[aria-pressed="true"]').waitFor()
+  const waitGameFrames=async count=>{
+    const frame=await player().evaluate(()=>window.__player.frames)
+    await player().waitForFunction(({frame,count})=>window.__player.frames>=frame+count,{frame,count},{timeout:30000})
+  }
   let moved = false
   for (const key of ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp']) {
-    await page.keyboard.down(key); await page.waitForTimeout(450); await page.keyboard.up(key)
+    // A slow software renderer may not finish even one game frame in 450 ms.
+    // Sample the held state, then let keyLock release on real game frames too.
+    await page.keyboard.down(key)
+    try { await waitGameFrames(3) } finally { await page.keyboard.up(key) }
+    await waitGameFrames(3)
     const after = await pixel()
     assert.ok(after[2] < 5, 'game state stays finite')
     if (after[0] !== before[0] || after[1] !== before[1]) { moved = true; break }
-    await page.waitForTimeout(450)
   }
   assert.ok(moved, 'direction keys must move the actual dungeon player')
   await page.keyboard.press('Escape')
