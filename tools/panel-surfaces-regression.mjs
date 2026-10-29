@@ -16,9 +16,11 @@ try {
   let panel
   const load = async () => {
     await page.goto(harness.url)
-    await page.waitForSelector('iframe[title="ShaderToy 背景设置"]')
+    // The iframe element can be visible while its frame still has about:blank.
+    // Wait inside it before looking up the navigated Frame object.
+    await page.frameLocator('iframe[title="ShaderToy 背景设置"]').locator('#preset-dd .dd-trigger').waitFor()
     panel = page.frames().find(frame => frame.url().includes('panel.html'))
-    await panel.waitForSelector('#preset-dd .dd-trigger')
+    assert.ok(panel, 'settings frame has navigated before accessing its document')
     await panel.click('#tab-code')
     await panel.waitForFunction(() => document.querySelector('#code-image').value.includes('mainImage'))
   }
