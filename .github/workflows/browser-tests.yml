@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [renderer, audio, panel, ui, audit, core, project, multi, worker, editor, surfaces, transparency, startup, playback, interaction]
+        suite: [renderer, audio, panel, ui, audit, core, project, multi, worker, editor, surfaces, transparency, startup, playback, interaction, community]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

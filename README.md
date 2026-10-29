@@ -9,8 +9,8 @@
 
 Realtime [ShaderToy](https://www.shadertoy.com/) background skin for DeepSeek Harness (desktop & web): a zero-runtime-dependency WebGL2 player, a background library, and a translucent glass shell.
 
-> **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的 12 个预设只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
-> **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库自写代码是 MIT，九个第三方预设按各自许可证收录）。
+> **推荐去 [www.shadertoy.com](https://www.shadertoy.com/) 逛逛** —— 插件自带的 15 个预设只是开胃菜。ShaderToy 上有几万个社区作品（搜 `background`、`seascape`、`raymarching` 这类关键词，或在 Browse 里按分类翻），挑喜欢的装进「背景库」、按自己的口味调亮度 / 速度 / 代码，就是一张专属桌面。
+> **改好了欢迎分享**：截图、参数、改进思路都可以提到 [Issues](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)，或者直接 PR（作品代码要看原作者的许可证，默认 CC BY-NC-SA 3.0：署名、非商业、同样方式共享；本仓库自写代码是 MIT，十二个第三方预设按各自许可证收录）。
 > **欢迎 issue 和 PR**：装不上、画面不对、想要新功能 → 开 [Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues)（附截图和 `$DSH_HOME/shader-skin.json` 里对应条目更好排查）；bug 修复、文档修正、自写预设 → 直接提 [PR](https://github.com/zdjmrq/dsh-shadertoy-skin/pulls)。
 > **欢迎分享你发现的 / 自己改过的 ShaderToy 作品**：作品链接、截图、调好的参数都行，开 [Issue](https://github.com/zdjmrq/dsh-shadertoy-skin/issues) 贴出来大家就能直接用；想让它进内置预设就提 PR（先确认原作者的许可证允许再分发）。
 >
@@ -41,10 +41,10 @@ npm view dsh-shadertoy-skin version   # 确认 npm 上真实存在的版本
 
 ## 从 ShaderToy 装一个作品
 
-插件自带 12 个预设（3 个自写 MIT + 8 个第三方作品及 1 个无闪电变体，第三方部分为 CC BY-NC-SA 3.0，见文末许可证），但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
+插件自带 15 个预设（3 个自写 MIT + 11 个第三方作品及 1 个无闪电变体，第三方项目标注 CC BY-NC-SA 3.0；造山的侵蚀算法组件另保留 MPL 2.0，见文末许可证），但真正好玩的是把你喜欢的 ShaderToy 作品装进来。**三种做法，任选一种：**
 
 > **推荐一试**：[`shadertoy.com/view/4dfXWj`](https://www.shadertoy.com/view/4dfXWj) —— 装进来效果挺带感，导入方式见下面任意一种。
-> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0）：装在本机自己玩没问题；想提交进仓库或随包分发，先确认许可证允许，并带上署名与相同许可证（本仓库的九个第三方预设就是这么收录的）。
+> 这只是个起点：**大家完全可以根据自己的喜好随便挑别的作品，也可以自己写着色器**（写好了走同样的导入流程）。ShaderToy 作品的许可证由原作者决定（默认 CC BY-NC-SA 3.0）：装在本机自己玩没问题；想提交进仓库或随包分发，先确认许可证允许，并带上署名与相同许可证（本仓库的十二个第三方预设就是这么收录的）。
 
 ### 1. 粘贴代码（最稳，不用抓网页）
 
@@ -99,6 +99,12 @@ float mainSound(int samp, float time)  // 单声道 + 采样序号
 多 pass 按 A → B → C → D → Image 执行：读取已经完成的前序 Buffer 得到当前帧；读取自身或后序 Buffer 得到上一帧。Buffer 不套用界面亮度/遮罩，也不截断浮点状态值；这些只作用于最终 Image。大窗口下会缩小离屏缓冲，以将缓冲数据限制在约 96 MiB；项目图片合计限制 1600 万像素。Cubemap、远程视频/音频输入暂不支持。
 
 设置页右上角只有一个 **预览并交互 ↗** 按钮：点击后隐藏设置、聚焦背景交互区，支持键盘及按住鼠标拖动；同一按钮变为 **返回设置 · Esc**。Esc、Tab、系统组合键、窗口失焦、切回 DSH 输入框或关闭设置页都会退出交互并释放按键。普通 DSH 输入不转发给背景，交互状态也不跨页面记忆。独立预览页仍支持键盘通道；作品需要连接 `keyboard` 通道才能读取键盘状态。
+
+### 新增交互作品
+
+- **诡异的线条**：四 Buffer 反馈线条动画，进入「预览并交互」后按空格重新初始化。
+- **造山**：按住鼠标绘制山体；按住 Shift 同时拖动可挖低，Backspace 恢复初始山体，Enter 切换侵蚀效果。高负载作品，建议先试 50%–75% 分辨率；原默认参数保持不变。
+- **地牢游戏**：进入「预览并交互」后，用方向键逐步移动，走向敌人攻击，撞墙跳过一回合。原作品是逐次按键移动，持续按住不会自动连走；不含外链音乐。
 
 ### 3. 从本地目录导入（批量最方便）
 
@@ -161,7 +167,7 @@ Shader 没有通用的“播完”事件，因此自动模式是一种保守判�
 - [x] 设置页采用 **DSH 原生中性色**：浅色白底、深色黑灰底，移除长说明与重复数值，自动跟随主题
 - [x] **背景库**：内置 + 我的背景列表、切换、改名、删除；粘贴代码导入、文件导入（ShaderToy JSON / GLSL）、从 `$DSH_HOME/shader-skin/presets/` 导入
 - [x] **新增六个多文件/纹理项目**：Take On Me、Never Gonna Give You Up、下雨的窗户、赛车、我的世界、风中的树（CC BY-NC-SA 3.0）。
-- [x] **随包 12 个预设**：含「下雨的窗户（无闪电）」独立变体，仅闪电效果与普通版不同；两版均持续下雨，不进入原作的爱心、停雨和加雾收尾，也不按 102 秒重播。第三方预设为 CC BY-NC-SA 3.0，背景库和下拉带许可标识。
+- [x] **随包 15 个预设**：含「下雨的窗户（无闪电）」独立变体，仅闪电效果与普通版不同；两版均持续下雨，不进入原作的爱心、停雨和加雾收尾，也不按 102 秒重播。第三方预设为 CC BY-NC-SA 3.0，背景库和下拉带许可标识。
 - [x] **代码页**：查看当前运行作品的 Image / Sound 源码，直接改 → **保存并运行**（内置作品会自动另存为「我的副本」，原件不动；编辑器里 Ctrl/⌘+S 同样保存）
 - [x] **iMouse 只在「按住左键 + 从空白处开始拖动」时驱动**：点按钮、拖滚动条、选中/复制回复文字都不会再带动背景；松手发一次释放（`iMouse.z < 0`）
 - [x] **卡片透明度三档**（不透明 / 半透明 / 透明）：控制卡片、代码块、弹层、输入框、聊天输入栏的底色，让背景能透进这些「框」里
@@ -277,6 +283,9 @@ dsh plugin --profile web add dsh-shadertoy-skin@latest
 | `赛车` | dathor / diatribes 等，原文件贡献者声明保留 | **CC BY-NC-SA 3.0** |
 | `我的世界` | Voxel Game，fb39ca4；内含噪声函数原许可声明保留 | **CC BY-NC-SA 3.0** |
 | `风中的树` | 原作者署名与组件许可声明见第三方清单 | **CC BY-NC-SA 3.0** |
+| `诡异的线条` | Lover，wyatt；保留 morimea 的稳定性修复 | **CC BY-NC-SA 3.0** |
+| `造山` | Mouse-Paint Eroded Mountains，Rune Skovbo Johansen；保留 Fewes / Clay John 及组件署名 | **CC BY-NC-SA 3.0**；侵蚀算法组件 **MPL 2.0** |
+| `地牢游戏` | Pixel Shader Dungeon，Krzysztof Narkowicz；基于 Watabou 的 Pixel Dungeon | **CC BY-NC-SA 3.0** |
 
 第三方作品是**按上游许可证收录的**（上游允许再分发），所以：
 
@@ -305,6 +314,7 @@ npm run test:worker      # 线程卡死、超时恢复、GPU 熔断、安全模�
 npm run test:editor      # 多文件标签编辑器、保存失败/重试/回滚
 npm run test:surfaces    # 设置页自身透明度与 iframe 合成
 npm run test:transparency # 18 组语义表面组合
+npm run test:community   # 新内置项目、造山笔刷与地牢实际键盘玩法
 ```
 
 CI（`.github/workflows/ci.yml`）把上面除 `dev` / `check` / `test:host` 之外的套件**各开一个 job 并行跑**；`publish.yml` 在发布前再并行跑同一批套件，全部通过才 `npm publish`。

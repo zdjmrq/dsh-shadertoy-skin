@@ -1,6 +1,6 @@
 {
   "name": "dsh-shadertoy-skin",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Realtime ShaderToy background skin for DeepSeek Harness — a zero-runtime-dependency WebGL2 player, background library and glass UI integration.",
   "type": "module",
   "license": "MIT",
@@ -79,7 +79,24 @@
     "native-dist/presets/tree-in-wind/common.glsl",
     "native-dist/presets/tree-in-wind/a.glsl",
     "native-dist/presets/tree-in-wind/b.glsl",
-    "native-dist/presets/tree-in-wind/image.glsl"
+    "native-dist/presets/tree-in-wind/image.glsl",
+    "native-dist/presets/strange-lines/common.glsl",
+    "native-dist/presets/strange-lines/a.glsl",
+    "native-dist/presets/strange-lines/b.glsl",
+    "native-dist/presets/strange-lines/image.glsl",
+    "native-dist/presets/strange-lines/d.glsl",
+    "native-dist/presets/strange-lines/c.glsl",
+    "native-dist/presets/mountain-paint/common.glsl",
+    "native-dist/presets/mountain-paint/a.glsl",
+    "native-dist/presets/mountain-paint/b.glsl",
+    "native-dist/presets/mountain-paint/c.glsl",
+    "native-dist/presets/mountain-paint/image.glsl",
+    "native-dist/presets/dungeon-game/a.glsl",
+    "native-dist/presets/dungeon-game/b.glsl",
+    "native-dist/presets/dungeon-game/c.glsl",
+    "native-dist/presets/dungeon-game/d.glsl",
+    "native-dist/presets/dungeon-game/image.glsl",
+    "licenses/MPL-2.0.txt"
   ],
   "dsh": {
     "bundle": {
@@ -119,7 +136,8 @@
     "test:editor": "node tools/tabbed-editor-regression.mjs",
     "test:startup": "node tools/startup-regression.mjs",
     "test:playback": "node tools/playback-regression.mjs",
-    "test:interaction": "node tools/interaction-regression.mjs"
+    "test:interaction": "node tools/interaction-regression.mjs",
+    "test:community": "node tools/community-presets-regression.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

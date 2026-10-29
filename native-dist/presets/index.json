@@ -281,5 +281,188 @@
         "mipmaps": true
       }
     }
+  },
+  {
+    "id": "strange-lines",
+    "name": "诡异的线条",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "wyatt; morimea (stability fix)",
+    "sourceUrl": "https://www.shadertoy.com/view/fsjyR3",
+    "hasSound": false,
+    "file": "strange-lines/image.glsl",
+    "bufferFiles": {
+      "A": "strange-lines/a.glsl",
+      "B": "strange-lines/b.glsl",
+      "C": "strange-lines/c.glsl",
+      "D": "strange-lines/d.glsl"
+    },
+    "channels": {
+      "A": [
+        "buffer:A",
+        null,
+        "keyboard",
+        "buffer:D"
+      ],
+      "B": [
+        "buffer:A",
+        "buffer:B"
+      ],
+      "C": [
+        null,
+        "buffer:B"
+      ],
+      "D": [
+        null,
+        null,
+        "buffer:C",
+        "buffer:D"
+      ],
+      "image": [
+        null,
+        "buffer:B"
+      ]
+    },
+    "bufferSettings": {
+      "A": {
+        "format": "float32",
+        "filter": "linear",
+        "mipmaps": false
+      },
+      "B": {
+        "format": "float32",
+        "filter": "linear",
+        "mipmaps": false
+      },
+      "C": {
+        "format": "float32",
+        "filter": "linear",
+        "mipmaps": false
+      },
+      "D": {
+        "format": "float32",
+        "filter": "linear",
+        "mipmaps": false
+      }
+    },
+    "commonFile": "strange-lines/common.glsl",
+    "note": "四 Buffer 反馈动画；预览并交互后按空格重置线条"
+  },
+  {
+    "id": "mountain-paint",
+    "name": "造山",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Rune Skovbo Johansen (runevision); Fewes; Clay John",
+    "sourceUrl": "https://www.shadertoy.com/view/sf23W1",
+    "hasSound": false,
+    "file": "mountain-paint/image.glsl",
+    "bufferFiles": {
+      "A": "mountain-paint/a.glsl",
+      "B": "mountain-paint/b.glsl",
+      "C": "mountain-paint/c.glsl"
+    },
+    "channels": {
+      "A": [
+        "buffer:A",
+        "keyboard"
+      ],
+      "B": [
+        "buffer:A",
+        "keyboard"
+      ],
+      "C": [
+        "buffer:C"
+      ],
+      "image": [
+        "buffer:B",
+        "buffer:C",
+        "noise"
+      ]
+    },
+    "bufferSettings": {
+      "A": {
+        "format": "float32",
+        "filter": "linear",
+        "mipmaps": false
+      },
+      "B": {
+        "format": "float32",
+        "filter": "linear",
+        "mipmaps": false
+      },
+      "C": {
+        "format": "float32",
+        "filter": "linear",
+        "mipmaps": false
+      }
+    },
+    "commonFile": "mountain-paint/common.glsl",
+    "note": "按住鼠标造山，Shift 按住时挖低，Backspace 重置，Enter 切换侵蚀；侵蚀算法组件保留 MPL 2.0"
+  },
+  {
+    "id": "dungeon-game",
+    "name": "地牢游戏",
+    "license": "CC BY-NC-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Krzysztof Narkowicz (knarkowicz); Pixel Dungeon by Oleg Dolya (Watabou)",
+    "sourceUrl": "https://www.shadertoy.com/view/Xs2fWD",
+    "hasSound": false,
+    "file": "dungeon-game/image.glsl",
+    "bufferFiles": {
+      "A": "dungeon-game/a.glsl",
+      "B": "dungeon-game/b.glsl",
+      "C": "dungeon-game/c.glsl",
+      "D": "dungeon-game/d.glsl"
+    },
+    "channels": {
+      "A": [
+        "buffer:A",
+        "buffer:B",
+        "keyboard"
+      ],
+      "B": [
+        "buffer:A",
+        "buffer:B"
+      ],
+      "C": [
+        "buffer:A",
+        "buffer:B"
+      ],
+      "D": [
+        "buffer:A",
+        "buffer:B",
+        "buffer:C"
+      ],
+      "image": [
+        "buffer:A",
+        "buffer:B",
+        "buffer:D",
+        "font"
+      ]
+    },
+    "bufferSettings": {
+      "A": {
+        "format": "float32",
+        "filter": "nearest",
+        "mipmaps": false
+      },
+      "B": {
+        "format": "float32",
+        "filter": "nearest",
+        "mipmaps": false
+      },
+      "C": {
+        "format": "float32",
+        "filter": "nearest",
+        "mipmaps": false
+      },
+      "D": {
+        "format": "float32",
+        "filter": "nearest",
+        "mipmaps": false
+      }
+    },
+    "note": "预览并交互后用方向键逐步移动；走向敌人攻击，撞墙跳过回合；不含外链音乐"
   }
 ]

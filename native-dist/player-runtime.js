@@ -187,7 +187,7 @@ import { createPipeline } from './pipeline.js'
   // ---------- GLSL preprocessing
 
   const UNIFORMS = [
-    ['vec3', 'iResolution'], ['float', 'iTime'], ['float', 'iTimeDelta'], ['int', 'iFrame'],
+    ['vec3', 'iResolution'], ['float', 'iTime'], ['float', 'iTimeDelta'], ['float', 'iFrameRate'], ['int', 'iFrame'],
     ['vec4', 'iMouse'], ['vec4', 'iDate'], ['float', 'iSampleRate'],
     ['sampler2D', 'iChannel0'], ['sampler2D', 'iChannel1'], ['sampler2D', 'iChannel2'], ['sampler2D', 'iChannel3'],
     ['float', 'iChannelTime[4]'], ['vec3', 'iChannelResolution[4]'],
@@ -1005,6 +1005,9 @@ import { createPipeline } from './pipeline.js'
     }
     set3('iResolution', width, height, 1)
     set1('iTime', state.time); set1('iTimeDelta', state.dt); set1i('iFrame', state.frame)
+    // ShaderToy brushes use 1 / iFrameRate as their integration step. Never
+    // expose zero (initial frame / frozen image clock), nor a speed-scaled rate.
+    set1('iFrameRate', state.dt > 0 && params.speed > 0 ? params.speed / state.dt : Math.max(1, params.fps))
     for (let i = 0; i < 4; i++) set1i(`iChannel${i}`, i)
     const sx = width / canvas.width, sy = height / canvas.height
     set4('iMouse', mouse.x * sx, mouse.y * sy, (mouse.down ? mouse.anchorX : -Math.abs(mouse.anchorX)) * sx, (mouse.down ? mouse.anchorY : -Math.abs(mouse.anchorY)) * sy)

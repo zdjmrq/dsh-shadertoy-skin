@@ -4,8 +4,8 @@
 
 | 工作流 | 触发 | 做什么 |
 |---|---|---|
-| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | 包、语法、Host、项目格式检查 + TypeScript 7 类型检查 + 15 个浏览器套件 |
-| `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 同一批 15 个浏览器套件全部通过 → 校验版本与 tag → `npm test` → OIDC 发布 |
+| `.github/workflows/ci.yml` | push 到 `main` / PR / 手动 | 包、语法、Host、项目格式检查 + TypeScript 7 类型检查 + 16 个浏览器套件 |
+| `.github/workflows/publish.yml` | **GitHub Release published** / 手动 | 同一批 16 个浏览器套件全部通过 → 校验版本与 tag → `npm test` → OIDC 发布 |
 | `.github/workflows/browser-tests.yml` | 供上述两条工作流调用 | 单一套件清单、npm 下载缓存、失败截图保留 7 天；不上传配置或任意临时文件 |
 
 npm 侧用 **Trusted Publisher（OIDC）**：不需要在仓库里放 `NPM_TOKEN`，发布时由 GitHub Actions 的 OIDC 身份换取短期凭证，并自动生成 provenance 证明。

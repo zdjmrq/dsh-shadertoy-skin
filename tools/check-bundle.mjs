@@ -188,6 +188,10 @@ async function main() {
       check('npm pack includes README, licence and manifest',
         files.includes('README.md') && files.includes('LICENSE') && files.includes('package.json'))
       check('npm pack includes third-party notices', files.includes('THIRD-PARTY-NOTICES.md'))
+      check('npm pack includes the terrain component licence', files.includes('licenses/MPL-2.0.txt'))
+      check('terrain preserves its MPL component notices',
+        (await readFile(join(ROOT, 'native-dist/presets/mountain-paint/b.glsl'), 'utf8')).includes('Mozilla Public')
+        && (await readFile(join(ROOT, 'licenses/MPL-2.0.txt'), 'utf8')).includes('Mozilla Public License Version 2.0'))
       check('npm pack includes the bundled third-party presets',
         files.includes('native-dist/presets/seascape.glsl')
         && files.includes('native-dist/presets/mario.glsl')
