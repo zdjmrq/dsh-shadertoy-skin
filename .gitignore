@@ -19,3 +19,7 @@ playwright-report/
 
 # debug scratch
 .tmp-*
+
+# final video deliverables (large files; website previews are tracked separately)
+artifacts/
+__pycache__/

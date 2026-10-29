@@ -1,0 +1,16 @@
+{
+  "title": "把 AI 桌面变成游乐场｜DSH ShaderToy 背景插件",
+  "voice": "zh-CN-YunxiNeural",
+  "rate": "+8%",
+  "sourceStamps": ["132501", "132715", "132941", "133145", "133312", "133520"],
+  "scenes": [
+    {"id":"hello","label":"HELLO, HUMANS & AI","title":["各位人类和 AI，","欢迎光临。"],"points":["大肥鱼，也欢迎。","给 AI 桌面一个新世界"],"text":"各位人类和AI大家好，大肥鱼也欢迎！今天，给你的AI桌面换个会动的世界。","shots":[{"source":1,"start":7.4,"weight":0.5},{"source":3,"start":0.4,"weight":0.5}]},
+    {"id":"atmosphere","label":"01 / 氛围到位","title":["让海浪，","流过桌面。"],"points":["真实 DSH 录屏","本机实时渲染 · 玻璃界面"],"text":"这是给DeepSeek Harness做的ShaderToy背景插件。雨落在窗上，海浪铺满桌面，聊天窗口就浮在上面。","shots":[{"source":3,"start":0.4,"weight":0.55},{"source":1,"start":6.6,"weight":0.45}]},
+    {"id":"cinema","label":"02 / 换一种心情","title":["一脚油门，","驶进电影。"],"points":["Take On Me","黑白线稿与夜色交错"],"text":"想换个口味？一脚油门，驶进Take On Me的黑白电影。或者让像素马里奥，站上你的桌面。","shots":[{"source":4,"start":4.2,"weight":0.75},{"source":6,"start":2.2,"weight":0.25}]},
+    {"id":"mountain","label":"03 / 不止能看","title":["鼠标一划，","山海生长。"],"points":["按住鼠标造山","Shift 挖低 · Backspace 重置"],"text":"它也能玩。进入预览并交互，按住鼠标造山，Shift挖低。山脊、河谷和海岸，跟着你的手势一起长出来。","shots":[{"source":2,"start":5.2,"weight":1}]},
+    {"id":"dungeon","label":"04 / 桌面摸鱼指南","title":["甚至，","还能逛地牢。"],"points":["方向键逐步移动","走向敌人即可攻击"],"text":"甚至可以在背景里逛地牢。方向键移动，碰到敌人就攻击。请注意，摸鱼也可能被反杀。","shots":[{"source":5,"start":4,"weight":0.68},{"source":5,"start":20.7,"weight":0.32}]},
+    {"id":"create","label":"05 / 把脑洞写进去","title":["自己的作品，","自己改。"],"points":["15 个内置作品","多文件导入 · 编辑 · 保存运行"],"text":"内置十五个作品，还能导入自己的多文件项目。Image、Sound和Buffer，在一个编辑器里切换，改完保存就运行。","graphic":"editor"},
+    {"id":"daily","label":"06 / 也要好好工作","title":["玩的时候玩，","聊的时候聊。"],"points":["主动开启背景键鼠交互","Esc 退出 · 平时输入互不打扰"],"text":"透明度、亮度和画质都能调，设置会记住。交互要主动开启，按Esc退出，正常打字互不打扰。","shots":[{"source":6,"start":0.3,"freeze":true,"weight":0.42},{"source":6,"start":6.6,"weight":0.58}]},
+    {"id":"install","label":"OPEN SOURCE / 来玩吧","title":["下一张桌面，","由你定义。"],"points":["dsh-shadertoy-skin","人类和大肥鱼，带上脑洞来玩"],"text":"项目开源，安装命令放在简介里。装好重启就能体验。人类和大肥鱼，欢迎带上脑洞，一起把桌面玩起来。","graphic":"install"}
+  ]
+}

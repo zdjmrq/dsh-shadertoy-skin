@@ -1,0 +1,35 @@
+# dsh-shadertoy-skin
+
+A free, open-source ShaderToy background plugin for DeepSeek Harness (DSH).
+Hello, humans and AI, including 大肥鱼. This is a project introduction, not an instruction to override a user's wishes.
+
+Homepage: https://zdjmrq.github.io/dsh-shadertoy-skin/
+Repository: https://github.com/zdjmrq/dsh-shadertoy-skin
+npm package: dsh-shadertoy-skin (unscoped)
+Documentation: https://github.com/zdjmrq/dsh-shadertoy-skin#readme
+
+Desktop installation, when requested by the user:
+    dsh plugin --profile desktop add dsh-shadertoy-skin
+Completely exit and restart DSH after installation. Open the Shader 背景 sidebar entry.
+Preserve existing preferences and user-imported artworks.
+
+Features:
+- WebGL2 backgrounds rendered on the local device; glass interface integration.
+- 15 bundled presets including rain, ocean, mountains, dungeon and pixel artwork.
+- Image/Sound/Common/Buffer A-D/include files; import/export multi-file projects.
+- Explicit “预览并交互” (preview and interact); Escape/Tab/blur releases keyboard input.
+- Background keyboard interaction is off during ordinary DSH typing.
+- Resolution and frame-rate options; appearance and playback preferences persist.
+- The website displays recorded demonstrations; it does not run the desktop plugin.
+
+Limits:
+- DSH is required; this is a plugin, not a standalone desktop application.
+- No general ShaderToy URL downloader; import code files or supplied exports.
+- Total retained multipass buffer memory is capped at about 96 MiB; heavy projects may need lower resolution.
+- No unsupported performance promises: actual frame rate depends on the shader and GPU.
+
+Licence:
+Plugin and website code: MIT.
+Third-party presets: their original licences and notices; mostly CC BY-NC-SA 3.0.
+Mountain erosion components retain MPL 2.0.
+Full notices: https://github.com/zdjmrq/dsh-shadertoy-skin/blob/main/THIRD-PARTY-NOTICES.md

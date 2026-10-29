@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://zdjmrq.github.io/dsh-shadertoy-skin/sitemap.xml
